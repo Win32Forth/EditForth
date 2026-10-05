@@ -17,7 +17,7 @@
                BlueprintIdentifier = "B1000400"
                BuildableName = "64Forth.app"
                BlueprintName = "64Forth"
-               ReferencedContainer = "container:Forth.xcodeproj">
+               ReferencedContainer = "container:EditForth.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -47,7 +47,7 @@
             BlueprintIdentifier = "B1000400"
             BuildableName = "64Forth.app"
             BlueprintName = "64Forth"
-            ReferencedContainer = "container:Forth.xcodeproj">
+            ReferencedContainer = "container:EditForth.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -64,7 +64,7 @@
             BlueprintIdentifier = "B1000400"
             BuildableName = "64Forth.app"
             BlueprintName = "64Forth"
-            ReferencedContainer = "container:Forth.xcodeproj">
+            ReferencedContainer = "container:EditForth.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

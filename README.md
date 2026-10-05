@@ -12,22 +12,23 @@ Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64For
 
 ## Layout
 
-Sibling app folders in one repo:
+One Xcode project, two targets, two source folders:
 
-| Folder / project | Role |
-|------------------|------|
-| `Editor/` + `EditForth.xcodeproj` | Editor app (from 64Edit). Product display name **EditForth**; sources still 64Edit / SixtyFourEdit*. |
-| `Forth/` + `Forth.xcodeproj` | Forth runtime (from 64Forth). Target / app still **64Forth** (`64Forth.app`, same bundle id and App Support paths). |
+| Folder | Target / product | Role |
+|--------|------------------|------|
+| `Editor/` | **EditForth** → `EditForth.app` | Editor (from 64Edit; sources still SixtyFourEdit*) |
+| `Forth/` | **64Forth** → `64Forth.app` | Forth runtime (from 64Forth; same bundle id and App Support paths) |
 
 ```text
 EditForth/
-  EditForth.xcodeproj   # editor
-  Forth.xcodeproj       # Forth runtime (scheme 64Forth)
+  EditForth.xcodeproj   # schemes: EditForth, 64Forth
   Editor/
   Forth/                # App, Host, Kernel, Resources, …
   README.md
   DESIGN.md
 ```
+
+Two **separate processes**; one project window in Xcode.
 
 ## Direction
 
@@ -38,20 +39,18 @@ EditForth/
 
 ## Status
 
-Both trees build. The editor still connects over `~/Library/Application Support/64Forth/edit.sock` to a **64Forth** process (the one from `Forth.xcodeproj` or the standalone 64Forth app — same paths).
+Both targets build. The editor still connects over `~/Library/Application Support/64Forth/edit.sock` to a **64Forth** process (scheme `64Forth` here, or the standalone 64Forth app).
 
 ## Build
 
 ```text
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 
-# Editor
 xcodebuild -project EditForth.xcodeproj -scheme EditForth \
   -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
 
-# Forth runtime (internal name 64Forth)
-xcodebuild -project Forth.xcodeproj -scheme 64Forth \
-  -configuration Debug -derivedDataPath DerivedData/Forth-debug build
+xcodebuild -project EditForth.xcodeproj -scheme 64Forth \
+  -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
 ```
 
 ## License

@@ -18,15 +18,14 @@ Earlier working name **64Forth2** was dropped for that reason.
 
 ```text
 EditForth/                 # repo root
-  EditForth.xcodeproj      # editor target → Editor/
-  Forth.xcodeproj          # 64Forth target → Forth/ (paths remapped from upstream)
-  Editor/                  # 64Edit sources (unchanged names)
-  Forth/                   # 64Forth sources (App, Host, Kernel, Resources, …)
+  EditForth.xcodeproj      # ONE project, two targets
+  Editor/                  # EditForth target (64Edit sources)
+  Forth/                   # 64Forth target (64Forth sources)
   README.md
   DESIGN.md
 ```
 
-Two **separate processes** and two Xcode projects in one git repo. `Forth.xcodeproj` is the upstream `64Forth.xcodeproj` with `SRCROOT` paths pointed at `Forth/` instead of `64Forth/`.
+Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
 
 ## Intended architecture (dock)
 
@@ -39,6 +38,6 @@ IPC / embedding details deferred until dock work starts.
 
 ## Commit exclusions
 
-- Leave `Forth/Resources/Config/HYPER.NDX` unstaged (local Hyper index), same practice as 64Forth.
+- Leave `Forth/Resources/Config/HYPER.NDX` unstaged (local Hyper index).
 - Leave emit products under `Forth/Resources/Library/PI` and Emitter smoke/runner artifacts gitignored.
 - Leave xcuserdata unstaged.
