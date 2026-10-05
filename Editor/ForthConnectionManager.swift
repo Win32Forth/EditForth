@@ -151,6 +151,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleEmitBuffer = ""
         return chunk
     }
+
+    /// Forth menu CLS: wipe the embedded/floating console transcript (form-feed).
+    func clearConsoleDisplay() {
+        consoleTranscript = ""
+        consoleLines = [""]
+        consoleEmitBuffer = "\u{0c}"
+        consoleEmitSeq &+= 1
+        consoleRefreshSeq &+= 1
+    }
     func start() {
         guard fd < 0 else { return }
 

@@ -140,6 +140,55 @@ struct SixtyFourEditApp: App {
                 }
                 .keyboardShortcut("\\", modifiers: [.command])
             }
+
+            // Forth actions must live here: the console window is EditForth-owned, so the
+            // companion process menu bar never becomes active while you use the REPL.
+            CommandMenu("Forth") {
+                Button("FLOAD…") {
+                    ForthMenuSupport.presentFload(forth: forth)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .disabled(!forth.isConnected)
+
+                Button("CHDIR…") {
+                    ForthMenuSupport.presentChdir(forth: forth)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(!forth.isConnected)
+
+                Button("Open File…") {
+                    ForthMenuSupport.presentEdit(workspace: workspace)
+                }
+
+                Divider()
+
+                Button("CLS") {
+                    ForthMenuSupport.clearConsole(forth: forth)
+                }
+                .keyboardShortcut("k", modifiers: [.command])
+                .disabled(!forth.isConnected)
+
+                Divider()
+
+                Button("Show Library Folder") {
+                    ForthMenuSupport.revealInFinder(
+                        ForthMenuSupport.userTreeURL.appendingPathComponent("Library", isDirectory: true)
+                    )
+                }
+                Button("Show AutoLoad Folder") {
+                    ForthMenuSupport.revealInFinder(
+                        ForthMenuSupport.userTreeURL.appendingPathComponent("AutoLoad", isDirectory: true)
+                    )
+                }
+                Button("Show Docs Folder") {
+                    ForthMenuSupport.revealInFinder(
+                        ForthMenuSupport.userTreeURL.appendingPathComponent("Docs", isDirectory: true)
+                    )
+                }
+                Button("Show Config Folder") {
+                    ForthMenuSupport.revealInFinder(ForthMenuSupport.configURL)
+                }
+            }
         }
     }
 
