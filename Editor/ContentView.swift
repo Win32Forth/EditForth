@@ -227,7 +227,7 @@ struct ContentView: View {
 
     // MARK: - Console
 
-    /// Ping strip + embedded companion console (no separate Forth window).
+    /// Ping strip + companion console under Ping, or undock placeholder.
     private var consolePane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -240,8 +240,16 @@ struct ContentView: View {
                     Text("· companion")
                         .foregroundStyle(.secondary)
                 }
+                Text(forth.preferDocked ? "· docked" : "· undocked")
+                    .foregroundStyle(.secondary)
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
+                if forth.preferDocked {
+                    Button("Undock") { forth.undockForth() }
+                        .disabled(!forth.isConnected)
+                } else {
+                    Button("Dock") { forth.dockForth() }
+                }
                 Button("Ping") {
                     forth.ping()
                 }
@@ -263,8 +271,18 @@ struct ContentView: View {
                 .frame(height: 1)
                 .frame(maxWidth: .infinity)
 
-            DockedConsoleView(forth: forth)
+            // Only one DockedConsoleView may drain emit — floating window owns it when undocked.
+            if forth.preferDocked {
+                DockedConsoleView(forth: forth)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ZStack {
+                    Color(nsColor: .controlBackgroundColor)
+                    Text("64Forth undocked — Dock to embed under Ping")
+                        .foregroundStyle(.secondary)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))

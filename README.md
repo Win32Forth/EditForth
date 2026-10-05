@@ -44,7 +44,7 @@ Both targets build. Ping launches this project’s **64Forth** as a companion (s
 
 ### Embedded companion console
 
-Ping starts `64Forth --companion` (accessory activation, no Forth window). The editor shows an embedded character console under Ping (`DockedConsoleView`); typing and output go over `edit.sock` (`executeCommand`, `pushKey`, `consoleOutput`). The splitter resizes the console with the editor window. Quit EditForth terminates the Ping-launched companion.
+Ping starts `64Forth --companion` (accessory activation, no Forth window). The editor shows an embedded character console under Ping (`DockedConsoleView`); typing and output go over `edit.sock` (`executeCommand`, `pushKey`, `consoleOutput`). The splitter resizes the console with the editor window. **Undock** moves that console into a floating titled window (same companion); **Dock** or closing the floating window returns it under Ping. Quit EditForth terminates the Ping-launched companion.
 
 ## Build
 

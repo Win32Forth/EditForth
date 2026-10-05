@@ -38,12 +38,14 @@ Window overlay docking (separate NSWindow `setFrame` into a slot) failed UX (flo
 - IPC: `EditorRequest.pushKey`; legacy `dock`/`undock` are no-ops that ack `dockState`.
 - Lifecycle: editor quit terminates Ping-launched companion (Process + bundle-URL match). Full quit-either-ends-both still open.
 - GRAPHICS App Output / facility windows remain out of scope while headless.
+- **Undock**: EditForth-owned floating `NSWindow` hosting `DockedConsoleView` (same companion / sock). Not a second 64Forth GUI process.
+- **Dock** / closing the floating window: console returns under Ping. Preference `forthDocked` (default true).
 
 ## Intended architecture (dock / detach)
 
 1. Default: embedded companion console under Ping (one editor window).
 2. **Ping stays in the editor**.
-3. Later undock = separate Forth window; **quit either app ends both**.
+3. Undock = floating console window (editor-owned); **quit editor ends companion**.
 4. Re-dock always lands **below Ping**.
 
 ## Commit exclusions

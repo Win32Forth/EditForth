@@ -47,9 +47,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleRefreshSeq: UInt = 0
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
-    /// True while the embedded console should treat Forth as present under Ping.
-    /// (Legacy window-dock ack; companion mode sets this on connect.)
-    @Published private(set) var isForthDocked = false
+    /// User preference: console under Ping (true) vs floating undocked window (false).
+    @Published var preferDocked: Bool {
+        didSet {
+            UserDefaults.standard.set(preferDocked, forKey: Self.preferDockedKey)
+            isForthDocked = preferDocked
+        }
+    }
+    /// True while the console is embedded under Ping (false = floating undocked window).
+    @Published private(set) var isForthDocked = true
     /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
     @Published private(set) var consoleEmitSeq: UInt = 0
     /// Durable full transcript for remount / Show Forth Console (not cleared by takeConsoleEmit).
@@ -63,6 +69,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         breakpointEntries.map(\.name)
     }
 
+    private static let preferDockedKey = "forthDocked"
     private var fd: Int32 = -1
     private var readSource: DispatchSourceRead?
     private let ioQueue = DispatchQueue(label: "com.Win32Forth.SixtyFourForth.edit-client")
@@ -79,7 +86,37 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var companionProcess: Process?
 
     override init() {
+        if UserDefaults.standard.object(forKey: Self.preferDockedKey) == nil {
+            preferDocked = true
+        } else {
+            preferDocked = UserDefaults.standard.bool(forKey: Self.preferDockedKey)
+        }
         super.init()
+        isForthDocked = preferDocked
+        ForthConsoleWindowController.shared.onRequestDock = { [weak self] in
+            self?.dockForth()
+        }
+    }
+
+    /// Embed the companion console under Ping; close the floating window.
+    func dockForth() {
+        preferDocked = true
+        ForthConsoleWindowController.shared.closeQuietly()
+    }
+
+    /// Move the companion console into a floating titled window.
+    func undockForth() {
+        preferDocked = false
+        ForthConsoleWindowController.shared.show(forth: self)
+    }
+
+    /// Keep floating window in sync after connect / preference changes.
+    private func syncUndockedWindow() {
+        if preferDocked {
+            ForthConsoleWindowController.shared.closeQuietly()
+        } else if isConnected {
+            ForthConsoleWindowController.shared.show(forth: self)
+        }
     }
 
     /// Drain companion emit text since `lastSeq`. Updates `lastSeq` to `consoleEmitSeq`.
@@ -129,8 +166,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
         fd = cfd
         isConnected = true
-        isForthDocked = true
+        isForthDocked = preferDocked
         lastError = nil
+        syncUndockedWindow()
 
         let src = DispatchSource.makeReadSource(fileDescriptor: cfd, queue: ioQueue)
         src.setEventHandler { [weak self] in
@@ -257,6 +295,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
     /// Quit the 64Forth we launched via Ping (EditForth lifecycle tie).
     func terminateLaunchedCompanion() {
+        ForthConsoleWindowController.shared.closeQuietly()
         if let proc = companionProcess, proc.isRunning {
             proc.terminate()
             companionProcess = nil
@@ -301,7 +340,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         readSource = nil
         fd = -1
         isConnected = false
-        isForthDocked = false
+        isForthDocked = preferDocked
         isDebugSessionArmed = false
         debugLocation = nil
         breakpointEntries = []
@@ -487,7 +526,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         if n <= 0 {
             DispatchQueue.main.async {
                 self.isConnected = false
-                self.isForthDocked = false
+                self.isForthDocked = self.preferDocked
                 self.isDebugSessionArmed = false
                 self.debugLocation = nil
                 self.breakpointEntries = []
@@ -580,9 +619,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             }
         case .breakpoints(let entries):
             breakpointEntries = entries
-        case .dockState(let docked):
-            // Companion ignores window dock; keep embedded console marked present.
-            isForthDocked = docked || isConnected
+        case .dockState:
+            // Legacy window-dock ack — editor owns dock/undock via preferDocked.
+            isForthDocked = preferDocked
         }
     }
 
