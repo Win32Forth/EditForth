@@ -47,15 +47,17 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleRefreshSeq: UInt = 0
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
-    /// User preference: console under Ping (true) vs floating undocked window (false).
+    /// User preference: console under the status strip (true) vs floating window (false).
     @Published var preferDocked: Bool {
         didSet {
             UserDefaults.standard.set(preferDocked, forKey: Self.preferDockedKey)
-            isForthDocked = preferDocked
+            isForthDocked = preferDocked && !consoleHidden
         }
     }
-    /// True while the console is embedded under Ping (false = floating undocked window).
+    /// True while the console is embedded under the status strip.
     @Published private(set) var isForthDocked = true
+    /// Floating console was closed with the red traffic light — companion still runs.
+    @Published private(set) var consoleHidden = false
     /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
     @Published private(set) var consoleEmitSeq: UInt = 0
     /// Durable full transcript for remount / Show Forth Console (not cleared by takeConsoleEmit).
@@ -76,11 +78,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var incoming = Data()
     private var debugLocationSeq: UInt = 0
     private var viewMissSeqCounter: UInt = 0
-    /// Cancels an in-flight Ping launch reconnect when Ping is pressed again.
+    /// Cancels an in-flight Start Forth launch reconnect when pressed again.
     private var launchConnectGeneration: UInt = 0
     /// Raw companion emit stream for DockedConsoleView (not line-split).
     private var consoleEmitBuffer = ""
-    /// Bundle URL of 64Forth launched via Ping this session (lifecycle terminate).
+    /// Bundle URL of 64Forth launched via Start Forth this session (lifecycle terminate).
     private var launchedForthURL: URL?
     /// Retained so Process deinit does not SIGTERM the companion.
     private var companionProcess: Process?
@@ -92,29 +94,51 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             preferDocked = UserDefaults.standard.bool(forKey: Self.preferDockedKey)
         }
         super.init()
-        isForthDocked = preferDocked
-        ForthConsoleWindowController.shared.onRequestDock = { [weak self] in
-            self?.dockForth()
+        isForthDocked = preferDocked && !consoleHidden
+        ForthConsoleWindowController.shared.onRequestHide = { [weak self] in
+            self?.hideForthConsole()
         }
     }
 
-    /// Embed the companion console under Ping; close the floating window.
+    /// Embed the companion console under the status strip; close the floating window.
     func dockForth() {
+        consoleHidden = false
         preferDocked = true
+        isForthDocked = true
         ForthConsoleWindowController.shared.closeQuietly()
     }
 
     /// Move the companion console into a floating titled window.
     func undockForth() {
+        consoleHidden = false
         preferDocked = false
+        isForthDocked = false
+        ForthConsoleWindowController.shared.show(forth: self)
+    }
+
+    /// Red traffic light on the floating console — hide UI, keep companion running.
+    func hideForthConsole() {
+        guard isConnected else { return }
+        consoleHidden = true
+        preferDocked = false
+        isForthDocked = false
+        ForthConsoleWindowController.shared.closeQuietly()
+    }
+
+    /// Show the floating console again after a red-ball hide.
+    func unhideForthConsole() {
+        guard isConnected else { return }
+        consoleHidden = false
+        preferDocked = false
+        isForthDocked = false
         ForthConsoleWindowController.shared.show(forth: self)
     }
 
     /// Keep floating window in sync after connect / preference changes.
     private func syncUndockedWindow() {
-        if preferDocked {
+        if preferDocked || consoleHidden || !isConnected {
             ForthConsoleWindowController.shared.closeQuietly()
-        } else if isConnected {
+        } else {
             ForthConsoleWindowController.shared.show(forth: self)
         }
     }
@@ -329,7 +353,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 }
                 if i == delays.count - 1 {
                     self.lastError = self.lastError ?? "64Forth launched but edit.sock not ready"
-                    self.appendConsole("ping: launched 64Forth, still not connected\n")
+                    self.appendConsole("Start Forth: launched 64Forth, still not connected\n")
                 }
             }
         }
@@ -340,10 +364,12 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         readSource = nil
         fd = -1
         isConnected = false
+        consoleHidden = false
         isForthDocked = preferDocked
         isDebugSessionArmed = false
         debugLocation = nil
         breakpointEntries = []
+        ForthConsoleWindowController.shared.closeQuietly()
     }
 
     func stepOver() { send(.stepOver) }
@@ -483,15 +509,16 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         #endif
         guard locateSixtyFourForthApp() != nil else {
             lastError = missingHint
-            appendConsole("ping: \(missingHint)\n")
+            appendConsole("Start Forth: \(missingHint)\n")
             return
         }
 
-        appendConsole("Launching companion 64Forth…\n")
+        appendConsole("Starting 64Forth…\n")
         lastError = nil
+        consoleHidden = false
         guard launchSixtyFourForth() else {
-            lastError = "failed to launch companion 64Forth"
-            appendConsole("ping: failed to launch companion 64Forth\n")
+            lastError = "failed to launch 64Forth"
+            appendConsole("Start Forth: failed to launch 64Forth\n")
             return
         }
         scheduleLaunchConnectRetries()
@@ -526,11 +553,13 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         if n <= 0 {
             DispatchQueue.main.async {
                 self.isConnected = false
+                self.consoleHidden = false
                 self.isForthDocked = self.preferDocked
                 self.isDebugSessionArmed = false
                 self.debugLocation = nil
                 self.breakpointEntries = []
                 self.lastError = "64Forth connection closed"
+                ForthConsoleWindowController.shared.closeQuietly()
             }
             readSource?.cancel()
             readSource = nil

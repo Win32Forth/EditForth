@@ -69,7 +69,9 @@ struct ContentView: View {
                     DebugToolbar(forth: forth)
                 }
 
-                if showForthChrome, forth.preferDocked {
+                let consoleEmbedded = forth.preferDocked && !forth.consoleHidden
+
+                if showForthChrome, consoleEmbedded {
                     ConsoleSplitter(
                         onDrag: { translationY in
                             let base = dragStartHeight ?? clampedConsole
@@ -87,14 +89,14 @@ struct ContentView: View {
                     )
                 }
 
-                if showForthChrome, forth.preferDocked {
+                if showForthChrome, consoleEmbedded {
                     consolePane
                         .frame(height: clampedConsole)
                 } else if showForthChrome {
-                    // Undocked: Ping status strip only — no empty dock well.
+                    // Undocked or hidden: status strip only — no empty dock well.
                     consolePane
                         .fixedSize(horizontal: false, vertical: true)
-                } else if forth.preferDocked {
+                } else if consoleEmbedded {
                     consolePane
                         .frame(height: 0)
                         .clipped()
@@ -236,7 +238,7 @@ struct ContentView: View {
 
     // MARK: - Console
 
-    /// Ping strip + (when docked) companion console. Undocked: strip only.
+    /// Status strip + (when docked) companion console. Undocked/hidden: strip only.
     private var consolePane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -245,22 +247,18 @@ struct ContentView: View {
                     Text("· debugging")
                         .foregroundStyle(.orange)
                 }
-                if forth.isConnected {
-                    Text("· companion")
-                        .foregroundStyle(.secondary)
-                }
-                Text(forth.preferDocked ? "· docked" : "· undocked")
-                    .foregroundStyle(.secondary)
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
-                if forth.preferDocked {
-                    Button("Undock") { forth.undockForth() }
-                        .disabled(!forth.isConnected)
+                if forth.isConnected {
+                    if forth.preferDocked {
+                        Button("Undock") { forth.undockForth() }
+                    } else if forth.consoleHidden {
+                        Button("Unhide Forth") { forth.unhideForthConsole() }
+                    } else {
+                        Button("Dock") { forth.dockForth() }
+                    }
                 } else {
-                    Button("Dock") { forth.dockForth() }
-                }
-                Button("Ping") {
-                    forth.ping()
+                    Button("Start Forth") { forth.ping() }
                 }
             }
             .font(.system(size: 12, design: .monospaced))
@@ -275,7 +273,7 @@ struct ContentView: View {
                     .padding(.bottom, 4)
             }
 
-            if forth.preferDocked {
+            if forth.preferDocked, !forth.consoleHidden {
                 Rectangle()
                     .fill(Color(nsColor: .separatorColor).opacity(0.55))
                     .frame(height: 1)
@@ -288,7 +286,7 @@ struct ContentView: View {
         }
         .frame(
             maxWidth: .infinity,
-            maxHeight: forth.preferDocked ? .infinity : nil,
+            maxHeight: (forth.preferDocked && !forth.consoleHidden) ? .infinity : nil,
             alignment: .topLeading
         )
         .background(Color(nsColor: .controlBackgroundColor))

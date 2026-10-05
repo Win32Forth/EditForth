@@ -3,7 +3,8 @@
 //  EditForth
 //
 //  Floating companion console when Undock is pressed. Same edit.sock session;
-//  closing the window (or Dock) returns the console under Ping.
+//  the red close button hides the console (companion keeps running); Dock embeds
+//  it under the editor status strip again.
 //
 
 import AppKit
@@ -15,10 +16,10 @@ final class ForthConsoleWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var hosting: NSHostingController<UndockedConsoleRoot>?
-    /// When true, `windowWillClose` must not call `onRequestDock` (programmatic Dock).
-    private var suppressDockOnClose = false
-    /// User closed the floating window — dock the console back under Ping.
-    var onRequestDock: (() -> Void)?
+    /// When true, `windowWillClose` must not call `onRequestHide` (programmatic close).
+    private var suppressHideOnClose = false
+    /// User closed the floating window with the red traffic light — hide, do not dock.
+    var onRequestHide: (() -> Void)?
 
     private override init() {
         super.init()
@@ -50,27 +51,27 @@ final class ForthConsoleWindowController: NSObject, NSWindowDelegate {
             win.isExcludedFromWindowsMenu = false
             window = win
         }
-        suppressDockOnClose = false
+        suppressHideOnClose = false
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Close without treating it as “user wants Dock”.
+    /// Close without treating it as “user wants Hide”.
     func closeQuietly() {
-        suppressDockOnClose = true
+        suppressHideOnClose = true
         window?.orderOut(nil)
         window?.delegate = nil
         window?.close()
         window = nil
         hosting = nil
-        suppressDockOnClose = false
+        suppressHideOnClose = false
     }
 
     func windowWillClose(_ notification: Notification) {
         window = nil
         hosting = nil
-        guard !suppressDockOnClose else { return }
-        onRequestDock?()
+        guard !suppressHideOnClose else { return }
+        onRequestHide?()
     }
 }
 
@@ -81,7 +82,7 @@ struct UndockedConsoleRoot: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(forth.isConnected ? "Companion connected" : "Engine down")
+                Text(forth.isConnected ? "Engine connected" : "Engine down")
                     .font(.system(size: 12, design: .monospaced))
                 if forth.isDebugSessionArmed {
                     Text("· debugging")
