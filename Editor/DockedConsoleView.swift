@@ -137,13 +137,12 @@ struct DockedConsoleView: NSViewRepresentable {
             tv.setSelectedRange(NSRange(location: protectedUTF16, length: 0))
             isProgrammatic = false
 
-            guard !line.isEmpty else {
-                // Empty Return — ask companion for a fresh prompt via a no-op eval? Just show local prompt space.
-                return
+            if !line.isEmpty {
+                history.append(line)
+                if history.count > 50 { history.removeFirst() }
+                historyIndex = -1
             }
-            history.append(line)
-            if history.count > 50 { history.removeFirst() }
-            historyIndex = -1
+            // Empty Return still asks the companion for a fresh ok(n)> (depth-correct).
             forth.send(.executeCommand(command: line))
         }
 

@@ -36,8 +36,7 @@ enum CompanionChannel {
             ForthEditorServer.shared.broadcast(.consoleOutput(text: chunk))
         }
         kernel.onCommandLineDone = {
-            let n = kernel.dataStackDepth
-            ForthEditorServer.shared.broadcast(.consoleOutput(text: "ok(\(n))> "))
+            ForthEditorServer.shared.broadcastOkPrompt()
         }
         kernel.onHostClearConsole = {
             ForthEditorServer.shared.broadcast(.consoleOutput(text: "\u{0c}")) // form-feed = clear hint
@@ -48,8 +47,7 @@ enum CompanionChannel {
         DispatchQueue.main.async {
             _ = kernel.runAutoLoadIfPresent()
             kernel.forceFlushEmitSync()
-            let n = kernel.dataStackDepth
-            ForthEditorServer.shared.broadcast(.consoleOutput(text: "ok(\(n))> "))
+            ForthEditorServer.shared.broadcastOkPrompt()
         }
 
         #if os(macOS)

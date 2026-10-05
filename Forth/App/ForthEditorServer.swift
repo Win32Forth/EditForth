@@ -30,6 +30,10 @@ final class ForthEditorServer {
     /// Tail of console text for late sock clients (DEBUG often opens 64Edit after first prints).
     private var recentConsole = ""
     private let recentConsoleMax = 32_768
+    /// Last broadcast console chunk ended with CR/LF (or clear). Used so `ok(n)>` starts on its own line after bare TYPE (e.g. `.`).
+    /// Updated on the calling thread (under lock) so `broadcastOkPrompt` sees TYPE before the async sock write.
+    private let emitLock = NSLock()
+    private var emitEndsWithNewline = true
 
     /// True when at least one 64Edit sock client is connected (edit.sock).
     /// Used to skip `open -a` on DEBUG/EDIT when the editor can take pending-goto
@@ -282,8 +286,8 @@ final class ForthEditorServer {
                     let st = kernel.evaluate(command)
                     kernel.forceFlushEmitSync()
                     if st == 0 {
-                        // Mirror GUI ConsoleView appendPrompt after evaluate.
-                        self.broadcast(.consoleOutput(text: "ok(\(kernel.dataStackDepth))> "))
+                        // Mirror GUI ConsoleView: newline before ok when TYPE left mid-line.
+                        self.broadcastOkPrompt()
                         response = .consoleOutput(text: "")
                     } else {
                         response = .error(message: "status=\(st)")
@@ -375,6 +379,11 @@ final class ForthEditorServer {
     }
 
     func broadcast(_ response: ForthResponse) {
+        if case .consoleOutput(let text) = response, !text.isEmpty {
+            emitLock.lock()
+            noteConsoleEmit(text)
+            emitLock.unlock()
+        }
         queue.async {
             if case .consoleOutput(let text) = response, !text.isEmpty {
                 self.appendRecentConsole(text)
@@ -382,6 +391,27 @@ final class ForthEditorServer {
             for fd in self.clients {
                 self.writeResponse(response, to: fd)
             }
+        }
+    }
+
+    /// Append `ok(depth)> ` for the editor console, starting a new line when needed.
+    func broadcastOkPrompt() {
+        let n = KernelBridge.shared.dataStackDepth
+        emitLock.lock()
+        let prefix = emitEndsWithNewline ? "" : "\n"
+        let text = "\(prefix)ok(\(n))> "
+        noteConsoleEmit(text)
+        emitLock.unlock()
+        broadcast(.consoleOutput(text: text))
+    }
+
+    private func noteConsoleEmit(_ text: String) {
+        if text.contains("\u{0c}") {
+            emitEndsWithNewline = true
+            return
+        }
+        if let last = text.last {
+            emitEndsWithNewline = (last == "\n" || last == "\r")
         }
     }
 
