@@ -1,0 +1,223 @@
+\ vocsys.fth — SYSVOC + generalized FORTH→vocab rechain (cold start).
+\ Public domain.
+\
+\ Loaded after app-points.fth (see forth.s). Creates SYSVOC, moves
+\ non-user support words out of FORTH into SYSVOC / EDITOR / GRAPHICS,
+\ then leaves ONLY FORTH DEFINITIONS.
+\
+\ EMITTER rechain stays in vocemit.fth (earlier in the cold blob).
+.( Loading: vocsys.fth) CR
+ONLY FORTH DEFINITIONS
+DECIMAL
+
+\ --- Generalized header move (FORTH → any wid / VOCABULARY) ---
+
+: VOC-WID  ( vocab-xt -- wid )
+  2 CELLS + ;
+
+: (WL-UNLINK#)  ( xt wid -- thread )
+  {: xt wid | slot pred -- :}
+  DICT-THREADS 0 DO
+    wid I CELLS + TO slot
+    BEGIN  slot @ DUP TO pred  WHILE
+      pred xt = IF
+        pred >LINK @  slot !
+        I UNLOOP EXIT
+      THEN
+      pred >LINK TO slot
+    REPEAT
+  LOOP
+  -1 ;
+
+: (WL-LINK#)  ( xt wid thread -- )
+  {: xt wid th | head -- :}
+  th 0< IF  ." XT>WL: not in source wid" CR ABORT  THEN
+  wid th CELLS + TO head
+  head @  xt >LINK !
+  xt head ! ;
+
+: XT>WL-FROM  ( xt from-wid to-wid -- )
+  {: xt from to -- :}
+  xt from (WL-UNLINK#)
+  xt to ROT (WL-LINK#) ;
+
+: XT>WL  ( xt to-wid -- )
+  {: xt to -- :}
+  xt FORTH-WORDLIST to XT>WL-FROM ;
+
+: FORTH>WL  ( c-addr u wid -- )
+  >R 2DUP FORTH-WORDLIST SEARCH-WORDLIST
+  DUP 0= IF  DROP 2DROP R> DROP EXIT  THEN
+  DROP >R 2DROP R> R> XT>WL ;
+
+: FORTH>VOC  ( c-addr u vocab-xt -- )
+  VOC-WID FORTH>WL ;
+
+DOC" SYSVOC ( -- ) vocabulary for system / support words; ALSO SYSVOC to use"
+VOCABULARY SYSVOC
+
+: FORTH>SYSVOC   ( c-addr u -- )  ['] SYSVOC   FORTH>VOC ;
+: FORTH>EDITOR   ( c-addr u -- )  ['] EDITOR   FORTH>VOC ;
+: FORTH>GRAPHICS ( c-addr u -- )  ['] GRAPHICS FORTH>VOC ;
+
+\ --- Phase A: SEE, vocab dump, SUBSTITUTE / XCHAR temps, host guts → SYSVOC ---
+
+S" (SEE-BR?)"       FORTH>SYSVOC
+S" (SEE-HDR)"       FORTH>SYSVOC
+S" (SEE-PRIM)"      FORTH>SYSVOC
+S" (SEE-STEP)"      FORTH>SYSVOC
+S" (SEE-LOC)"       FORTH>SYSVOC
+
+S" (THREAD-DEPTH)"  FORTH>SYSVOC
+S" (CONTEXT)"       FORTH>SYSVOC
+S" (WID.THREADS)"   FORTH>SYSVOC
+S" (TYPE-FIELD)"    FORTH>SYSVOC
+S" (IS-VOCAB)"      FORTH>SYSVOC
+S" (SHOW-VOCAB)"    FORTH>SYSVOC
+S" (VW-T)"          FORTH>SYSVOC
+S" (VW-F)"          FORTH>SYSVOC
+S" (CHK-VOC-WID)"   FORTH>SYSVOC
+S" (VOCAB-WID?)"    FORTH>SYSVOC
+S" (SHOW-BARE-WL)"  FORTH>SYSVOC
+S" (SHOW-WL-REG)"   FORTH>SYSVOC
+
+S" (SUBST-MAX)"     FORTH>SYSVOC
+S" (SUBST-NAMES)"   FORTH>SYSVOC
+S" (SUBST-TEXTS)"   FORTH>SYSVOC
+S" (SUBST-CNT)"     FORTH>SYSVOC
+S" (SF-I)"          FORTH>SYSVOC
+S" (SS-I)"          FORTH>SYSVOC
+S" (SUBST-NAME)"    FORTH>SYSVOC
+S" (SUBST-TEXT)"    FORTH>SYSVOC
+S" (SUBST-FIND)"    FORTH>SYSVOC
+S" (UE-B)"          FORTH>SYSVOC
+S" (UE-D)"          FORTH>SYSVOC
+S" (SS-DEST)"       FORTH>SYSVOC
+S" (SS-MAX)"        FORTH>SYSVOC
+S" (SS-LEN)"        FORTH>SYSVOC
+S" (SS-N)"          FORTH>SYSVOC
+S" (SS-ERR)"        FORTH>SYSVOC
+S" (SS-NBUF)"       FORTH>SYSVOC
+S" (SS-ADD)"        FORTH>SYSVOC
+S" (SS-ADDS)"       FORTH>SYSVOC
+S" (SS-LOOK)"       FORTH>SYSVOC
+
+S" (XQ-SZ)"         FORTH>SYSVOC
+S" (XQ-MAX)"        FORTH>SYSVOC
+S" (TGA)"           FORTH>SYSVOC
+S" (TGU)"           FORTH>SYSVOC
+S" (TGP)"           FORTH>SYSVOC
+S" -TRAILING-GARBAGE" FORTH>SYSVOC
+S" (XH-A)"          FORTH>SYSVOC
+S" (XH-U)"          FORTH>SYSVOC
+S" (XWA)"           FORTH>SYSVOC
+S" (XWU)"           FORTH>SYSVOC
+S" (XWS)"           FORTH>SYSVOC
+
+S" (BLOCK-SEEK)"    FORTH>SYSVOC
+S" (BLOCK-WRITE)"   FORTH>SYSVOC
+S" (BLOCK-READ)"    FORTH>SYSVOC
+
+S" (XFACILITY-OP-GO)" FORTH>SYSVOC
+\ (FILE-OP-CALL) (LOCAL-FRAME-EXIT) (.) (U.) → EMITTER (FLAG_EMM; see vocemit.fth)
+
+\ Compiler / block / locals / float / debug internals (not user words).
+S" (DOES>)"            FORTH>SYSVOC
+S" (F-OP)"             FORTH>SYSVOC
+S" (DO)"               FORTH>SYSVOC
+S" (?DO)"              FORTH>SYSVOC
+S" (LOOP)"             FORTH>SYSVOC
+S" (+LOOP)"            FORTH>SYSVOC
+S" (COMP,)"            FORTH>SYSVOC
+S" (BLOCK-BUF)"        FORTH>SYSVOC
+S" (BLOCK-NR)"         FORTH>SYSVOC
+S" (BLOCK-UPD)"        FORTH>SYSVOC
+S" (CATCH-OK)"         FORTH>SYSVOC
+S" DBG-SHOW-XT"        FORTH>SYSVOC
+S" DBG-SYNC-OK"        FORTH>SYSVOC
+S" DBG-HL-XT"          FORTH>SYSVOC
+S" DBG-PAUSE-XT"       FORTH>SYSVOC
+S" DBG-KEY-XT"         FORTH>SYSVOC
+S" DBG-INLINE"         FORTH>SYSVOC
+S" DBG-TOS@"           FORTH>SYSVOC
+S" DBG-XT@"            FORTH>SYSVOC
+S" DBG-IP@"            FORTH>SYSVOC
+S" DBG-CFA@"           FORTH>SYSVOC
+S" DBG-BODY#"          FORTH>SYSVOC
+S" DBG-NEED-INTRO"     FORTH>SYSVOC
+S" DBG-NEED-STACKS"    FORTH>SYSVOC
+S" DBG-HELP-SHOWN"     FORTH>SYSVOC
+S" DBG-SKIP-NL"        FORTH>SYSVOC
+S" DBG-MIDLINE"        FORTH>SYSVOC
+S" DBG-LINE-COL"       FORTH>SYSVOC
+S" DBG-.SR"            FORTH>SYSVOC
+S" DBG-CURSOR-ON"      FORTH>SYSVOC
+S" DBG-CURSOR-OFF"     FORTH>SYSVOC
+S" DBG-PRINT-INLINE"   FORTH>SYSVOC
+S" DBG-PRINT-NAME"     FORTH>SYSVOC
+S" DBG-XT-INTOABLE?"   FORTH>SYSVOC
+S" DBG-HOST-PAINT"     FORTH>SYSVOC
+S" DBG-HOST-SPAN"      FORTH>SYSVOC
+S" DBG-HOST-SPAN@"     FORTH>SYSVOC
+S" DBG-VIEW-UPDATE"     FORTH>SYSVOC
+S" DBG-WHEEL-DO"       FORTH>SYSVOC
+S" DBG-STEP-OVER"      FORTH>SYSVOC
+S" DBG-STEP-INTO"      FORTH>SYSVOC
+S" DBG-STEP-OUT"       FORTH>SYSVOC
+S" DBG-GO"             FORTH>SYSVOC
+S" DBG-ABORT-SESSION"  FORTH>SYSVOC
+S" TDBG-ARM-KEYS"      FORTH>SYSVOC
+S" TDBG-DISARM-KEYS"   FORTH>SYSVOC
+
+S\" (C\")"             FORTH>SYSVOC
+S" (LOAD-ENTER)"       FORTH>SYSVOC
+S" (LOAD-RUN)"         FORTH>SYSVOC
+S" (LOCAL!)"           FORTH>SYSVOC
+S" (LOCAL@)"           FORTH>SYSVOC
+
+\ --- Phase B: retired SZ-EDITOR host hooks (kept as comments) ---
+\ Clipboard / cwd are FORTH words: CLIP! CLIP@ CWD@
+\ Former (SZ-VIEW-CELLS) (SZ-CLICK) (SZ-PATH@) (SZ-CMD@) (SZ-CONSOLE-EMIT)
+\ (SZ-CMD-DONE) (SZ-SAVE-AS-REQ) (SZ-OPEN-REQ) (SZ-CLR-APP-QUIT) removed.
+
+\ --- Phase C: graphics host hooks → GRAPHICS ---
+
+S" (APP-OPEN)"   FORTH>GRAPHICS
+S" (APP-CLOSE)"  FORTH>GRAPHICS
+S" (APP-BLIT)"   FORTH>GRAPHICS
+S" (APP-PBLIT)"  FORTH>GRAPHICS
+S" (APP-CBLIT)"  FORTH>GRAPHICS
+S" (APP-KEY?)"   FORTH>GRAPHICS
+S" (APP-KEY)"    FORTH>GRAPHICS
+S" (APP-NAME)"   FORTH>GRAPHICS
+S" (APP-TONE)"   FORTH>GRAPHICS
+S" (APP-PUMP)"   FORTH>GRAPHICS
+S" (APP-MOUSE)"  FORTH>GRAPHICS
+S" (APP-IMG-CHOOSE)" FORTH>GRAPHICS
+S" (APP-IMG-LOAD)"   FORTH>GRAPHICS
+S" (APP-IMG-SIZE)"   FORTH>GRAPHICS
+S" (APP-IMG-RENDER)" FORTH>GRAPHICS
+S" (APP-FILE-CHOOSE)"  FORTH>GRAPHICS
+S" (APP-FILE-SAVE-AS)" FORTH>GRAPHICS
+S" (APP-FILE-PATH)"    FORTH>GRAPHICS
+S" (APP-FILE-SLURP)"   FORTH>GRAPHICS
+S" (APP-FILE-SPEW)"    FORTH>GRAPHICS
+
+\ Rechain helpers into SYSVOC (ALSO so we can keep calling them while moving).
+ALSO SYSVOC
+: >SYSVOC  ( xt -- )  ['] SYSVOC VOC-WID XT>WL ;
+' FORTH>GRAPHICS >SYSVOC
+' FORTH>EDITOR   >SYSVOC
+' FORTH>SYSVOC   >SYSVOC
+' FORTH>VOC      >SYSVOC
+' FORTH>WL       >SYSVOC
+' XT>WL          >SYSVOC
+' XT>WL-FROM     >SYSVOC
+' (WL-LINK#)     >SYSVOC
+' (WL-UNLINK#)   >SYSVOC
+' VOC-WID        >SYSVOC
+' >SYSVOC        >SYSVOC
+' (SLURP)        >SYSVOC
+
+ONLY FORTH DEFINITIONS
+

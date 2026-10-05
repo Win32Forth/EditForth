@@ -1,0 +1,4 @@
+#!/bin/sh
+# Deprecated stub — use app-build.sh (emit-run + 64EMIT02 Resources/app.img).
+# Kept so older docs that name this file still find a pointer.
+exec "$(cd "$(dirname "$0")" && pwd)/app-build.sh" "$@"

@@ -1,0 +1,221 @@
+//
+//  kernel_api.h
+//  64Forth
+//
+//  Public domain.
+//
+//  C ABI for the PickleForth ARM64 kernel embedded in the Swift host.
+//
+
+#ifndef SIXTYFOURFORTH_KERNEL_API_H
+#define SIXTYFOURFORTH_KERNEL_API_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int kernel_init(void);
+int kernel_eval(const char *line, size_t n);
+
+/// Data-stack depth (cells) after last kernel_eval / init. Does not modify the stack.
+int kernel_data_depth(void);
+
+/// Nonzero while DEBUG / DBG-ON is stepping (NEXT pause). Host must pushKey for KEY.
+int kernel_debug_armed(void);
+
+/// Nonzero while TCOMDBG pause wants F6/F7/⌘⇧Y steal (SIMARM64 stepper; not ITC NEXT).
+int kernel_tdebug_armed(void);
+
+/// Nonzero if either ITC DEBUG or TCOM TDBG wants stepper keys.
+int kernel_any_debug_armed(void);
+
+/// Copy last DEBUG snapshot (data stack, return IPs, upcoming counted name as C string).
+/// rlabels is 16 slots of 32 bytes ("NAME +N CELLS" / "NAME -N CELLS") if non-NULL.
+void kernel_debug_get(int64_t *s, int *ns, int64_t *r, int *nr, char *name, int nmax, char *rlabels);
+
+/// Cell after paused IP (LIT's value when the upcoming word is LIT).
+int64_t kernel_debug_inline(void);
+
+/// VIEW path + 1-based line for the paused enclosing colon (or peek xt).
+/// Writes a NUL-terminated path into `path` (up to path_max). Returns 1 if
+/// stamped, else 0 (*line = 0, path empty).
+int kernel_debug_location(char *path, int path_max, int *line);
+
+/// Peek token name at the last DEBUG pause (`debug_name`). Writes a
+/// NUL-terminated name into `buf` (up to buf_max). Returns length, or 0.
+int kernel_debug_peek_name(char *buf, int buf_max);
+
+/// BREAK table has 8 xt slots (`debug_bp_xts`). Copy the NUL-terminated
+/// dictionary name for slot `index` (0..7) into `buf`. Returns length, or 0
+/// if the slot is empty / out of range / NFA looks invalid / no room.
+int kernel_break_name(int index, char *buf, int buf_max);
+
+/// 1 if slot `index` has an xt and a nonzero enable flag, else 0.
+int kernel_break_enabled(int index);
+
+/// Set enable for an occupied slot (no-op if empty / out of range).
+void kernel_break_set_enabled(int index, int enabled);
+
+/// Clear xt and enable for slot `index` (no-op if out of range).
+void kernel_break_clear(int index);
+
+/// Arm "run until enabled BREAK" (`debug_bp_go = 1`). Safe while DEBUG paused.
+void kernel_debug_bp_go(void);
+
+void kernel_set_emit(void (*fn)(int c));
+/// Bulk TYPE path: emit `n` bytes at `buf` as one UTF-8 (or Latin-1 fallback) chunk.
+void kernel_set_emit_buf(void (*fn)(const char *buf, size_t n));
+void kernel_set_key(int (*fn)(void));
+
+/// KEY? — non-blocking: return non-zero if a key is available (does not consume it).
+void kernel_set_key_q(int (*fn)(void));
+
+/// TIME&DATE — fill out[6] with sec, min, hour, day, month, year (local time).
+void kernel_set_time_date(void (*fn)(int64_t out[6]));
+
+/// File-Access multiplexor. op codes in forth.s; returns ior (0 = ok).
+/// ptr is optional c-addr / buffer; o1/o2/o3 optional results.
+typedef long long (*kernel_file_op_fn)(long long op, long long a, long long b, long long c, long long d,
+                                       void *ptr, long long *o1, long long *o2, long long *o3);
+void kernel_set_file_op(kernel_file_op_fn fn);
+
+/// Floating-point multiplexor (IEEE 64-bit F-stack in host). Same ABI shape as file_op.
+typedef long long (*kernel_float_op_fn)(long long op, long long a, long long b, long long c, long long d,
+                                        void *ptr, long long *o1, long long *o2, long long *o3);
+void kernel_set_float_op(kernel_float_op_fn fn);
+
+/// FROMLIB / FROM-LIBRARY — host arms Library resolve for next load/CHDIR.
+void kernel_set_fromlib(void (*fn)(void));
+
+/// Disarm FROMLIB (e.g. REQUIRE skipped because file already loaded).
+void kernel_set_fromlib_clear(void (*fn)(void));
+
+/// FROMLIB? — nonzero if Library resolve is currently armed.
+typedef long long (*kernel_fromlib_query_fn)(void);
+void kernel_set_fromlib_query(kernel_fromlib_query_fn fn);
+
+/// LIBRARY-PATH — absolute Library root into out; return 0 ok, -1 missing.
+typedef int (*kernel_library_path_fn)(char *out, size_t out_max, size_t *out_len);
+void kernel_set_library_path(kernel_library_path_fn fn);
+
+/// Called when a file INCLUDE/FLOAD SOURCE ends (SOURCE-ID was > 0) so the host
+/// can restore the previous load cwd (nested relative path resolution).
+void kernel_set_end_include(void (*fn)(void));
+
+/// INCLUDE / FLOAD / REQUIRE.
+/// path_len == 0 → bare (host open panel). On success set *out_ptr / *out_len
+/// (buffer valid until host frees after kernel_eval). Return 0 ok, -1 fail/cancel.
+typedef int (*kernel_load_file_fn)(const char *path, size_t path_len,
+                                   const char **out_ptr, size_t *out_len);
+void kernel_set_load_file(kernel_load_file_fn fn);
+
+/// Resolve load name → absolute registry key (consumes FROMLIB). Return 0 ok, -1 fail.
+/// Writes UTF-8 path (no trailing NUL required; *out_len set).
+typedef int (*kernel_resolve_key_fn)(const char *path, size_t path_len,
+                                     char *out, size_t out_max, size_t *out_len);
+void kernel_set_resolve_key(kernel_resolve_key_fn fn);
+
+/// Absolute path of last successful load_file (REQUIRE registry). Return 0 ok, -1 none.
+typedef int (*kernel_last_load_key_fn)(char *out, size_t out_max, size_t *out_len);
+void kernel_set_last_load_key(kernel_last_load_key_fn fn);
+
+/// CHDIR — path_len == 0 → bare folder picker.
+void kernel_set_chdir(void (*fn)(const char *path, size_t n));
+
+/// PWD — print logical cwd.
+void kernel_set_pwd(void (*fn)(void));
+
+/// DIR — path_len == 0 → list cwd (or Library if FROMLIB armed).
+void kernel_set_dir(void (*fn)(const char *path, size_t n));
+
+/// EDIT — path_len == 0 → open panel; else open named file in system editor + cwd.
+/// Honors FROMLIB (Library resolve; does not permanently chdir into Library).
+void kernel_set_edit(void (*fn)(const char *path, size_t n));
+
+/// EDIT-AT — open path at 1-based line in 64Edit (VIEW); no cwd change.
+void kernel_set_edit_at(void (*fn)(const char *path, size_t n, int64_t line));
+
+/// SYSTEM — run shell command (host: /bin/sh -c). cmd is not necessarily NUL-terminated.
+/// Returns process exit status (0 = success), or -1 if launch/wait failed.
+typedef long long (*kernel_system_fn)(const char *cmd, size_t n);
+void kernel_set_system(kernel_system_fn fn);
+
+/// Facility terminal (PAGE / AT-XY / TERMINAL-REFRESH / FACILITY-OFF).
+/// op: 1=PAGE  2=AT-XY (a=col b=row, 0-based)  3=TERMINAL-REFRESH
+///     4=FACILITY-OFF  5=resize (a=cols b=rows)
+void kernel_set_facility_op(void (*fn)(int64_t op, int64_t a, int64_t b));
+
+/// Facility cursor for AT-XY? (0-based col, row). Host fills both; nulls ignored.
+void host_facility_xy(int64_t *col_out, int64_t *row_out);
+
+/// App-output char-graphics window (separate from console / Facility).
+/// Forth owns the cell buffer; host blits and supplies keys.
+int64_t host_app_open(int64_t cols, int64_t rows);
+void host_app_close(void);
+void host_app_blit(const void *addr, int64_t nbytes);
+/// 1-bit pixel blit (legacy SA). Prefer host_app_cblit for depth 1/8/32.
+void host_app_pblit(const void *addr, int64_t nbytes);
+/// Pixel blit with depth: 1=packed bits, 8=index, 32=BGRA. Size implied 640×400.
+void host_app_cblit(const void *addr, int64_t nbytes, int64_t depth);
+int64_t host_app_keyq(void);
+int64_t host_app_key(void);
+void host_app_name(const void *addr, int64_t nbytes);
+/// TONE: freq = Hz, dur = tenths of a second (F-PC/TCOM). Plays a sine tone.
+void host_app_tone(int64_t freq, int64_t dur);
+void host_app_pump(void);
+/// Latest mouse in Forth PLOT coords (origin bottom-left). buttons: 1=left 2=right 4=middle.
+void host_app_mouse(int64_t *x, int64_t *y, int64_t *buttons);
+
+/// Image viewer: NSOpenPanel / path load / size / render into BGRA.
+/// choose: 0=ok -1=cancel -2=fail. load: 0=ok -2=fail. render: 0=ok -1=no image.
+int64_t host_app_img_choose(void);
+int64_t host_app_img_load(const void *path, int64_t nbytes);
+void host_app_img_size(int64_t *w, int64_t *h);
+int64_t host_app_img_render(void *dest, int64_t dest_w, int64_t dest_h,
+                            int64_t cx, int64_t cy, int64_t zoom100);
+
+/// Text file panels / staged path (EDIT64). ior: 0=ok, -1=cancel, -2=fail.
+int64_t host_app_file_choose(void);
+int64_t host_app_file_save_as(void);
+int64_t host_app_file_path(void *dest, int64_t max);
+int64_t host_app_file_slurp(void *dest, int64_t max, int64_t *out_u);
+int64_t host_app_file_spew(const void *src, int64_t nbytes);
+
+/// \S / \s on the console SOURCE (SOURCE-ID 0): sticky flag for multi-line paste stop.
+/// Returns 1 if set since last call, else 0; always clears the flag (TZForth-style).
+int kernel_take_repl_batch_stop(void);
+
+/// Legacy SZ-EDITOR open-panel sticky (Forth no longer sets). Always clears.
+int kernel_take_sz_editor_open(void);
+
+/// Cmd-Q while a facility editor session is open: quit after it ends.
+void kernel_set_sz_app_quit(void);
+void kernel_clear_sz_app_quit(void);
+/// Nonzero if app-quit-after-editor is pending (does not clear).
+int kernel_sz_app_quit_pending(void);
+
+/// Memory-fault recovery (SIGSEGV / SIGBUS). Kernel installs handlers at init;
+/// host may reinstall. longjmps to the active kernel_eval / QUIT setjmp.
+void kernel_on_memory_fault(int sig);
+
+/// 1 if a memory fault was recovered since last take (sticky; cleared on read).
+int kernel_take_fault_flag(void);
+
+void kernel_cold_start(void);
+
+const kernel_boot_word *row = kernel_boot_word_table();
+for (; row->name != NULL; row++) {
+    size_t n = (row->end && row->code)
+        ? (const char *)row->end - (const char *)row->code
+        : 0;
+    /* row->name, row->code, n */
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SIXTYFOURFORTH_KERNEL_API_H */

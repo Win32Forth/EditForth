@@ -1,0 +1,1407 @@
+# 64Forth development status
+
+**Current:** **1.5.4** (build **48**) — dual-app DMG ready; GitHub release pending  
+**Last updated:** 2026-10-04
+
+---
+
+## v1.5.4 — Hyper VIEW, companion flavor, Emitter sanitize, 64Edit chrome
+
+**Version strings:** marketing **1.5.4**, build **48**. Companion **64Edit** uses the **same** marketing version (**1.5.4**) and build (**48**) — keep them matched when shipping.
+
+**Release:** `64Forth/releases/64Forth-1.5.4-macOS.dmg` in tree (replaces 1.5.3); GitHub `v1.5.4` pending until tagged. Dual-app DMG ships **both** `64Forth.app` and `64Edit.app`. GitHub release attaches the DMG plus `Getting 64Forth to run.jpg` (Gatekeeper steps apply to **each** app the first time).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.5.4 === Oct 4, 2026 10:28 PM ===
+```
+
+### Highlights (vs 1.5.3)
+
+- **Classic `VOCABULARY`:** execute replaces CONTEXT (`search_order[0]`) like Win32Forth / F-PC / GForth and like `FORTH`; it no longer `PUSH-ORDER`s. Use `ALSO <vocab>` when the prior wordlist must stay on the order (e.g. `ALSO FLOATING`, `ALSO GRAPHICS DEFINITIONS`). New `NAMESPACE` is the push-and-set form (ciforth-style). `CONTEXT! ( wid -- )` is the shared replace helper. ANSValidate `search.fth` now expects depth **2** after `ONLY FORTH ALSO SW-FOO` (not 3) and depth **1** after `PREVIOUS`. Kernel rebuild required for `kernel1.fth`.
+- **Hyper TYPE 0 / VIEW OVER:** `HX-SCAN-PREF` matches TYPE 0 prefixes only at the first non-blank on the line (mid-line `CREATE OVER` in `+FIELD` no longer indexes `OVER`). `(HYPER-STAMP-LINE)` keeps the first Library stamp (first-wins). `HYPER.CFG` docs updated. Leave local `Config/HYPER.NDX` unstaged; reindex after pull if needed.
+- **Companion flavor match:** `FileHost.locateSixtyFourEditApp` — Debug → sibling then DerivedData Debug only; Release → sibling then `/Applications` only (never Debug DerivedData). 64Edit Ping uses the same rule to launch 64Forth.
+- **64Edit (companion repo):** View → Show Forth Console / Show Line Numbers; Ping launches flavor-matched 64Forth when `edit.sock` is down (silent when connected — no pong line); console splitter no longer flashes (AppStorage on drag end + global drag coordinates; opaque transcript).
+- **Emitter `SA-SANITIZE-DOVAR`:** keep integers below **4 GiB** (`$100000000`, same threshold as DOCON) **and** sign-extended negatives (`$FFFF…` top bits). Earlier `$100000` / unsigned-only `>=4GiB` rules zeroed `ED-CAP0` (64K → EDIT64 Open empty), `VED-CAP` (256K), `BI-BASE` (1e9 → PIMAIN blink/SEGV on `UM/MOD` by 0), and `-1 CONSTANT` cells. Host malloc stays a canonical VA above 4 GiB. Re-emit Sample stand-alone apps (`EDIT64`, `VED64`, `PIMAIN`, …) after the change.
+- **Emitter body offsets (audit):** host `>BODY` and emitter `BODY` remain CFA+**16**; stand-alone emitted colon bodies start at CFA+**8** (`WRITE-COLON` omits the host `DOES>` slot); `SA-DOCOL-IP8` / `emit-run` enter with `#8`. Data PFAs and `GRAPHICS-WID` stay CFA+16.
+
+## v1.5.3 — BREAK Pass 1–2, dbg-map spans, 64Edit polish; version lockstep
+
+**Version strings:** marketing **1.5.3**, build **47**. Companion **64Edit** uses the **same** marketing version (**1.5.3**) and build (**47**) — keep them matched when shipping.
+
+**Release:** `64Forth/releases/64Forth-1.5.3-macOS.dmg` + GitHub `v1.5.3`. Dual-app DMG ships **both** `64Forth.app` and `64Edit.app`. GitHub release attaches the DMG plus `Getting 64Forth to run.jpg` (Gatekeeper steps apply to **each** app the first time).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.5.3 === Oct 3, 2026 11:21 AM ===
+```
+
+### Highlights (vs 1.5.2)
+
+- **Pass 1 BREAK toggle (console + 64Edit):** **F9** / **⌘\\** / Tools→Toggle Breakpoint (console) or Debug→Toggle Breakpoint (64Edit) run `TOGGLE-BREAK` on the whitespace-delimited Forth token under the caret. Marks an xt in the 8-slot `BREAK-TABLE` (`debug_bp_xts`); the break fires when **`BPGO <word>`** arms the stepper and that xt is hit. Idle only while DEBUG is paused.
+- **Pass 2 BREAK panel + enable/Arm:** Kernel `BREAK-ENABLES` / `debug_bp_en`; Forth `DISABLE-BREAK` / `ENABLE-BREAK` / `.BREAKS` “(off)”. Sock `breakpoints(entries:)` with `{name,enabled}`; `removeBreakpoint` / `setBreakpointEnabled` (paused-safe via kernel clear/enable); `armBreakGo` while paused (set `debug_bp_go` + Continue). 64Edit **Breakpoints** popover next to Ping and on the Debug toolbar: list, checkbox enable/disable, delete, **Arm** (paused only — idle still uses console `BPGO <word>`). Wash: enabled pale-red, disabled gray.
+- **Current-word highlight:** `kernel_debug_peek_name` + sock `debugLocation(path:line:name:off:len)`. Prefers dbg-map file-relative UTF-8 spans (`DBG-HOST-SPAN` / `DBG-PUBLISH-SPAN`); 64Edit falls back to whole-word name search near the VIEW line (runtime→source aliases). Pastel green wash; clears on next pause or session end. `Library/DbgSpanSmoke/` exercises map build and publish.
+- **Soft VIEW for 64Edit Hyper:** `(VIEW) ( c-addr u -- flag )`; `VIEW` is `PARSE-NAME (VIEW) DROP` (no `'` abort). Sock `viewWord` / `viewResult(opened:)` so ⌘-click can fall back to in-file find on miss. `HYPER-VIEW-CU` removed.
+- **Autoload HL bind:** after Hyper, re-arm `DBG-MAP-BIND` / `DBG-SET-HL` so map→span survives Hyper clearing `DBG-HL-XT`.
+- **Nested DEBUG file follow:** step into/out opens each new source tab and restores the prior file on EXIT; sock `debugLocation` uses the resolved absolute path from `revealForDebug`.
+- **Quieter opens:** when 64Edit is already on `edit.sock`, skip `open -a` (and DEBUG pending-goto) so Launch Services does not reactivate/flash the window; cold launch still opens the file.
+- **Editor-typed DBG:** `host_debug_paint` publishes on the Forth queue (no `main.async` hop) so source opens while `executeCommand` holds main inside `evaluate`.
+- **Location fallback:** `kernel_debug_location` tries stamped `debug_cfa`, then stamped `debug_xt` (unstamped CFA no longer blocks e.g. `DBG .FREE`).
+- **64Edit DEBUG UX:** toolbar focus + F5–F8 / browse-mode letters; Forth command field disabled while armed; single system **View** menu for Browse Mode; no sticky red “debugger not armed” after Continue/`g`.
+- **Sock hardening:** `SO_NOSIGPIPE` + `SIGPIPE` ignore; step/resume/stop on the editor-server I/O queue; `notifyDebugSessionArmed` on paint.
+- **64Forth menus:** File holds FLOAD / CHDIR / EDIT / Update·Restore user data / Show Library·AutoLoad·Docs·Config (SZ New/Open/Save/Close removed). Tools keeps CLS, VIEW under cursor, Toggle Breakpoint.
+- **64Edit (companion):** New File / dirty Save sheets, line-number gutter, Find & Replace, ⌘-click VIEW with disconnected fallback, thicker console splitter, Home/End, Pass 1–2 BREAK (F9/⌘\\, panel, Arm, red/gray wash).
+
+## v1.5.2 — 64Edit companion, DEBUG follow, dual-app DMG
+
+**Version strings:** marketing **1.5.2**, build **46**. Companion **64Edit** was marketing **1.0** at first ship.
+
+**Release:** DMG ships **both** `64Edit.app` and `64Forth.app`. Drag both into `/Applications` (or the same folder). Rebuild Release before packing so the banner matches. GitHub release attaches the DMG plus `Getting 64Forth to run.jpg` (Gatekeeper steps apply to **each** app the first time).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.5.2 === Oct 2, 2026 7:19 PM ===
+```
+
+### Highlights (vs 1.5.1)
+
+- **In-app SZ-EDITOR removed.** `Library/Editor/` is gone. Editing is the separate **64Edit** app: https://github.com/Win32Forth/64Edit
+- **Socket link (no special install wiring):** 64Forth listens on `~/Library/Application Support/64Forth/edit.sock`. 64Edit connects as a client. Works whenever both apps run, from Applications or elsewhere. Autoload keeps an empty `EDITOR` vocabulary for Hyper.
+- **EDIT / VIEW launch:** writes `pending-goto.json` (`path`, `line`, `mode`) and posts `com.Win32Forth.64Edit.goto`, then `/usr/bin/open -a` on the companion. **Release** prefers `64Edit.app` beside `64Forth.app`, then `/Applications/64Edit.app`. **Debug** prefers DerivedData first. `mode: "view"` for VIEW/EDIT-AT; `mode: "edit"` for EDIT.
+- **64Edit workspace:** single window with tabs, shared Forth console, Open/Save/Save As, pending-goto and debug find-or-open (path/inode). Per-tab caret, top line, and **view mode** (browse stays on every debug-opened file until Edit).
+- **DEBUG / DBG → 64Edit:** on pause, `host_debug_paint` resolves the VIEW stamp and opens/scrolls 64Edit (`revealForDebug` + sock `debugLocation`). Nested step into/out switches files and restores the prior tab. Toolbar in 64Edit: Step Over / Into / Out / Continue / Stop (sock → same keys as console F6 / F7 / F8 / `g` / `q`). Console DEBUG cursor erase uses BS in the sock replay path.
+- **SEE / VIEW / DBG** print full `path:line` (or `(no source)`). Nested `REQUIRE` / `INCLUDED` push/pop the view source stack so Autoload Hyper stamps stay on `Library/Hyper/hyper.fth:…`.
+- `HYPER-STAMP-COLD` uses `ALSO FORTH` and restamps after `VIEW` / `LOCATE` / `DBG` exist.
+
+## v1.5.1 — OOP windows
+
+**Version strings:** marketing **1.5.1**, build **45**.
+
+**Release:** DMG + GitHub release.
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.5.1 === Sep 27, 2026 9:59 PM ===
+```
+
+### Highlights (vs 1.5.0)
+
+- **OOP UI,** separate from the GRAPHICS App Output window. `FROMLIB FLOAD Classes/oop.fth` loads `WINDOW`, `CHILD`, `MENU`, and `BUTTON`.
+- `(OOP-CALL)` is the host word. A window is an `NSWindow`. A child is an `NSView` inside its parent. Menu items and buttons post a tag.
+- `OOP-ON` stores an xt for a tag. `OOP-SERVE` runs that word. `OOP-STOP` ends the wait. `LABEL:` is `( c-addr u x y tag -- )` from the parent's top-left.
+- `Classes/OOP_REF` is local Win32Forth reference material and is not part of this version.
+
+## v1.5.0 — Classes, FLOATING, Hayes
+
+**Version strings:** marketing **1.5.0**, build **44** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.5.0 === Sep 27, 2026 5:06 PM ===
+```
+
+### Highlights (vs 1.4.3)
+
+- **Classes:** Forth-2012 port of the April 2, 2002 Win32Forth object system in `Library/Classes/classes.fth`. Heap send is `MSG: [ ]` with the object already on top. `n NEW>` only after `<INDEXED`.
+- **Dictionary:** lookup folds a–z. `COMPARE`, `SEARCH`, file paths, and `SUBSTITUTE` text stay case-sensitive. Colon bodies start at CFA+16; `>BODY` is `16 +`. A `VOCABULARY` body is the 16 hash-head cells (the wid), not a cell holding a pointer.
+- **`FLOATING`:** the floating-point wordlist was renamed from `FP`. `filetest.fth`'s `CREATE FP` buffer is unchanged. Use `ALSO FLOATING`.
+- **`REPRESENT`:** digits are written to the `c-addr` the kernel passes. The Hayes number-output compares (`10000` / `33333` / `66667`) pass.
+- **Blocks and source:** block volumes may seek past EOF; a short `hayes-blocks.blk` is recreated; `EVALUATE` clears `BLK`. Line-at-a-time `INCLUDE` is `SOURCE-ID` −2, and `FILE-ECHO` / undefined reports treat that like a file. The console drains emit while `evaluate` waits, so long `FLOAD`s show output without a `KEY`.
+- **Hayes:** `FROMLIB FLOAD HayesTest/HayesTest.fth`. The core `ACCEPT` test still waits for a typed line. After that, every suite counter is 0, including `FPERRORS`.
+- **Emitter stand-alone:** each `VOCABULARY` registers its wid, so `DATA-END` sizes GRAPHICS data to the next header (tetra no longer overflows the data segment). `(CATCH-OK)` is recorded as a pointer reloc, so `EMIT-WINDOW-APP` stays open after the window appears. Emitted colon bodies start at CFA+8; the host `DOES>` slot is not copied, and `>BODY` on the host remains CFA+16. Pass the word that waits (`GAME` for tetra), not a wrapper that calls `WINDOW-OFF` as soon as it returns.
+- **Pascal:** an array bound may be a number, a named constant, or that constant plus or minus a number (`array [Limit+1]` → `(Limit+1)` cells). Generated `PASY.fth` / `PASX.fth` and `Pascal.zip` are not shipped; `*-SAMPLE.fth` stays.
+
+**Release:** DMG + GitHub release. Rebuild before making the DMG so the banner and build number match.
+
+---
+
+This file tracks design notes and progress for work after 1.0.7.  
+Append new design sections as we go; mark items done when implemented.
+
+---
+
+## v1.4.3 — GRAPHICS color, IMAGEVIEW64/EDIT64, cold XREF
+
+**Version strings:** marketing **1.4.3**, build **42** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.4.3 === Sep 22, 2026 10:51 PM ===
+```
+
+### Highlights (vs 1.4.2)
+
+- **GRAPHICS color depths:** `1BIT` (default) / `COLOR8` / `TRUECOLOR` on the same 640×400 surface; `G-PIX` sized for BGRA; `COLOR` + `RGB` + `CBLACK`…`CWHITE`; host CGImage blit; `(APP-CBLIT)` slot **16** (keep `(APP-PBLIT)` for 1-bit SA). Smoke: `GRAPHICS-CSMOKE`. See `APPKIT.md`.
+- **Sample DOODLECOLOR64:** `Library/Sample/DOODLECOLOR64.fth` — COLOR8 sibling of DOODLE64 with a 16-color chrome bar (`FROMLIB FLOAD Sample/DOODLECOLOR64.fth` then `DOODLECOLOR`). Leaves `DOODLE64.fth` unchanged.
+- **Image viewer:** host `(APP-IMG-CHOOSE/LOAD/SIZE/RENDER)` (NSOpenPanel + `NSImage`, any macOS-readable still image) → TRUECOLOR BGRA; slots **17–20** in interactive Swift and Emitter `emit-run` (argv `--image` / drag-drop stage). Sample `Library/Sample/IMAGEVIEW64.fth` → `IMAGEVIEW`. Emit: `EMIT-WINDOW-APP IMAGEVIEW` (needs 2 MiB SA data arena for `G-PIX`).
+- **Emitter LIT-PAYLOAD-MARK:** only `@`-probe payloads that look like user VAs (≥4 GiB); aligned immediates such as `$808080` (IMAGEVIEW chrome) must not be treated as VALUE PFAs (was EXC_BAD_ACCESS in `XFETCH` / `@` during `EMIT-WINDOW-APP`).
+- **Sample EDIT64:** GRAPHICS mini-editor (`Library/Sample/EDIT64.fth` → `EDIT64`) — COLOR8 white paper / black text; reverse-video caret; click/arrows/wheel; CRLF normalize on load; OPEN/SAVE via `(APP-FILE-*)` slots **21–25** (NSOpenPanel/NSSavePanel + slurp/spew, no ANS File-Access in emit reach); dirty quit **S**/**D**/**Esc**; chrome buttons only on the label row. Emit: `EMIT-WINDOW-APP EDIT64` (not Facility SZ-EDITOR).
+- **Host file ABI:** `(APP-FILE-CHOOSE/SAVE-AS/PATH/SLURP/SPEW)` in Swift `AppOutputHost` and Emitter `emit-host` / `reloc.fth` (`#HOST-APP` **26**).
+- **Cold REF / XREF:** `Kernel/xref.fth` is `.incbin`’d after `vocsys.fth` (always present after boot — no `FLOAD`). Port of classic TCOM `Library/TCOM/REF.FTH` (kept as the unchanged reference). Public: `REF` / `XREF` / `USEDIN` / `CALLS` / `ANYREF`, `FINDANY`, `ANYWORDS`.
+  - **Wordlists:** FORTH + every named `VOCABULARY` (FORTH traverse) + extra `GET-ORDER` wids — **not** the raw `WORDLISTS` registry (garbage wids crash SEARCH/TRAVERSE). Guards: `XREF-XT-OK?` / `XREF-WID-OK?` / `XREF-WID-SANE?`. Zeroable loops use `?DO` (plain `0 0 DO` runs once and hit stale buffers).
+  - **Titles:** `-------- references to: NAME leaf:line --------` from `VIEW-FILE#` / `VIEW-LINE` / `VIEW-PATH` (`XREF-.LOC` / `XREF-LEAF`); unstamped → `(no source)`. Multi-def `FINDANY` summaries list each def with `(leaf:line)`.
+  - **ANYWORDS** `[filter]`: WORDS-like multi-vocab name listing (headers only; one TRAVERSE per wid; VOCABULARY nts cached at collect; optional case-insensitive substring; Space pause every 32 names; Esc/Q stop). Contrast: `WORDS` is **CONTEXT / first search-order only**.
+  - **Build:** `project.pbxproj` touch-forth.s + Kernel→Sources sync lists include `xref.fth`; Sources mirror at `Library/Sources/xref.fth`.
+  - **Host:** `KernelBridge.deliverConsoleEvalKeyDown` feeds Esc/Space into the KEY queue while console `kernel_eval` runs (otherwise pause/abort never see keys).
+  - **IMMEDIATE targets:** `REF` does not scan a definition whose FLAGS bit 63 (`FLAG_IMM`) is set. Those words compile other words into a definition, so the body is not a call list. Message: `-------- NAME is immediate (not cross-referenced) --------`. A name with both an immediate and an ordinary definition still scans the ordinary one.
+- **Sample VED64:** `Library/Sample/VED64.fth` → `VED64`. Minimal app-window port of TCOM `Library/TCOM/VED.FTH` (that file stays the DOS/TCOM reference). Flat 256KB buffer (not the 40MB swap-file cache). COLOR8 grid; OPEN/SAVE/FIND/HELP via the same `(APP-FILE-*)` panels as EDIT64; dirty quit **S**/**D**/**Esc**. Status numbers go through graphics `TYPE` (`U.R` is console-only and was leaking digits). `S" file" VED-LOAD` optional. Not emitted yet.
+- **Sample MIDNIGHT:** `Library/Sample/MIDNIGHT.FTH` → `MAIN` (Towers of Hanoi). Peter Midnight’s F-PC demo, adapted: `RECURSE`, `CHAR`/`[CHAR]`, `AT-XY`, `(APP-TONE)` for `BEEP`. `FROMLIB FLOAD Sample/MIDNIGHT.FTH` then `MAIN`. Classic source also updated in `Library/TCOM/MIDNIGHT.FTH`.
+- **Tiny Pascal:** `FACTOR-` / `SIMP-EXPR` call `RECURSE` (the name is smudged until `;`, so a direct call was undefined). Generated sample `Library/Pascal/PASY.fth` kept beside `PASY.PAS`.
+
+**Release:** WIP / not yet (no DMG).
+
+---
+
+## v1.4.2 — ANS SMUDGE, FILE-ECHO, GRAPHICS mouse, Emitter SA
+
+**Version strings:** marketing **1.4.2**, build **41** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.4.2 === Sep 21, 2026 10:38 PM ===
+```
+
+### Highlights (vs 1.4.1)
+
+- **ANS hide-until-`;`:** NFA count bit7 = SMUDGE (max name length 127). `:` / `:NONAME` set it; `;` / `DOES>` clear it. FIND/SEARCH-WORDLIST/WORDS/TRAVERSE skip hidden. Forth `SMUDGE` / `REVEAL` on `LAST`; `NAME>STRING` masks `$7F`. `RECURSE` via `LAST` still works while smudged. ANSValidate `host.fth` covers hide/reveal/CREATE/RECURSE.
+- **FILE-ECHO line numbers:** each echoed INCLUDE/FLOAD source line is prefixed with a 5-digit right-aligned line number and `| `.
+- **GRAPHICS mouse:** host `host_app_mouse` + kernel `(APP-MOUSE)` → `G-MOUSE` / `GETMOUS` (PLOT origin bottom-left; buttons 1=left 2=right 4=middle). Emitter SA slot 15 + `EmitGridView` mouse tracking for stand-alone `.app`s. `host_app_open` clears the key queue so a prior ESC does not make the next `KEY` return immediately.
+- **Sample DOODLE64:** `Library/Sample/DOODLE64.fth` — TCOM DOODLE port for 640×400 1-bit + mouse (`FROMLIB FLOAD Sample/DOODLE64.fth` then `DOODLE`). Ink bar WHITE/BLACK/INVERT; flags as `VARIABLE` (not `VALUE`/`TO`) so Emitter reach sees xts. Classic `TCOM/DOODLE.FTH` unchanged. `EMIT-WINDOW-APP` stand-alone DOODLE verified.
+- **Emitter SA reloc:** `SCAN-DOCON` + DOCON `IMPORT-RELOC-XT-CELLS` mark/rebase CONSTANT PFA xts; `LIT-PAYLOAD-MARK` follows VALUE/VARIABLE PFAs from `TO`; host-VA LIT abort ignores sign-extended immediates (`-1` TRUE, etc.). `GRAPH-BYE` does not `WINDOW-OFF` when the emit runner owns the window.
+- **PLOT BLACK fix:** clear-ink path uses `-1 XOR` so GRAPHICS `INVERT` (ink) no longer shadows bitwise invert.
+- **CODE-BOUNDS / Emitter:** walk `__bootptr` as an array of row pointers (plus `BOOT-WORD-TABLE-END`); restores non-zero ends for `(S")` and other labeled prims so Emitter `PRIM-SPAN` works again. Same fix in Emitter `BOOT-SPAN-NAMED` / `EMM-SPAN-OF` (`reloc.fth`) so `sa-block missing (SA-PRINT)` no longer fires after a good rebuild.
+
+**Release:** `64Forth/releases/64Forth-1.4.2-macOS.dmg` + GitHub `v1.4.2`.
+
+---
+
+## v1.4.1 — TRAVERSE DBG VIEW/HL, boot diagnostics, INCLUDE `file:line`
+
+**Version strings:** marketing **1.4.1**, build **40**.
+
+**Console header stamp:** `=== 64Forth 1.4.1 === Sep 19, 2026 10:50 PM ===`
+
+### Highlights (vs 1.4.0)
+
+- **TRAVERSE-WORDLIST trampoline:** pause resolve/print treat `tw_continue_cell` like CATCH — visitor xt from R, label `(TRAVERSE)`, auto-skip trampoline UI; empty `debug_name` keeps prior HL.
+- **Enclosing colon:** `_ip_find_colon` scans every registered wordlist (`WORDLISTS`), not search order + FORTH only — SYSVOC helpers such as `(SHOW-VOCAB)` win over a FORTH neighbor (e.g. `.THREADS`).
+- **Cold VIEW stamps:** `HYPER-STAMP-COLD` temporarily `ALSO SYSVOC EDITOR GRAPHICS` so `FORTH>SYSVOC` (etc.) words get `VIEW-FILE#` / `VIEW-LINE`; DBG sync/map-HL no longer stick on `TRAVERSE-WORDLIST` while stepping the visitor.
+- **R-stack DEBUG display:** nearest **4** cells + `...`; CFA/small-int labeling hardened (no NFA probe on aligned `0`).
+- **Debugger library:** `dbg-map.fth` / `dbg-ed.fth` under `Library/Debugger` (moved off Hyper); deferred Editor/Hyper links via `DBG-ED-INSTALL` after Autoload.
+- **Cold-bootstrap messages:** `KernelBridge` retains emit from `kernel_init` (`.incbin` blobs) in `bootTranscript`; **Help → Show Boot Messages** shows it (survives `CLS`). Not auto-inserted at startup. Cold blobs print `.( Loading: … )` / `.( Finished Loading: … )` progress. Agent dumps the same transcript.
+- **Undefined `file:line`:** during INCLUDE/FLOAD/Autoload, `_report_undefined` appends `  (path:line)` from `include_name_pending` + `_source_line_at_token` (FILE-ECHO file-load predicate). Console undefined stays bare.
+
+**Release:** `64Forth/releases/64Forth-1.4.1-macOS.dmg` + GitHub `v1.4.1`.
+
+---
+
+## v1.4.0 — DEBUG token maps, comment-safe highlight, pause UI
+
+**Version strings:** marketing **1.4.0**, build **39** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.4.0 === Sep 18, 2026 3:27 PM ===
+```
+
+### Highlights (vs 1.3.9)
+
+- **Debug-time token maps:** `Debugger/dbg-map.fth` builds per-colon body↔source tables (`ALLOCATE`; prune on `ANEW-HOOK`); `DBG-MAP-HL` prefers map spans, falls back to name search. Autoload after Hyper. Kernel: `DBG-IP@` / `DBG-CFA@` / `DBG-BODY#` / `DBG-XT@` / `DBG-TOS@` / `DBG-SYNC-OK`.
+- **Comment-safe highlight:** editor `SZ-SKIP-COMMENT` / `SZ-SEARCH-FWD-CODE` and dbg-map search treat only whitespace-delimited `\` / `(` as comments (never `[CHAR] \`; `(SLURP)` is a name). Taken-`IF` dest + def-window clamp keep post-`THEN` tokens (e.g. `R>`) correct.
+- **Pause UI:** `I>>` for nestable xts; LIT prints xt names when payload looks like a CFA; DOCOL-only F6/Space step-over; data/return stack column layout; console BS erases the DEBUG block cursor; host delivers `h` for help.
+- **Hyper sync:** narrower `DBG-SYNC-SKIP?` / `DBG-HL-SKIP?`; commit view CFA only after a real VIEW (`DBG-SYNC-OK`).
+- **Always report undefined** before `THROW -13`; **FILE-ECHO** for `SOURCE-ID == -1` (INCLUDED/`EVALUATE` buffers).
+- Drop duplicate `AutoLoad/vocsys.fth`; Hyper reindex; Pascal `PASY` / `pasx-test` WIP in tree.
+
+**Release:** `64Forth/releases/64Forth-1.4.0-macOS.dmg` + GitHub `v1.4.0`
+
+---
+
+## v1.3.9 — FLOAD/INCLUDED load-cwd, quoted paths, THROW/CATCH
+
+**Version strings:** marketing **1.3.9**, build **38** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.9 === Sep 17, 2026 2:35 PM ===
+```
+
+### Highlights (vs 1.3.8)
+
+- **High-level `INCLUDED` load-cwd:** `BEGIN-LOAD-CWD` / `END-LOAD-CWD` wrap `(INCLUDED-BODY)` so nested relative `FLOAD` / `OPEN-FILE` resolve against the loaded file’s folder (same behavior as CODE `(INCLUDED)`). Failed loads drop the restored path under ior before rethrow (no +2 stack leak).
+- **`PARSE-FILESPEC`:** `INCLUDE` / `FLOAD` accept quoted paths with spaces (`FROMLIB FLOAD "Benchmarks/Bubble Sort Forth Benchmark.fth"`).
+- **Missing file UX:** `(SLURP)` prints `can't open: <path>` and `THROW -38` (ANS non-existent file), matching CODE open-fail style — not a bare OPEN-FILE ior.
+- **CATCH / nested `EVALUATE`:** CATCH frames store `source_sp`; resume when the matching EVALUATE ends (fixes Hayes/`FLOAD` abort after AutoLoad when an outer `['] EVALUATE CATCH` stayed live across nested SOURCE).
+- **Signed THROW print:** uncaught codes print with sign (`THROW -1`, not `THROW 1`).
+- **Agent `-f` / `loadFile`:** uses `S" path" INCLUDED` (quoted `INCLUDE "…"` was mis-parsed by `BL WORD`).
+- **Bubble Sort benchmark:** remove stray leading `1` before `DO` (was leaking once per pass → `ok(5)`).
+- **Pascal:** `PASFILE` synonym for `PASCAL-TO-FILE`; HayesTest comment refresh for load-cwd.
+
+**Release:** `64Forth/releases/64Forth-1.3.9-macOS.dmg` + GitHub `v1.3.9`
+
+---
+
+## Library/Pascal — Tiny Pascal → Forth (in tree)
+
+**Docs:** `Library/Pascal/README.txt` · load `FROMLIB FLOAD Pascal/PASCAL.fth`
+
+| Word | Role |
+|------|------|
+| `PASCAL"` / `PASCAL` | Translate `.pas` → Forth on the console |
+| `PASCAL-TO-FILE` | Translate `.pas` → sibling `.fth` (same folder/stem) |
+
+- **FROMLIB:** resolved in the entry words via `PAS-RESOLVE` (not in `PAS-OPEN`).
+- **Extension:** source must end in `.pas` (any case); `.fth` is rejected.
+- **Samples:** `PASY.PAS` / `PASY-SAMPLE.fth` (clear no-KEY demo); `PASX.PAS` / `PASX-SAMPLE.fth` (legacy stress). Generated `PASY.fth` / `PASX.fth` are free for `PASCAL-TO-FILE`.
+- **I/O:** prefer `Write(#n)` for numbers; bare `write`/`read` map to `EMIT`/`KEY`.
+- Related: `?EXIT` immediate form shared with `Kernel/app-output.fth` (`[UNDEFINED] ?EXIT`).
+
+---
+
+## v1.3.8 — SZ-EDITOR in its own window (three-window model)
+
+**Version strings:** marketing **1.3.8**, build **37** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.8 === Sep 12, 2026 3:51 PM ===
+```
+
+### Product shape
+
+| Window | Role |
+|--------|------|
+| **Console** | Forth REPL only (no VSplit with the editor) |
+| **SZ-EDITOR** | Facility character grid + KEY loop (`FacilityEditorHost`, **macOS only**) |
+| **App Output** | GRAPHICS / Emitter / stand-alone apps only (`AppOutputHost`) |
+
+**Hard rule:** Do **not** merge SZ-EDITOR into App Output. Emitter and compiling application programs keep using the App Output window for graphics I/O. The editor is a third window, separate from both the console and App Output.
+
+**iOS:** SZ-EDITOR is unsupported (no `FacilityEditorHost`); Console remains REPL-only.
+
+### Highlights (vs 1.3.7)
+
+- **Dedicated SZ-EDITOR window** (`FacilityEditorHost` + `FacilityGridView`); Console never hosts the facility grid
+- Console stays a **fully live REPL** while the editor KEY loop runs (host-queued evaluate / key 133)
+- Key routing: **App Output** → **SZ-EDITOR** → **Console**
+- Menus / `VIEW` / Hyper / DEBUG retargeted to the editor window; outer-top `[X]` removed (Files-list `[X]` kept)
+- **`SEE`** = kernel decompiler (console only); **`VIEW`** / ⌘E / ⌘-click open SZ-EDITOR; optional **`SEE-HYPER`**
+- Legacy Option A console VSplit / `useSeparateFacilityEditor` flag **removed**
+- `FacilityTerminal` thread-safe (Forth EMIT vs main-thread `deactivate` race fixed)
+
+**Release:** `64Forth/releases/64Forth-1.3.8-macOS.dmg` + GitHub `v1.3.8`
+
+---
+
+## v1.3.7 — ANEW cleanup + debugger breakpoints
+
+**Version strings:** marketing **1.3.7**, build **36** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.7 === Sep 12, 2026 10:56 AM ===
+```
+
+**Highlights (vs 1.3.6):**
+
+*ANEW / module reload*
+- **`ANEW`** rewritten on top of **`MARKER`**: prints `name :Loading module` / `name :Reloading module`, executes an existing marker to forget, then defines a fresh marker (removed the older `FORGET`/`ANEWMODULE` path)
+- Related cold-load / vocabulary cleanup: AutoLoad `vocsys.fth`, quieter EMITTER native-helper rechain, Assembler touch-ups, HYPER.NDX refresh
+
+*Debugger*
+- **8 breakpoints** via **`BREAK`** / **`BPGO`** (topword) — `Library/Debugger/debug-bp.fth` (AutoLoad) + kernel `BREAK-TABLE` / `(BP-GO)`
+
+**Release:** `64Forth/releases/64Forth-1.3.7-macOS.dmg` + GitHub `v1.3.7`
+
+---
+
+## v1.3.6 — Emitter 0.7 SA locals / BI / window I/O
+
+**Version strings:** marketing **1.3.6**, build **35** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.6 === Sep 7, 2026 7:50 PM ===
+```
+
+**Highlights (vs 1.3.5):**
+
+*Emitter **0.7***
+- Stand-alone **`(LOCAL-FRAME-EXIT)`** as SA-BLOCK (EXIT no longer NOP’s nested `{: … :}` frame pops — fixes PI-POOL → PI-ALLOC1 garbage `ALLOCATE` / Dock bounce)
+- SA **locals BSS** sizing: `local_frame_depth` / `local_frames` / `rsp` / `n` via `SA-BSS-ENSURE-SZ` / `SA-LOCALS-DISCOVER`
+- SA **BigInteger host**: slots 12–14 (`BI-MUL` / `BI-DIVMOD` / `BI-ISQRT`) → `runner/emit-bi.inc`; `host_tmp0` 32 bytes; CBZ/BLR X9 → HOST-APP veneers
+- **`EMIT-WINDOW-APP` I/O remap**: FORTH `EMIT`/`TYPE`/`CR`/`SPACE`/`.`/`KEY`/`KEY?` → GRAPHICS at emit time (`IO-REMAP`)
+- SA DOVAR sanitize + `PI-FREE` / `PI-POOL-OK` so emit does not snapshot host malloc ptrs into `BI-*`
+- Verified: `PIMAIN.app` (10-digit π window) settles at KEY; tetra path unchanged in spirit
+
+**Release:** `64Forth/releases/64Forth-1.3.6-macOS.dmg` + GitHub `v1.3.6`
+
+---
+
+## v1.3.5 — Emitter 0.6 stand-alone apps
+
+**Version strings:** marketing **1.3.5**, build **34** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.5 === Sep 6, 2026 10:29 PM ===
+```
+
+**Highlights (vs 1.3.4):**
+
+*Emitter **0.6***
+- Phase 2b persist + `emit-run` + `app-build.sh` → `.app` (shipped; was in-tree only at 1.3.4)
+- Host slot 9: `MS@` → `gettimeofday` (fixes tetra gravity / `10TH-ELAPSED` in stand-alone)
+- SA-PRINT / SA-BLOCK / SA-FILES / SA-FLOAT paths verified; smokes under `Library/Emitter/EmitterSmoke/`
+- `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED`; `EMIT-APP` / `EMIT-APP-TO` honor armed `FROMLIB` (Library outdir + `app-build.sh` via `LIBRARY-PATH`)
+- **`EMIT-WINDOW-APP`** / **`EMIT-WINDOW-APP-TO`**: `:NONAME` wrapper with `APP-NAME`/`WINDOW`/`WINDOW-OFF`; `.app` basename = uppercase stem of `LAST-INCLUDED` (load app `.fth` after Emitter)
+- User-verified: `TETRA.app` playable (SPACE/ESC; gravity OK after MS@ fix)
+
+**Release:** `64Forth/releases/64Forth-1.3.5-macOS.dmg` + GitHub `v1.3.5`
+
+---
+
+## v1.3.4 — Emitter Phase 1 + quiet AutoLoad
+
+**Version strings:** marketing **1.3.4**, build **33** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner` — refresh date/time just before DMG):
+
+```text
+=== 64Forth 1.3.4 === Sep 5, 2026 9:09 PM ===
+```
+
+**Highlights (vs 1.3.3):**
+
+*Emitter*
+- GRAPHICS mini + tetra subset smokes; interactive `EMIT-TETRA` (`MAIN`/`GAME`) user-verified
+- `/EMIT-STANDALONE` copies reachable DATA into RW `TGT-DATA-*` segment; `/EMIT-HOSTDATA` keeps identity map
+- TCOM-style `Library/Emitter/app-build.sh` packages `emit-run` + `Resources/app.img` as a `.app`
+- `\EMITTER` policy clarified for shared sources (`tetra.fth`); packaging stays under Library/Emitter (incl. EmitterSmoke)
+
+*System cleanup*
+- **`WARNING`** shares the redefinition gate with **`REDEF-WARNING`**; redefine messages go through host `TYPE`/`EMIT` (no trailing NUL)
+- SZ-EDITOR load-order stubs → **`DEFER` / `IS`** (no redefine spam on AutoLoad); `SEE` / `DEBUG` are DEFERs (Hyper / editor install via `IS`)
+- Product AutoLoad no longer defines **`MAIN`**; boot runs `MAIN` only if present (`[DEFINED] MAIN`)
+- Xcode: touch `forth.s` when embedded `.fth`/`.inc` sources are newer (so `kernel2.fth` edits reassemble)
+
+**Release:** local only — superseded by **1.3.5** before DMG/GitHub tag.
+
+---
+
+## Emitter app kit (post-1.3.3 design) — GRAPHICS stand-alone base
+
+**Emitter version:** **0.7** (bundle `CFBundleShortVersionString` via `app-build.sh`; tetra + PIMAIN window apps)  
+**Doc:** [`APPKIT.md`](APPKIT.md)
+
+**FROMLIB visibility:** `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED` — Forth can read/clear the host arm, get the Library root, and the last INCLUDE/FLOAD path. `EMIT-APP` / `EMIT-APP-TO` honor armed `FROMLIB` for relative outdirs; `app-build.sh` is resolved via `LIBRARY-PATH`. **`EMIT-WINDOW-APP`** wraps an xt with `APP-NAME`/`WINDOW`/`WINDOW-OFF` and names the `.app` from the `LAST-INCLUDED` stem (e.g. `tetra.fth` → `TETRA.app`).
+
+**Frozen now:**
+- Stand-alone UI surface = existing **GRAPHICS** (**80×25** chars → **640×400** pixels); vocab stays **GRAPHICS**
+- Develop/run on interactive 64Forth, then emit; **first emit target:** `tetra/tetra.fth` (64TCOM tree)
+- **Triple-load** line directives: `\ANS` (64Forth), `\TCOM` (64TCOM), `\EMITTER` (optional; usually unused — Emitter slices compiled ITC under `\ANS`) — defined in `Kernel/app-output.fth` (mirrored under `Library/Sources/`)
+
+**Deferred:**
+- **MENUS** vocabulary (limited menu construction/handling)
+- Declaring File-Access as part of the Emitter kit fence (words already exist in kernel/host)
+
+**Not in kit:** console, Facility/`PAGE`, SZ-EDITOR, Hyper, IDE Tools menus.
+
+**Emitter growth (toward tetra in-process):**
+- [x] Host-import **DATA** words (`DATA-WORD?`): CREATE / VALUE / DOVAR / DOCON / DODOES identity-mapped; do not slice as CODE; abort if `CODE-BOUNDS` unknown
+- [x] Smoke: VALUE/`TO`, CREATE cell, `DO`/`LOOP` (`Library/Emitter/test.fth`, `Library/Emitter/EmitterSmoke/agent-smoke.fth`)
+- [x] Branch-aware colon scan/span/write (`IF EXIT THEN`); reloc skips data imports
+- [x] GRAPHICS mini `TGT-BUILD`+`TGT-RUN` (`Library/Emitter/EmitterSmoke/gfx-smoke.fth` — `(APP-OPEN)` reached + veneered)
+- [x] Tetra subset `TGT-BUILD`+`TGT-RUN` + `MAIN` build-only (`Library/Emitter/EmitterSmoke/tetra-smoke.fth` — FIELD/SETUP/BORDER/one piece; MAIN reach ~169 < `REACH-MAX` 512)
+- [x] Interactive `MAIN`/`GAME` emit howto (`Library/Emitter/EmitterSmoke/tetra-gui-smoke.fth` — agent: `TGT-BUILD` only; GUI console: `EMIT-TETRA` → real window + KEY; ESC → `\ANS` `WINDOW-OFF`; user-verified play)
+- [x] `\EMITTER` policy — required on **shared** source lines that are Emitter-only; normal ITC slice stays under `\ANS`. Packaging lives in `Library/Emitter/` (incl. `EmitterSmoke/`)
+- [x] Phase 1 stand-alone data segment: `/EMIT-STANDALONE` copies DATA into RW `ALLOCATE` (`TGT-DATA-*`); default `/EMIT-HOSTDATA` identity map unchanged. Smoke: `Library/Emitter/EmitterSmoke/data-standalone-smoke.fth`; in-process `TGT-RUN` OK with copied data
+- [x] Phase 2a: relocatable `host_app_*` slots (`MAGIC|slot` veneers + `HOST-BIND` in-process; `Library/Emitter/EmitterSmoke/gfx-smoke.fth`)
+- [x] Phase 2a slot 9: `MS@` → `gettimeofday` (SA used to NOP that BL; tetra gravity / `10TH-ELAPSED` froze). Smoke: `EmitterSmoke/timer-sa-smoke.fth`
+- [x] Phase 2b.2: thin GRAPHICS runner `Library/Emitter/runner/emit-run` loads `64EMIT02`, binds host slots, runs ITC (headless `EMIT_HEADLESS=1`; ADR return gadget so C epilogue runs)
+- [x] Phase 2b.1: persist `64EMIT02` (`/EMIT-UNBOUND`, `SAVE-IMAGE`/`LOAD-IMAGE`, ITC rebase; `Library/Emitter/EmitterSmoke/persist-smoke.fth`)
+- [x] Phase 2b.3: `app-build.sh` + `Library/Emitter/EmitterSmoke/gfx-app-smoke.sh` → `Gfx.app` (headless MacOS binary OK)
+- [x] `EMIT-APP` / `EMIT-APP-TO` — one-shot `.app` from a compiled xt (`Library/Emitter/app.fth`; smoke `EmitterSmoke/emit-app-smoke.fth`)
+- [x] `EMIT-WINDOW-APP` / `EMIT-WINDOW-APP-TO` — `APP-NAME`/`WINDOW` wrapper; basename from `LAST-INCLUDED` (`EmitterSmoke/emit-window-app-smoke.fth`)
+- [x] FROMLIB arm visible + honored by `EMIT-APP*` (`FROMLIB?` / `LIBRARY-PATH`)
+- [x] `CATCH`/`THROW` `CODE-BOUNDS`; SA-EXCEPT data cells; `EMIT-APP*` auto-`CATCH` + overridable `EMIT-ON-THROW` (message + `KEY DROP`)
+
+---
+
+## v1.3.3 — SYSVOC / EMITTER vocabularies, `-ROT`, clean FORTH
+
+**Version strings:** marketing **1.3.3**, build **32** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.3.3 === Sep 5, 2026 6:28 PM ===
+```
+
+**Highlights (vs 1.3.2):**
+- **SYSVOC** cold vocabulary (`Kernel/vocsys.fth`): moves system / support words out of FORTH (SEE helpers, SUBSTITUTE temps, loops/`(DOES>)`, block/locals/debug guts, `-TRAILING-GARBAGE`, …); EDITOR / GRAPHICS host hooks rechain as before
+- **EMITTER** cold vocabulary (`Kernel/vocemit.fth`): emitter-only ITC/boot helpers; loaders use `ONLY FORTH ALSO SYSVOC ALSO EMITTER`
+- **LOCAL-INIT** public name (was `(LOCAL-INIT)`); stays in FORTH for ANSValidate; CFA-cache string kept in sync
+- Hyper editor/debug hooks (`HYPER-NEXT`/`PREV`, `(VIEW)`, `DBG-SYNC-VIEW`, …) move to **SYSVOC**; `VIEW` / `LOCATE` / `SEE` / `DBG` / `APP-RUN` stay in FORTH
+- Kernel assembly **`-ROT`** (common extension; not Forth-2012) next to `ROT`; removed colon def from `Emitter/reloc.fth`
+- `BOOT_WORD_COUNT` corrected to **321** (was stale at 267)
+- ANSValidate + Hayes suites pass
+- Release: `64Forth/releases/64Forth-1.3.3-macOS.dmg` + GitHub `v1.3.3`
+
+---
+
+## v1.3.2 — User Library tree, CODE `_END` labels, Emitter (in progress)
+
+**Version strings:** marketing **1.3.2**, build **31** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.3.2 === Sep 5, 2026 12:49 PM ===
+```
+
+**Highlights (vs 1.3.1):**
+- **User data tree:** on first run, copy shipped `Library` / `AutoLoad` / `Docs` into `Documents/64Forth/…`; FROMLIB prefers that tree. File → **Update User Data in 64Forth Folder** and **Restore Shipped Files to 64Forth Folder**
+- **CODE `_END` labels:** assembly end markers on slicable primitives so a space-optimizing emitter can measure and copy CODE bodies into a target image (path toward stand-alone apps)
+- **Emitter (in progress):** `Library/Emitter/` — `reach.fth` (reachable xts), `target.fth` (target image / colon layout), `reloc.fth` (PC-rel retarget / veneers), `run.fth` (trampoline + `CALL-NATIVE`), load via `FROMLIB FLOAD Emitter/emitter.fth`. Not a finished compiler; experimental Step 1–3 work
+- Kernel: boot `(.)` / `(U.)`; `U.` emits a trailing blank; high-level `ARSHIFT`
+- `HYPER.NDX` refreshed for Emitter / kernel source sync
+- Release: `64Forth/releases/64Forth-1.3.2-macOS.dmg` + GitHub `v1.3.2` (replaces 1.3.1 DMG in tree)
+
+---
+
+## v1.3.1 — Interactive CODE / END-CODE (ASSEMBLER.fth)
+
+**Version strings:** marketing **1.3.1**, build **30** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.3.1 === Sep 2, 2026 3:16 PM ===
+```
+
+**Highlights (vs 1.3.0):**
+- New `Library/Assembler/ASSEMBLER.fth`: interactive ITC `CODE` / `END-CODE` / `C;` / `NEXT,` on top of the existing ASMARM64 toolkit
+- Load: `FROMLIB FLOAD Assembler/ASSEMBLER.fth` (auto-loads `asmarm64.fth` if needed)
+- Puts `CODE` in FORTH; switches search order to ASMARM64 while assembling; `END-CODE` emits ITC `NEXT,`, `ASM-MAKE-EXEC`, patches CFA, restores FORTH
+- Does **not** load under 64TCOM and does **not** redefine the `ASSEMBLER` synonym for `ASMARM64`
+- `HYPER.NDX` updated for the new file
+- Release: `64Forth/releases/64Forth-1.3.1-macOS.dmg` + GitHub `v1.3.1` (replaces 1.3.0 DMG in tree)
+
+---
+
+## v1.3.0 — GRAPHICS points, larger dictionary, cold-load AppOutput
+
+**Version strings:** marketing **1.3.0**, build **29** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.3.0 === Sep 2, 2026 11:12 AM ===
+```
+
+**Highlights (vs 1.2.0; absorbs unreleased 1.2.1 tree):**
+- GRAPHICS: point primitives (`app-points.fth`); `app-output.fth` moved into Kernel; both cold-loaded via `forth.s` blobs; mirrored under `Library/Sources/`
+- Dictionary: default logical size **8 MiB** (was 1 MiB); `USER_DICT_MAX` / `GROWMEMORYMB` hard cap **256 MiB** (was 64 MiB; 1 GiB BSS fails to link)
+- DEBUG UX (from 1.2.1 work): help column; resize while paused; LIT/branch ±CELLS inline; `S(n):`/`R(n):`; DO/LOOP highlight; no blank pause lines; `ok(n)>` focus after DEBUG / ⌘W
+- Release: `64Forth/releases/64Forth-1.3.0-macOS.dmg` + GitHub `v1.3.0` (replaces 1.2.0 DMG in tree)
+
+---
+
+## v1.2.1 — DEBUG UX polish (unreleased; folded into 1.3.0)
+
+**Version strings (historical):** marketing **1.2.1**, build **28** — never DMG/GitHub-tagged; features shipped as **1.3.0**.
+
+**Highlights (vs 1.2.0):**
+- Editor: debug-only help column (F6/F7/F8, Esc/`q`, Cmd-Shift-Y); resize-while-paused wakes `DBG-WHEEL` → `SZ-REDRAW`
+- Kernel/host: pause line + Files column show **LIT** value and **BRANCH**/**0BRANCH**/**(LOOP)**/**(+LOOP)** as ±N CELLS; `S(n):` / `R(n):`; R-stack end labels as ±N CELLS
+- Editor: highlight **DO**/`?DO`/`LOOP`/`+LOOP` (with `(DO)`/`(LOOP)` aliases)
+- Kernel: no blank lines between consecutive `>>` pauses (`debug_midline`); no blank before `DEBUG done`
+- Host: `ok(n)>` + caret/focus after DEBUG ends or aborts; same after ⌘W / `FACILITY-OFF` restores the full console
+
+---
+
+## v1.2.0 — ITC DEBUG source highlight + step-out / abort
+
+**Version strings:** marketing **1.2.0**, build **27** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.2.0 === Aug 31, 2026 7:10 PM ===
+```
+
+**Highlights (vs 1.1.9):**
+- Editor: ITC `DEBUG`/`DBG` maps runtime names to source — `0BRANCH`→`IF`/`WHILE`/`UNTIL`, `BRANCH`→`ELSE`/`REPEAT`/`AGAIN`, `EXIT`→`;`, **`LIT`→decimal** via kernel `DBG-INLINE` (`[IP+8]` at pause)
+- Editor: same-name highlight history + loop prune (`REPEAT`/`AGAIN`/`WHILE`/`UNTIL`) so nested/`test2` call sites advance correctly
+- Kernel: **F8 step-out** (`debug_out`); **Esc / `q` abort** (`DEBUG aborted`, back to prompt); Space/`o`/`i`/`g` aliases honored in `_debug_pause`
+- Host: **⌘Q while DBG paused** aborts the stepper then closes the editor (quit-after-close); dirty S/D still applies
+- Docs: `STATUSDBG64.md` key table updated for F8 / Esc
+- Release: `64Forth/releases/64Forth-1.2.0-macOS.dmg` + GitHub `v1.2.0`
+
+---
+
+## v1.1.9 — ITC DEBUG stack isolation + NEXT x28
+
+**Version strings:** marketing **1.1.9**, build **26** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.9 === Aug 29, 2026 12:11 PM ===
+```
+
+**Highlights (vs 1.1.8):**
+- Kernel: `NEXT` mirrors `debug_armed` in **x28** (hot path `cbnz`; memory cell still for host)
+- Kernel: `_debug_pause` saves/restores full VM; nested SYNC/HIGHLIGHT/WHEEL **isolate** the data stack
+- Editor: `SZ-HIGHLIGHT-NAME` no longer `ROT DROP`s under highlight args (was corrupting ITC `DEBUG` stack → bad `C@`/`TYPE`)
+- Host: `kernelEmitBufTrampoline` rejects near-NULL TYPE buffers
+- Kernel: `LOCAL-INIT` overflow drain + ANSValidate locals coverage; more `BOOT_WORD` / `DOC"` help
+- Hyper: `HYPER.NDX` regenerated as needed for kernel source sync
+- Release: `64Forth/releases/64Forth-1.1.9-macOS.dmg` + GitHub `v1.1.9`
+
+---
+
+## v1.1.8 — TCOM debugger host hooks + editor highlight
+
+**Version strings:** marketing **1.1.8**, build **25** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.8 === Aug 23, 2026 11:02 PM ===
+```
+
+**Highlights (vs 1.1.7):**
+- Kernel: `TDBG-ARM-KEYS` / `TDBG-DISARM-KEYS`, `kernel_tdebug_armed` / `kernel_any_debug_armed` — F6/F7/⌘⇧Y steal while TCOM `TDBG` is paused (does not arm ITC `DBG-ON`)
+- Kernel: `DBG-HL-XT` + `_debug_highlight` — every ITC `DEBUG` pause highlights the upcoming word token in SZ-EDITOR
+- Host: `KernelBridge` uses `kernel_any_debug_armed` for stepper key delivery; Space/`o`/`i`/`g`/`q` when Xcode steals F-keys
+- Editor: `SZ-HIGHLIGHT-NAME` (shared); `SZ-TDBG-ARM`/`SZ-TDBG-RUN`; `SZ-SIDE-HOOK` after Files-column paint
+- Hyper: `DBG-HIGHLIGHT-NAME` installed on `DBG-HL-XT`
+- Docs: `STATUSDBG64.md` twin; 64TCOM pack **0.9** ships console/`TCOMDBG-ED` TDBG with NDX map
+- Release: `64Forth/releases/64Forth-1.1.8-macOS.dmg` + GitHub `v1.1.8`
+
+ITC `DEBUG` / `DBG` stepper behavior unchanged aside from source highlight.
+
+---
+
+## v1.1.7 — ASMARM64 host toolkit + Open/editor polish
+
+**Version strings:** marketing **1.1.7**, build **24** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.7 === Aug 23, 2026 8:24 AM ===
+```
+
+**Highlights (vs 1.1.6):**
+- Library `Assembler/asmarm64.fth` — dual-home AArch64 toolkit (host buffer + `ASMARM64-DISCARD`); pack twin in 64TCOM (**Synced Aug 23, 2026 3:16 PM**)
+- `Assembler/ASMARMTESTS.fth` → `ASM-TESTS` (64 encode/run checks)
+- Docs: `STATUSASM64.md` (twin of 64TCOM monitor)
+- File Open / New / Save As while SZ-EDITOR KEY waits (shipped path continued from 1.1.6 work)
+- 64TCOM side: pack Version **0.8**; `TCOM tetra/tetra.fth` builds `.app` with ASMARM64 search-order fixes
+
+---
+
+## v1.1.6 — DEBUG stepper (console + SZ-EDITOR stack pane)
+
+**Version strings:** marketing **1.1.6**, build **23** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.6 === Aug 19, 2026 2:53 PM ===
+```
+
+Shared plan with 64TCOM is in 64TCOM `STATUS.md`.
+
+**Now (console):**
+- Type **`DEBUG FOO` once** (not once per step). The session stays in that evaluate until FOO finishes.
+- Each **threaded word** prints `>> NAME S n: … R n: … [F6/F7=step Cmd-Shift-Y=go]` and waits for a key.
+- **F6** step over — run the current xt (including a whole colon word) and stop at the next xt in the caller. **F7** step into — pause at the next `NEXT` (enter colon bodies). **F8** step out reserved (ignored). **⌘⇧Y** — run the rest (continue).
+- When the pause IP moves into a **different colon word** (F7 into, or `EXIT` back out), SZ-EDITOR `VIEW`s that word’s source if it is in `HYPER.NDX`. Same word → no reload. Wheel scrolls the source while paused (stack pane is repainted).
+- When FOO returns you see **`DEBUG done`** then the usual `ok>`.
+- Host must deliver KEY while stepping (`kernel_debug_armed`); leftover CR from the command line is ignored.
+- `DBG-ON` / `DBG-OFF` — raw arm/disarm. `R.S` — print return stack.
+- Pauses only when RSP is **deeper** than at `DBG-ON` (skips `DEBUG`/`CATCH`/`DBG-OFF` themselves).
+- **CODE / primitives** (`DUP`, etc.) do not go through `NEXT` before they run (`CATCH` branches to the CFA). `DEBUG`/`DBG` now pause **once** on that xt, then F6/F7 executes it. Colon words are still stepped in the body.
+- Data stack is the live Forth stack (including anything left under `ok(n)>`). Return stack print is **only the nest under `DEBUG`**, minus the CATCH frame — not the editor KEY loop. Each R cell is **`NAME +bytes`** (colon body offset), not a raw address.
+
+**SZ-EDITOR (this pass):**
+- While `DEBUG` is armed, the **Files** column is a vertical split: **data stack** (top: `>> NAME`, then `Data n`, TOS with `T` at the top of the cells, oldest toward the split) and **return nest** (bottom, `NAME +offset`).
+- **Control does not move into the text buffer.** Start with `DEBUG FOO` in the **command pane** (same as any other line). The editor’s KEY loop is still waiting, but `kernel_eval` is nested inside `SZ-CMD-EVAL`.
+- While armed, the host **steals space / return / q / g** (and other non-⌘ keys) and `pushKey`s them to the stepper — even if the command pane has focus. They never insert into the file or the find field.
+- **q** or **g** disarms and the rest of FOO runs. After `DEBUG done`, the host queues a no-op key so Forth `SZ-REDRAW`s the Files list again.
+- Console `>> NAME S … R …` still prints (useful if you `DEBUG` from the idle console with no editor).
+
+**`DBG name`:** VIEW the word in SZ-EDITOR when it is in `HYPER.NDX`; if there is no source (console-defined), open **untitled** (or File→New if the editor is already up) and then `DEBUG` that xt. From the idle console, untitled/VIEW enters the editor loop first so the stack pane is live. `>>` lines go to the command pane (`SZ-CONSOLE-EMIT`). Step keys match Xcode: **F6/F7** step, **⌘⇧Y** continue. Wheel, mouse, resize-wake, space, and letters are ignored so they do not step-to-end.
+
+**Later:** gutter marks; idle Arm word picker; listing/xref. (Pass 1–2 BREAK toggle/enable/panel/Arm shipped in **1.5.3**.)
+
+**Open panel while already editing:** Bare `EDIT` / `SZEDIT` (and `DBG EDIT` once `EDIT` runs) used to queue `SZ-HOST-REQUEST-OPEN`. After **⌘W** the host still showed the file panel. `SZ-HOST-REQUEST-OPEN` now no-ops if `SZ-EDITOR-ACTIVE` and prints `editor already open; use Cmd-O`. The editor’s own **⌘O** remains the way to open a file.
+
+**⌘O / File→Open:** SwiftUI `onReceive(NotificationCenter…)` deferred while KEY waited — menubar Open looked dead until **⌘W**, then the panel appeared; teardown races could `EVALUATE` the facility grid (`undefined: │` spam). Host **steals ⌘O** and the File menu calls `KernelBridge.requestFileOpen()` → `onOpenPanelRequest` directly. In-editor panel is **async** + single-flight; **idle** panel is **sync**. Facility Return never falls through to REPL commit while split/grid is showing; restore drops leftover grid paints.
+
+**File → New (⌘N):** untitled buffer (`SZ-DO-MENU-NEW` / idle `SZ-EDIT-NEW`). **⌘S** on untitled opens **Save As** (`untitled.fth` default; `.fth` if no extension). **⌘⇧S / File → Save As…** always picks a new path (copy of the current file).
+
+**64TCOM:** Phase 4.0 slice 1 shipped in pack **0.9** — `TDBG` / `SEE-T` on SIMARM64 (`STATUSDBG64.md`). Editor highlight is the next host pass (v1.1.8 hooks). ITC `DEBUG`/`DBG` unchanged.
+
+---
+
+## v1.1.5 — console mid-line backspace caret
+
+**Version strings:** marketing **1.1.5**, build **22** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.5 === Aug 19, 2026 10:31 AM ===
+```
+
+Left-arrow then backspace on the input line no longer jumps the caret to end-of-line (`scrollToEndNow` only pins the caret for engine output / new prompt).
+
+---
+
+## v1.1.4 — GRAPHICS complete for tetra `\ANS`
+
+**Version strings:** marketing **1.1.4**, build **21** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.4 === Aug 18, 2026 11:57 AM ===
+```
+
+Builds on **1.1.3** GRAPHICS MVP: coalesced EMIT, real `TONE` (Hz / tenths), dual-load helpers (`\\`, `DIRECTIVE` / `\ANS` / `\TCOM`), tetra interactive load verified.
+
+---
+
+## v1.1.3 — GRAPHICS app-output window (MVP)
+
+**Version strings:** marketing **1.1.3**, build **20**.
+
+**Console header stamp** (at 1.1.3 ship):
+
+```text
+=== 64Forth 1.1.3 === Aug 18, 2026 11:14 AM ===
+```
+
+**Goal:** A **separate** character-grid window for apps (TETRA-class dual-load under `\ANS`), without bending the Forth **console** into TCOM graphics.
+
+| Area | Status |
+|------|--------|
+| Version 1.1.3 / build 20 | **Done** (pushed) |
+| `Host/AppOutputHost.swift` — NSWindow + blit + keys | **Done** |
+| Kernel `(APP-*)` CODE words in `forth.s` | **Done** (MVP open/blit/key) |
+| `Library/AppOutput/app-output.fth` — `VOCABULARY GRAPHICS` | **Done** (MVP) |
+| `GRAPHICS-SMOKE` (open, draw, keys, close) | **Done** (verified) |
+| Tetra-readiness words (timers, `.`, pump, …) | **Done** |
+| Soften EMIT refresh (dirty/coalesced blit) | **Done** — `DIRTY` / `?REFRESH` |
+| Real `TONE` (Hz + tenths) | **Done** — sine WAV via `NSSound` |
+| Wire tetra `\ANS` path onto GRAPHICS | **Done** — dual-load in `tetra/tetra.fth` |
+| GitHub release / DMG | **This cut** (after dual-load) |
+| Pixel graphics | **Later** |
+| Richer sound (polyphony / samples) | **Later** — base system |
+
+**Do not** overload the console for character graphics. Console stays REPL/debug.
+
+### Tetra-readiness (post-1.1.3 push, before `\ANS` / release)
+
+MVP smoke is not enough for interactive tetra. Gaps vs TCOM `tcom-textgrid.inc` / `tetra.fth`:
+
+| Need | Why | Status |
+|------|-----|--------|
+| **`TIME-RESET` / `10TH-ELAPSED` / `TENTHS`** | GAME loop timing | **Done** — Forth via `MS@` + `(APP-PUMP)` yield |
+| **`TONE`** | Sound toggle / cues | **Done** — sine tone; **freq=Hz, dur=tenths of a second** (F-PC) |
+| **GRAPHICS `.` (and `."`)** | `AT LEVEL .` must draw in the **grid**, not console | **Done** — pictured + `TYPE` / `SLITERAL` |
+| **Event pump while spinning** | `KEY?` / `TENTHS` busy loops must not starve UI | **Done** — yield in `(APP-KEY?)` / `(APP-PUMP)` |
+| **`APP-NAME`** | Window title | **Done** — `(APP-NAME)` + Forth wrapper |
+| Soften **`EMIT` refresh** | Per-char full blit is heavy | **Done** — `DIRTY` / `?REFRESH` (flush on TYPE / KEY / timers / TONE) |
+| **tetra `\ANS` dual-load** | Same `tetra.fth` under GRAPHICS | **Done** — see 64TCOM `tetra/README.txt` |
+
+**GUI check:** rebuild app, then `GRAPHICS-SMOKE` (tone at 440 Hz × 3 tenths), Tetra, and Point Graphics.
+Tetra:
+```forth
+ONLY FORTH ALSO GRAPHICS
+S" …/64TCOMARM64/tetra/tetra.fth" INCLUDED
+MAIN
+```
+Point graphics: 
+```forth
+ONLY FORTH ALSO GRAPHICS 
+GRAPHICS-PSMOKE
+
+---
+
+## Optional backlog — DMG `/Volumes/…` open
+
+**Status:** Mostly explained at 1.1.2 release; keep as light hardening if it reappears.
+
+**Symptom (seen once on 1.1.2 cut):** Double-click `64Forth.app` inside a mounted DMG. Console showed (often twice):
+
+```text
+can't open: /Volumes/64Forth-1.1.2-macOS
+  path: /Volumes/64Forth-1.1.2-macOS
+  The file "64Forth-1.1.2-macOS" couldn't be opened.
+ok(0)>
+```
+
+**Resolution at ship (user observation, 2026-08-17):** Desktop had **two** mounted volumes both named `64Forth-1.1.2-macOS` (leftover mount from an earlier DMG build plus the new one), in addition to the staging folder used to create the image. After **ejecting both** and reopening a single DMG, running 64Forth from the volume **worked fine**. Likely cause: **duplicate mount / stale volume**, not a hard requirement to copy the app out first.
+
+**Message mechanics (still true if it returns):**
+
+| Fact | Detail |
+|------|--------|
+| Message source | `FileHost.pinFileContents` — **INCLUDE/FLOAD** (`Data(contentsOf:)`), not silent `OPEN-FILE` ior |
+| Path meaning | **Volume root directory** (mount point), not a `.fth` file |
+| Boot context | AutoLoad loads editor + Hyper + reindex while process **cwd** may be the volume root |
+
+**1.1.3 if needed (optional hardening):**
+
+1. On launch: if cwd is a **read-only volume root** (or only contains `*.app`), prefer home/Documents for `logicalCurrentDirectory`.  
+2. Refuse to FLOAD/INCLUDE a path that is a **directory**.  
+3. Release hygiene: eject old `64Forth-*-macOS` volumes before mounting a new DMG with the same name.
+
+**1.1.2:** ship as-is; recommend single clean mount + drag to Applications for install.
+---
+
+## v1.1.2 — agent channel (headless automation)
+
+**Version strings:** marketing **1.1.2**, build **19** (Info.plist, Xcode `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, console banner, kernel hello).
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 1.1.2 === Aug 17, 2026 11:08 AM ===
+```
+
+- Bump **version** in the banner when marketing version changes.  
+- Update **date/time** only when finishing a change set for that version — **just before** building the DMG and committing/pushing (not on every intermediate build).  
+- Kernel `str_hello` stays short (`64Forth v1.1.2`); the dated line is the GUI console header only.
+
+**Goal:** Let AI agents (Grok), CI, and scripts **load Forth files** and **capture console output** without driving the SwiftUI GUI.
+
+| Area | Status |
+|------|--------|
+| Version 1.1.2 / build 19 | **Done** (bumped in tree) |
+| `App/AppMain.swift` — `@main` branches agent vs GUI | **Done** (sources) |
+| `App/AgentChannel.swift` — CLI parse, eval/load, transcript | **Done** (sources) |
+| `KernelBridge` — `setAgentSyncEmit` / `forceFlushEmitSync` | **Done** (sources) |
+| Skip AppKit key monitor in agent mode | **Done** (sources) |
+| `tools/64forth-agent` wrapper script | **Done** |
+| Docs: `Agent-channel.md`, README, `tools/README.txt` | **Done** |
+| Xcode project membership (pbxproj) | **Done** |
+| Rebuild / ship in `/Applications/64Forth.app` | **User** — build in Xcode (CLI `xcodebuild` needs full Xcode) |
+| Socket into a **live** GUI session | **Not yet** (separate process only) |
+| Accessibility-driven GUI typing as primary path | **Rejected** for automation (fragile on SwiftUI) |
+
+### Why
+
+- GUI binary ignores stdin as a REPL; `--help` / Forth text as argv do not evaluate.
+- Accessibility can focus/type but cannot reliably read the console transcript.
+- Same engine as the GUI: `kernel_init` / `kernel_eval` + host EMIT hooks.
+
+### Activate
+
+```bash
+/Applications/64Forth.app/Contents/MacOS/64Forth --agent --help
+/Applications/64Forth.app/Contents/MacOS/64Forth --agent -e '2 2 + .'
+./tools/64forth-agent -c ~/Documents/64TCOM/64TCOMARM64 -f IFDEMO.fth -o /tmp/out.txt
+```
+
+Or environment: `FORTH64_AGENT=1` (shell-safe). Alias `64FORTH_AGENT=1` via `env(1)` only.
+
+**Invoke the bundle binary**, not `open -a` (need a real stdout pipe).
+
+### Options (summary)
+
+| Flag | Meaning |
+|------|---------|
+| `-e` / `--eval <line>` | Evaluate one line |
+| `-f` / `--file <path>` | INCLUDE file |
+| `-c` / `--cwd <path>` | chdir before work |
+| `-o` / `--out <path>` | Write full transcript (stdout always) |
+| `--autoload` / `--no-autoload` | AutoLoad (default **off** in agent mode) |
+| `--repl` | Further lines from stdin until EOF or BYE |
+
+Exit `0` if every step status is 0, else `1`. Full detail: **[Agent-channel.md](Agent-channel.md)**.
+
+### Relation to 64TCOM
+
+64TCOM lives under `Documents/64TCOM` and is developed **on** 64Forth. After the agent build is installed, automated smoke looks like:
+
+```bash
+…/64Forth --agent -c …/64TCOM/64TCOMARM64 \
+  -e 'FLOAD TARGETARM64.fth' -f IFDEMO.fth -o /tmp/ifdemo.txt
+```
+
+64TCOM’s living status notes this under **Host automation** in project-root `STATUS.md`.
+
+### Grok / session workspace
+
+No need to restart the AI agent from the 64Forth folder. One session can edit both trees (absolute paths). **Do** rebuild the **app** when agent sources change; restarting Grok does not compile or install 64Forth.
+
+---
+
+## v1.0.9 summary (released)
+
+Shipped with DMG and GitHub release `v1.0.9`.
+
+| Area | Status |
+|------|--------|
+| Find next/prev: `SM/REM`, selection token, reverse-video match | **Done** |
+| Cmd-F type-in find in status Sel/Find field | **Done** |
+| Facility Unicode cells + box-drawing editor chrome | **Done** |
+| Help grid; status Select/Find layout | **Done** |
+| Version 1.0.9 / build 16; DMG + GitHub release | **Done** |
+
+## v1.1.1 summary (released)
+
+Shipped with DMG and GitHub release `v1.1.1`.
+
+| Area | Status |
+|------|--------|
+| Version 1.1.1 / build 18 | **Done** |
+| ⌘-click / ⌘E VIEW from **command pane** while editor KEY waits | **Done** |
+| ⌘F / ⌘G / ⌘←→ / Hyper PgUp/Dn while command pane focused | **Done** |
+| VIEW word via staged line (`VIEW name`; FORTH-visible) when evaluating | **Done** (was `HYPER-VIEW-CU` in SYSVOC → `undefined`) |
+| Seed lower command pane from pre-editor console transcript; restore on close | **Done** |
+| Splitter drag: orphan-PAGE no longer tears down split / wipes console | **Done** |
+| `CLS` clears host console only; editor exit is `FACILITY-OFF` (no transcript wipe) | **Done** |
+| Repeated VIEW / ⌘-click: no duplicate Files visits; flash “here” when already on hit | **Done** |
+| DMG + GitHub release `v1.1.1` | **Done** |
+
+## v1.1.0 summary (released)
+
+| Area | Status |
+|------|--------|
+| Version strings 1.1.0 / build 17 | **Done** |
+| Status-bar top-border `[X]` close (⌘W) | **Done** |
+| Option A: facility editor **above** + scrollable command pane **below** | **Done** |
+| Staged command evaluate while KEY waits (key 133 / `(SZ-CMD@)` / `(SZ-CMD-DONE)`) | **Done** |
+| Click either pane; type `ok(n)>` while editor open; stack shared | **Done** |
+| Custom 5pt splitter (gray/white/black/white/gray); drag to resize | **Done** |
+| Long FLOAD/Hayes/ANS-VALIDATE output scrolls live in command pane | **Done** |
+| Nested `EVALUATE` under command `CATCH` (inner Core tests keep running) | **Done** |
+| Grid paint never leaks into command transcript during emit bypass | **Done** |
+| Help fields: leading/trailing space; facility row fit above divider | **Done** |
+| Persist split ratio in UserDefaults | **Not yet** |
+| Multi-line paste polish in command pane | **Not yet** |
+
+---
+
+## 1.1.0 design: editor + interactive command pane (Option A)
+
+**Decision (2026-08-15):** Use **Option A** — a **system splitter** and a **regular scrollable text pane** for the command area (same kind of console surface used when *not* in SZ-EDITOR), with the **facility grid only in the upper panel**. Not Option B (command area as extra facility cells).
+
+### Motivation
+
+- Pre-1.1 the host reserved ~5 monospaced lines below the facility for “command entry,” but while SZ-EDITOR owns `KEY` those lines were mostly **dead space**. **1.1.0** replaces that with a real lower command pane (`facilityCommandAreaLines = 0`).
+- User wants to:
+  1. **Click** the lower area and run arbitrary Forth interactively (`ok>` prompt).
+  2. Later **drag a splitter** (represented by the bottom of the help chrome / pane boundary) to grow or shrink that command area.
+  3. Have the lower pane **scroll** with a normal **scrollbar**.
+  4. Keep the **upper panel** as the monospaced SZ-EDITOR facility.
+
+This is standard IDE layout (editor above, console below). Not a rewrite; real work on focus + evaluate nesting.
+
+### Current layout (before split views)
+
+```text
+┌─────────────────────────────────────┐
+│  Facility grid (SZ-EDITOR chrome)   │  ← KEY loop, PAGE/AT-XY paint
+│  status / text / visit list / help  │
+├─────────────────────────────────────┤  ← bottom of help (future splitter)
+│  ~5 reserved lines (mostly unused)  │  ← intended for commands
+└─────────────────────────────────────┘
+```
+
+### Target layout (Option A)
+
+```text
+┌─────────────────────────────────────┐
+│  Upper: facility / SZ-EDITOR        │  NSView hosting facility paint
+│  (status, body, visit list, help)   │  (existing Terminal-REFRESH path)
+├════════ splitter (system) ══════════┤  drag → resize panes
+│  Lower: scrollable console pane     │  same idea as non-editor console
+│  ok> …                              │  transcript + input, scrollbar
+│  (history scrolls)                  │
+└─────────────────────────────────────┘
+```
+
+### Why Option A (not B)
+
+| | **Option A (chosen)** | Option B (rejected for now) |
+|--|----------------------|-----------------------------|
+| Upper | Facility SZ-EDITOR (as now) | Same |
+| Lower | **Host scrollable text** (like idle console) | More facility cell rows |
+| Splitter | **AppKit/SwiftUI splitter** | Manual drag on a facility row |
+| Scrollbar | **Free** with `NSScrollView` / text view | Hand-rolled or awkward |
+| KEY / evaluate | Console focus submits lines via host evaluate queue | Multiplex KEY for every char in a mini terminal |
+| Look | Slightly two-surface, very macOS | One monospaced grid everywhere |
+
+Option A matches “interactive command window that scrolls with a scroll bar” and reuses the **non-editing console** model.
+
+### Hard constraints (from existing architecture)
+
+- While the editor is open, Forth is typically blocked in **`KEY`** (`SZ-EDIT-LOOP`). Nested **`kernel_eval`** mid-KEY is unsafe (learned with ⌘O; solved there with staged path + host).
+- Console commands must be run via a **host queue**: when the user presses Return in the command pane, stage the line and evaluate on a safe path (same spirit as menu open / idle evaluate), **not** by nesting evaluate inside the editor KEY wait without a pump plan.
+- **Focus** must be as strict as find-edit: typing must not leak into the buffer when the console has focus, and vice versa.
+
+### Focus model (three targets)
+
+| Focus | Click | Keys go to |
+|-------|--------|------------|
+| **Document** | Editor text body | SZ-EDITOR motion/edit (current) |
+| **Find field** | Status type-in (right of Files `│`) | Modal find (current) |
+| **Console** | Lower scrollable pane | Command line / transcript selection |
+
+- Esc or click editor → leave console focus (and leave find if needed).
+- Click console → console focus (leave find-edit if open).
+
+### Implementation phases
+
+1. **Split the window (host)**  
+   - Upper: existing facility paint surface (console body when facility active may shrink to upper pane only).  
+   - Lower: dedicated scrollable text view (transcript + input), initially fixed height (~5 monospaced lines or a pixel min height).  
+   - System splitter between them (`NSSplitView` / SwiftUI `HSplitView`/`VSplitView` equivalent).
+
+2. **Console focus + one-line evaluate**  
+   - Click lower pane → focus.  
+   - Type at `ok>` (or `ok(n)>`); Return submits one line.  
+   - Host runs evaluate safely relative to the open editor session; append output to the lower transcript.  
+   - Do **not** require full dual-KEY multiplexing for every character if the lower pane is host-owned text input.
+
+3. **Scrollable history**  
+   - Keep last N lines (or unbounded with soft cap) of command I/O in the lower pane.  
+   - Native scrollbar; select/copy like the idle console.
+
+4. **Splitter UX**  
+   - Drag boundary under help / between panes to change upper facility height vs lower console height.  
+   - Map height → preferred facility rows (`preferredFacilityCells` / `facilityCommandAreaLines` becomes variable or is replaced by split ratios).  
+   - Persist ratio in UserDefaults (optional early).  
+   - Avoid layout ↔ wake feedback loops (reuse existing resize-wake discipline).
+
+5. **Polish (later)**  
+   - Send editor selection to console; multi-line paste in console; dirty interaction if evaluate mutates open buffer; optional “clear console.”
+
+### Feasibility summary
+
+| Question | Answer |
+|----------|--------|
+| Insane? | No — standard IDE pattern |
+| Possible here? | Yes |
+| Best shape for 1.1? | **Option A**: system splitter + scrollable command pane; facility only above |
+| First milestone | Fixed-height lower console: click → type Forth → see result; Esc/click editor returns focus |
+| Second milestone | Draggable splitter grows/shrinks console vs editor |
+
+### Related code (implemented)
+
+- `KernelBridge.facilityCommandAreaLines` (= **0**); `facilityRowSafety` (= **0**); `preferredFacilityCells()` from **upper** pane only  
+- Facility paint: `FacilityTerminal` (`gridPaintActive` for PAGE/AT-XY…TERMINAL-REFRESH) + `ConsoleView`  
+- Idle console: single `ConsoleTextView` when facility inactive  
+- Split: `EditorCommandSplitView` / `EditorCommandNSSplitView` (5pt striped divider)  
+- Editor KEY: `sz-edit.fth` `(SZ-EDIT-LOOP)`; command line `SZ-DO-CONSOLE-LINE`  
+
+### Open questions (mostly resolved)
+
+| Question | Resolution |
+|----------|------------|
+| Embed both panes vs `NSSplitView`? | Custom `NSSplitView` (macOS); stacked panes on iOS |
+| Shared dictionary/stack while editor open? | **Yes** — same `kernel_eval` session; command line is nested `EVALUATE` under CATCH |
+| Facility still reserve 5 command rows? | **No** — `facilityCommandAreaLines = 0`; lower host pane owns the REPL |
+
+### 2026-08-15 — Option A implementation (as shipped for DMG)
+
+**Host UI**
+- `isEditorSplitActive` → upper facility + lower command `ConsoleTextView`.
+- macOS: **`EditorCommandSplitView`** — 5pt divider (gray/white/black/white/gray), drag to resize.
+- Command pane: protected `ok(n)>` prefix, history Up/Down, append-only TYPE + live scroll-to-end.
+- Upper pane metrics only drive `preferredFacilityCells` (command pane must not overwrite cell size).
+- On `FACILITY-OFF`: fold command transcript under `--- command pane ---`.
+
+**Safe evaluate while KEY waits**
+- Return → `stageCommandLine` + `pushKey(133)` (`SZ-CMD-EVAL`); no nested host `kernel_eval`.
+- `SZ-DO-CONSOLE-LINE`: `(SZ-CMD@)` → `(SZ-CONSOLE-EMIT) on` → `['] EVALUATE CATCH` → emit off → `(SZ-CMD-DONE)` → `SZ-REDRAW`.
+- `(SZ-CMD-DONE)` calls `_vm_save` so host `ok(n)>` sees live stack depth.
+- Sticky `isCommandPaneFocused` (not first-responder inference) routes KEY vs command typing.
+
+**Kernel (nested EVALUATE)**
+- Completing an `EVALUATE` under CATCH must not end `kernel_eval` (would kill SZ-EDITOR).
+- Resume CATCH **only** when outermost evaluate nest finishes (`source_sp == 0` after pop).
+- Inner `EVALUATE` during FLOAD (ANS Core, Hayes, …) continues the outer file — verified with ANS-VALIDATE + Hayes while editor open.
+
+**Emit routing**
+- Command bypass: non-paint TYPE → lower pane.
+- `PAGE`/`AT-XY`…`TERMINAL-REFRESH` always paints cells (`gridPaintActive`) so SEE/VIEW does not dump the frame into the command transcript.
+
+**Still open / later 1.1.x**
+- Persist split ratio (UserDefaults); multi-line paste polish; optional clear-command-pane.
+
+---
+
+## Editor UX: caret and selection (1.0.8+)
+
+### Short answer
+
+| Feature | Difficulty | Rough effort | Status |
+|--------|------------|--------------|--------|
+| **I-beam / line caret** (not reverse-video block) | Easy | ~½–1 day | **Done** (host paint) |
+| **Click–drag selection** (like a normal editor) | Moderate | ~2–4 days for solid UX | **Done** (host + Forth) |
+
+Neither needs a kernel rewrite. Most work is **host (Swift) input + paint** and **Forth selection/redraw**.
+
+---
+
+### What we have now
+
+**Caret**
+
+- SZ-EDITOR does not draw a glyph caret.
+- After each frame it parks the facility cursor with `AT-XY` (`SZ-PLACE-CURSOR` in `sz-screen.fth`).
+- Swift paints a **thin vertical I-beam** at that cell (`applyFacilityCursorHighlight` → `ConsoleNSTextView.showFacilityLineCaret` / iOS twin).
+- System insertion point is suppressed while the facility terminal is active.
+
+**Mouse**
+
+- `ConsoleTextView` delivers **down / drag / up** into the facility as key 25 + `(SZ-CLICK)`.
+- Flag: bit0 valid, bit1 ⌘, bits2–3 phase (0=down, 1=drag, 2=up). Drag coalesces on the host.
+- Forth: plain click → word/line; drag → `[SZ-SEL-BEG, SZ-SEL-END)` + reverse-video paint; ⌘-click → VIEW.
+
+---
+
+### 1. Regular (line) cursor — easy
+
+**Idea:** stop reverse-video of the whole cell; draw a thin vertical bar (or underline) at the insert point.
+
+**Where:** mainly `applyFacilityCursorHighlight()` (and the facility paint path). Optionally a small flag “I-beam vs block” if we want both.
+
+**Gotchas (small):**
+
+- Character cell grid is monospaced — bar position is col × cell width (col/row already known).
+- Blink is optional polish (timer on main).
+- Insert vs overwrite: for insert, bar is *before* the character; current block is *on* the character — same coord as today, different drawing.
+
+**Does not require** Forth changes unless we want a user-facing `BLOCK-CURSOR` / `LINE-CURSOR` toggle.
+
+**Checklist**
+
+- [x] Replace reverse-video cell with thin vertical bar (I-beam)
+- [x] Facility I-beam blink (~0.53s); system insertion point suppressed in facility mode
+- [ ] Optional: Forth toggle for block vs line caret
+- [ ] Verify redraw after motion, scroll, and status updates (manual in SZ-EDITOR)
+
+---
+
+### 2. Click-and-drag selection — moderate
+
+**Idea:** treat mouse as a *stream of positions*, not one click.
+
+#### Host (Swift) — necessary
+
+Today: only `mouseDown` → one facility click.
+
+Need something like:
+
+- `mouseDown` → start selection at cell  
+- `mouseDragged` → update end cell (throttled)  
+- `mouseUp` → finish  
+
+Map view points → facility **col/row** (same math as click), inject into Forth (new key codes or a host op with col/row/flags: down/drag/up).
+
+**Gotchas:**
+
+- Throttle drag updates (every N ms or when cell changes) so we don’t flood `kernel_eval`.
+- Don’t fight NSTextView’s own selection; keep facility mode capturing mouse (already special-cased in `ConsoleTextView`).
+- Scroll while dragging near top/bottom (nice-to-have, extra work).
+
+#### Forth (SZ-EDITOR) — necessary
+
+Selection storage already exists; wire it to drag:
+
+1. **Down:** set `SZ-CUR`, clear or start `SZ-SEL-BEG = SZ-SEL-END = cur`
+2. **Drag:** map cell → buffer index (reuse `SZ-MOUSE-PLACE` logic), set `SZ-SEL-END`, keep `SZ-CUR` at end
+3. **Up:** finalize `SZ-SEL-OK`
+4. **Paint:** while drawing a line, if bytes fall in `[min(beg,end), max)` use reverse-video (or a second attribute)
+5. **Typing / motion:** replace selection on type; optional Shift+arrows later
+
+**Gotchas:**
+
+- Multi-line highlight across gutters and h-scrolled lines (`SZ-HCOL`)
+- Interaction with existing **word** / **line** / **⌘-click VIEW** (don’t break Cmd-click)
+- Cut/copy already exist; they need a real byte range from drag
+
+**Checklist**
+
+- [x] Host: mouseDown / mouseDragged / mouseUp → facility (col, row, phase)
+- [x] Host: throttle drag to cell changes (+ coalesce pending drags)
+- [x] Forth: map drag phases to `SZ-SEL-*` / `SZ-CUR`
+- [x] Forth: paint selection range on redraw (`FACILITY-REV` + host reverse attrs)
+- [x] Type / paste / delete replaces selection
+- [x] Preserve Cmd-click VIEW and word/line click modes
+- [x] Scroll-on-drag at edges (vertical TOP + horizontal HCOL; selection kept)
+- [x] Shift+click extend (from anchor; before or after)
+- [x] Double-click word (space-delimited)
+- [x] Triple-click line (whole logical line; host bit6, `SZ-TRI-CLICK`)
+
+---
+
+### Suggested order of attack
+
+1. **I-beam caret only** — quick win, pure host paint.
+2. **Drag selection** — host mouse stream, then Forth range + paint, then “type replaces selection.”
+3. Optional: Shift+click extend, double-click word, triple-click line — **done**.
+
+---
+
+### Bottom line
+
+- **Line cursor:** low risk, mostly one Swift highlight routine.
+- **Click-drag select:** very doable, but a **real editor feature** (input path + selection paint + interaction with existing mouse modes), not a one-line change.
+
+**Default plan for 1.0.8:** caret first for immediate “real editor” feel, then drag selection.
+
+---
+
+## Design notes log
+
+_Further design suggestions and decisions go below as work proceeds._
+
+### 2026-08-13 — Editor caret & drag selection
+
+- Captured initial design (sections above).
+- Status file created under `Resources/Docs/` for in-app / tree visibility.
+
+### 2026-08-13 — Line (I-beam) caret
+
+- Replaced reverse-video cell paint with a 2pt vertical bar overlay on the monospaced grid.
+- macOS: `ConsoleNSTextView.showFacilityLineCaret` / `hideFacilityLineCaret`; `shouldDrawInsertionPoint` off in facility mode.
+- iOS: same API on `UITextView` (tagged subview + clear `tintColor` while active).
+- No Forth changes; still driven by facility `AT-XY` row/col after each `TERMINAL-REFRESH`.
+
+### 2026-08-14 — Facility caret blink + hide system caret
+
+- System caret: `shouldDrawInsertionPoint`, `drawInsertionPoint`, `insertionPointColor` clear, and
+  forced collapsed selection at 0 while facility is active (stops top-left blink leak).
+- Our I-beam blinks on a 0.53s timer (common modes so it ticks during KEY pump); motion/redraw
+  restarts visible phase like a normal editor.
+
+### 2026-08-14 — Scroll-on-drag at edges
+
+- While drag-selecting, holding the pointer on the top/bottom or left/right of the text band
+  auto-pans the view (~10 Hz) and re-extends the free end of the selection.
+- Vertical: `SZ-VIEW-UP` / `SZ-VIEW-DN` move `SZ-TOP` only (do not clear selection).
+- Horizontal: `SZ-HSCROLL-LEFT` / `RIGHT` adjust `SZ-HCOL` by `SZ-HSCROLL-STEP` (4).
+- Host: edge timer + clamped text-band cell; wheel scroll still moves caret with view.
+
+### 2026-08-14 — Fix dynamic window resize while editor open
+
+- `applyPreferredFacilityCellsIfChanged` skipped `pushKey(0)` when `isPumpingEvents`
+  (true during almost all KEY waits), so lastPreferred updated but SZ-SYNC-SIZE never ran.
+- Wake again on real cell-grid change; defer one main turn if already pumping layout.
+
+### 2026-08-13 — Click-drag selection
+
+- Host: `mouseDown` / `mouseDragged` / `mouseUp` → `reportFacilityMouse` with phase; cell-change throttle; drag coalesce in event queue.
+- `(SZ-CLICK)` flag bits 2–3 = phase (0 down / 1 drag / 2 up); bit1 still ⌘ for VIEW on down.
+- Forth: `SZ-MOUSE-DOWN` / `DRAG` / `UP`; drag sets `SZ-SEL-*` and copies on mouse-up; no-drag up → word/line via `SZ-PLAIN-CLICK`.
+- Paint: `FACILITY-REV` CODE word + facility attr grid; `SZ-SHOW-LINE` marks selected bytes; host applies reverse-video on refresh.
+- Typing, BS, Del, Tab, Enter, Paste replace an active selection; motion clears it.
+
+### 2026-08-13 — Double-click word + Shift-click extend
+
+- Host flag bit4 = ⇧, bit5 = double-click (`clickCount == 2`).
+- Double-click: `SZ-SPACE-WORD-RANGE` (space/blank/CR/LF only) → full reverse-video word + clipboard; `SZ-EXT-ANCHOR` at word start.
+- Shift-click / shift-drag: free end moves; fixed end is `SZ-EXT-ANCHOR` (set on plain down, drag start, or double-click); range ordered so click may be before or after.
+
+### 2026-08-14 — Triple-click line
+
+- Host flag bit6 = triple-click (`clickCount >= 3`); double is exactly 2 so triple is not also a word select.
+- `SZ-TRI-CLICK`: place caret, `SZ-LINE-RANGE-AT-CUR` → `SZ-COMMIT-RANGE` (selection + clipboard), `SZ-SET-LINE-ANCHOR` for ⇧-extend.
+
+### 2026-08-13 — Gutter click no longer line-selects
+
+- Line-number column click only places the caret at line start (`SZ-CLICK-ZONE` 1).
+- Whole-line select / gutter paste-here unbound; `SZ-LINE-SELECT` remains for later use.
+- Gutter reserved (e.g. breakpoints).
+
+### 2026-08-13 — Dynamic editor size + quiet exit
+
+- Host reports console visible size in monospaced cells (`updateConsoleVisibleSize`).
+- `(SZ-VIEW-CELLS)` → facility cols/rows; **5 lines reserved** below facility for command entry.
+- `SZ-SYNC-SIZE` at each `SZ-REDRAW` maps cells → `SET-EDIT-WINDOW` (width=cols-8, height=rows-5).
+- Window resize while editing wakes KEY (`pushKey 0`) so the grid updates live.
+- Cmd-W exit: no `SZ-EDITOR: done` / `SZ-.INFO` dump (modified warning kept).
+
+### 2026-08-14 — Fix dynamic window resize while editor open
+
+- Regression: `applyPreferredFacilityCellsIfChanged` skipped `pushKey(0)` when
+  `isPumpingEvents` (true during almost all KEY waits), so preferred size updated
+  but `SZ-SYNC-SIZE` never ran and the facility grid stayed fixed.
+- Fix: wake on real cell-grid change again; if already pumping, defer `pushKey(0)`
+  one main turn. `guard changed` still prevents a layout↔wake feedback loop.
+
+### 2026-08-14 — Multi-hit nav updates visit / Files list
+
+- Cmd-PgUp/Dn multi-hit (e.g. VIEW MAIN then walk 1/7…7/7) only did GOTO; side list
+  stayed on the first hit.
+- `HYPER-HIST-ENSURE-HIT`: if path+line already in VTAB, select it; else RECORD
+  after current. Called from `HYPER-APPLY-HIT` so each multi-hit appears with line#.
+
+### 2026-08-14 — File → Open… (⌘O)
+
+- Menu + shortcut; open panel start dir = current file’s folder (VIEW/Cmd-click),
+  else Library after FROMLIB session, else session cwd.
+- In-editor: stage path via `(SZ-PATH@)` / host (no nested EVALUATE), key 30
+  `SZ-DO-MENU-OPEN` (dirty confirm, load, visit RECORD).
+- Idle: same panel then `openInSzEditor`.
+
+### 2026-08-14 — Side [X] closes visit and switches buffer
+
+- Closing the **current** visit: dirty Save/Discard/Cancel; remove visit; load
+  previous row (or untitled if list empty). Closing a **non-current** row only
+  drops the list entry.
+
+### 2026-08-14 — Side panel file list
+
+- 16-col panel right of editor (no "Files" title); status stays full width.
+- `SZ-FL-*` stores full paths; shows leaf `name.ext` (≤16 chars).
+- Recorded after successful open (EDIT / Hyper VIEW).
+- Current file reverse-video; list scrolls so the current entry stays visible.
+- Click a side-panel row → `SZ-FL-GOTO` reloads that file (same as Hyper switch).
+- Dirty buffer on switch: centered dialog Save / Discard / Cancel (`S`/`D`/`Esc` or click).
+- Hyper Cmd-click / Cmd-PgUp/PgDn: `HYPER-NOTE-HIT` + `SZ-HYPER-GOTO` register
+  the destination path (e.g. `Library/Sources/forth.s`) before redraw so the
+  side list and highlight stay in sync; leaf-name match merges path variants.
+- **Bugfix:** `SZ-FL-LEAF` left the full path under the leaf `a u` (stack leak).
+  Every side-panel paint and leaf find polluted the stack, so a second file
+  (`forth.s`) never stayed on the list / highlight broke. Fixed with `2DROP`
+  after saving base/len in temps. Automated suite: `Editor/sz-fl-test.fth`
+  (host: `SZFLTEST=1`).
+- Side panel = **visit list** (one row per path+line): leaf, line#, trailing **X**.
+  Wider panel (28 cols). Click row → goto; click **X** → remove visit.
+  List **persists** across editor exit / re-VIEW (session).
+- Cmd-click VIEW notes origin **before** moving the caret (return to pre-click
+  position, e.g. original VIEW line if you never plain-clicked elsewhere).
+- New visits **insert after** the current visit (branch mid-list; later kept).
+- Cmd-PgUp/PgDn: visit history first; multi-hit only if visit cannot move.
+- Tests: `Editor/sz-fl-test.fth` / `SZFLTEST=1` (visit record/insert/remove/line).
+- **Bug fix (list order / blank / dead top row):** `SZ-FL-CLEAR` now **ERASE**s the
+  table (stale `forth.s` no longer paints above `hyper.fth` after a partial PUT).
+  Hyper panel rebuild uses **bound XTs** (no silent FIND-skip holes). Empty paths
+  rejected in `HYPER-V-STORE` / `SZ-FL-PUT`. `SZ-FL-GOTO` no longer no-ops when
+  `i = CUR` (dead click on highlighted row). VI clamped before insert-after.
+  Tests: CLEAR-ERASES, VTAB-MIRROR, PUT-EMPTY.
+- **Bug fix (Cmd-W exit looks stuck):** `FACILITY-OFF` now restores the pre-editor
+  console transcript (snapshot on first facility paint). Previously the last
+  SZ-EDITOR frame stayed on screen until Return; exit worked but was not obvious.
+
+### 2026-08-15 — Find next/prev: SM/REM, selection, highlight (1.0.9)
+
+- Assembly name chars include `/` so `SM/REM` is one find token (was `REM` only).
+- Cmd-← / Cmd-→ / ⌘G prefer active multi-byte selection; else word at cursor.
+- Match is reverse-video selected; caret at match start; Selected: shows query.
+- `SZ-FIND-GOTO` no longer re-expands the token (avoids splitting at `/`).
+- Files: `sz-edit.fth` (`SZ-ASM-NAME-CHAR?`, `SZ-FIND-LOAD-TOKEN`, `SZ-FIND-GOTO`,
+  `SZ-FIND-SHOW-TOKEN`).
+
+### 2026-08-15 — Facility Unicode + box-drawing editor chrome (1.0.9)
+
+**Host (`FacilityTerminal.swift`)**
+
+- Cells store one **Unicode scalar** each (was ASCII-only `UInt8` → `.` for non-ASCII).
+- UTF-8 decode across `EMIT` / `TYPE` / `XEMIT` byte streams so multi-byte glyphs
+  (box-drawing) occupy a single monospaced cell.
+- `render()` emits full scalars; selection/caret still assume BMP (1 UTF-16 unit/cell).
+
+**Layout (`sz-screen.fth`) — facility rows = text height + 7 chrome**
+
+```
+row 0     ╭──────────────── full width ────────────────╮
+row 1     │ status (path, L/C, size, Sel: …)           │
+row 2     ├─────┬──────────────────────┬───────────────┤
+rows 3…   │ NNN │ text body            │ visit list    │
+          ├─────┴──────────────────────┴───────────────┤
+          │ help col │ help col │ help col │ help col  │
+          │ help col │ help col │ help col │ help col  │
+          ╰──────────┴──────────┴──────────┴───────────╯
+```
+
+- Outer box: light arcs `╭╮╰╯`, edges `─│`, mid rules `├┤` with column tees `┬┴`
+  aligned to gutter / text / side-panel separators.
+- Dirty Save/Discard dialog uses the same box characters (`sz-edit.fth`).
+- `SZ-CHROME-ROWS = 7`; `SZ-TEXT-TOP = 3`; host `facilityTextBand` matches
+  (`KernelBridge.swift`).
+
+### 2026-08-15 — Status path + Selected: (1.0.9)
+
+- Path **tail at most 30** characters (`SZ-STAT-PATHMAX`); longer paths show the
+  useful suffix (not a 3-dot ellipsis).
+- **Bug fix:** early tail math subtracted 30 from the **address** (`>R R@ - +`)
+  after `MIN` had already replaced `u`, producing garbage / “…”-looking junk.
+  Correct form: `DUP 30 > IF  30 - + 30  THEN` (same pattern as the old 33-char clip).
+- `SZ-ROOM-KEEP` reserves width for `Sel: "word"` [find note] so path/meta cannot
+  clip it; then pad and draw **Selected: flush right** in the status box.
+- Status/help content uses room-limited emit so text never wraps into chrome rows.
+
+### 2026-08-15 — Help grid with aligned separators (1.0.9)
+
+- Four fixed-width help fields + graphic `│` (not ASCII `|`); both help rows share
+  widths so separators line up vertically.
+  - W1=16 `Cmd-E/click VIEW` / `drag/Shift-click` (padded)
+  - W2=18 `Cmd-PgUp/Dn visits` / `dbl-word tri-line`
+  - W3=15 `side: line# [X]` / `Cmd-click VIEW`
+  - W4 = remaining inner width / `find Cmd-F/G` / `Cmd-X/C/V/S/W`
+- Outer bottom bar `SZ-DRAW-HELP-BOT` places `┴` under each help separator so the
+  help area is a closed grid (last col grows with window zoom).
+
+### 2026-08-15 — Cmd-F type-in find on status line (1.0.9)
+
+- **⌘F** opens status type-in find (key 131); host wires letter `f` like ⌘G.
+- Status layout:
+  - path/meta on the left
+  - **`Select/Find` title ends at the Files-column `│`** (`SZ-EDIT-RIGHT`)
+  - type-in / highlighted query is **right of that `│`** (under the visit list)
+  - Files `│` is drawn on the status row between title and type-in area
+- ⌘F with **no selection**: empty field, no word-under-cursor seed, no auto-highlight.
+  With a selection: seed query and live-match as before.
+- Typing edits `SZ-TOKEN` (reverse-video in type-in area); caret blinks there.
+- **Modal until Esc or document click:** arrows move the find caret only; other
+  keys are swallowed (never reach the document). **Click** in the type-in field
+  enters/stays in find-edit and places the caret; **click in the document** leaves
+  find-edit and resumes normal editing. **Enter** = find next and **stay** in the
+  field (avoids Return deleting a match in the buffer); **Esc** = leave; **⌘G /
+  ⌘←→** next/prev while staying in the field.
+- Typed / selection queries use **substring** search (`SZ-FIND-TYPED`); word-under-
+  cursor find stays **whole-word**.
+
+
+---
+
+## Future — beyond GRAPHICS + tetra dual-load (with 64TCOM)
+
+**Shipped path:** char-grid MVP (1.1.3) → tetra-readiness → coalesced EMIT → real `TONE` → tetra `\ANS` dual-load.
+
+Still open:
+
+1. Pixel graphics later
+2. Richer sound (chords / samples) beyond single sine `TONE`
+3. Align further with 64TCOM’s AppKit text-grid shell where practical
+
+### Sound
+
+`TONE` / `(APP-TONE)`: **`freq` in Hz**, **`dur` in tenths of a second** (F-PC). Host plays a mono sine WAV via `NSSound` (blocks for `dur`). See also `64TCOM/STATUS.md`.

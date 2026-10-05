@@ -10,24 +10,23 @@ Earlier working name **64Forth2** was dropped for that reason.
 
 ## Naming
 
-Product and repo name: **EditForth**. Bundle id: `com.Win32Forth.EditForth`.
-
-README must keep the **not a derivative of eForth** note (names only resemble each other).
+- Umbrella / repo / editor display name: **EditForth**.
+- Internal trees keep **64Edit** and **64Forth** filenames, types, and (for the Forth app) product/bundle/App Support identity so diffs backport cleanly.
+- README must keep the **not a derivative of eForth** note.
 
 ## Repo layout
 
-Sibling folders (like 64Edit and 64Forth as separate trees, but one git repo):
-
 ```text
 EditForth/                 # repo root
-  EditForth.xcodeproj      # editor target now; Forth target later
-  Editor/                  # editor app (from 64Edit; rename pass deferred)
-  Forth/                   # Forth runtime app (placeholder)
+  EditForth.xcodeproj      # editor target → Editor/
+  Forth.xcodeproj          # 64Forth target → Forth/ (paths remapped from upstream)
+  Editor/                  # 64Edit sources (unchanged names)
+  Forth/                   # 64Forth sources (App, Host, Kernel, Resources, …)
   README.md
   DESIGN.md
 ```
 
-Two **separate processes** when both apps exist. One packaging story later (multi-target project / shared DMG) is fine; the process boundary still holds.
+Two **separate processes** and two Xcode projects in one git repo. `Forth.xcodeproj` is the upstream `64Forth.xcodeproj` with `SRCROOT` paths pointed at `Forth/` instead of `64Forth/`.
 
 ## Intended architecture (dock)
 
@@ -36,10 +35,10 @@ Two **separate processes** when both apps exist. One packaging story later (mult
 3. Undock = separate window; **quit either app ends both** (lifecycle-tied).
 4. Re-dock always lands **below Ping**.
 
-IPC details (sock vs XPC, how the docked surface is embedded) are deferred until the first real Forth host lands under `Forth/`.
+IPC / embedding details deferred until dock work starts.
 
-## Current state
+## Commit exclusions
 
-- `Editor/` is a straight copy of 64Edit **1.5.4** sources (filenames and symbols still 64Edit / SixtyFourEdit*).
-- Product display name and bundle id for the Xcode target remain **EditForth** / `com.Win32Forth.EditForth`.
-- Until `Forth/` has a runtime, the editor still expects a running **64Forth** on `edit.sock`.
+- Leave `Forth/Resources/Config/HYPER.NDX` unstaged (local Hyper index), same practice as 64Forth.
+- Leave emit products under `Forth/Resources/Library/PI` and Emitter smoke/runner artifacts gitignored.
+- Leave xcuserdata unstaged.

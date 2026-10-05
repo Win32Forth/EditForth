@@ -1,0 +1,1904 @@
+//
+//  FileHost.swift
+//  64Forth
+//
+//  Public domain.
+//
+//  Path / Resources / FROMLIB / CHDIR architecture (TZForth lineage).
+//
+
+import Foundation
+import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
+
+/// Host-side directories and resolve rules (TZForth lineage).
+final class FileHost {
+    static let shared = FileHost()
+
+    /// Logical session cwd (may differ from process cwd under sandbox).
+    var logicalCurrentDirectory: String
+
+    /// When true, next path resolve uses bundle Library (FROMLIB).
+    private(set) var fromLibraryArmed = false
+
+    /// Start directory for the next bare FLOAD/CHDIR open panel (FROMLIB bare).
+    var fileDialogStartDirectoryOverride: String?
+
+    /// When true, bare FLOAD after FROMLIB must not leave session cwd at Library permanently.
+    var preserveSessionCwdAfterFileOp = false
+
+    /// Saved cwd frames while a FROMLIB *named* load is in progress (nested-safe).
+    private var fromLibraryDirStack: [(logical: String, process: String)] = []
+
+    /// Saved cwd frames while a file INCLUDE/FLOAD is active (nested-safe).
+    /// Each successful load chdirs to the file's directory so nested relative
+    /// FLOAD/INCLUDE resolve next to that file (TZForth performScopedNamedLoad).
+    private var loadCwdStack: [(logical: String, process: String)] = []
+
+    /// Pinned INCLUDE buffers for the current kernel_eval (nested INCLUDE).
+    private var includeAllocs: [UnsafeMutablePointer<CChar>] = []
+
+    /// Last error message for INCLUDE/FLOAD (also emitted via KernelBridge when set).
+    private(set) var lastLoadError: String?
+
+    /// Absolute standardized path of the last successful load (REQUIRE registry key).
+    private(set) var lastLoadRegistryKey: String?
+
+    /// Last path opened for DEBUG reveal; open -a only when this changes.
+    private var lastDebugRevealPath: String?
+
+    /// Monotonic count of successful EDIT-AT opens (VIEW stamp → 64Edit).
+    /// ForthEditorServer compares before/after `viewWord` to build `viewResult`.
+    private(set) var editAtOpenCount: Int = 0
+
+    /// Optional emit sink (KernelBridge sets this for load/chdir messages).
+    var onMessage: ((String) -> Void)?
+
+    /// Security-scoped bookmark blobs (Phase 5; useful if App Sandbox is enabled later).
+    private var scopedBookmarkData: [Data] = []
+    private let bookmarksDefaultsKey = "SixtyFourForth.SecurityScopedBookmarks"
+    private let lastCwdDefaultsKey = "SixtyFourForth.LastLogicalCwd"
+    private let firstRunDefaultDirKey = "SixtyFourForth.UserTreePath"
+
+    private init() {
+        logicalCurrentDirectory = FileManager.default.currentDirectoryPath
+        restorePersistedAccess()
+        firstRunDefaultDir()
+    }
+
+    private func msg(_ s: String) {
+        onMessage?(s)
+    }
+
+    #if os(macOS)
+    /// Create, configure, and run an `NSOpenPanel` entirely on the main thread.
+    ///
+    /// `kernel_eval` often runs on `forthQueue` (so KEY can pump AppKit). AppKit
+    /// requires *all* `NSOpenPanel` / `NSSavePanel` use on the main thread —
+    /// including `init`, not only `runModal`. Uses async + wait so we never
+    /// `main.sync` against a main thread that is already pumping for KEY
+    /// (that would deadlock).
+    private func pickWithOpenPanelOnMain(
+        configure: @escaping (NSOpenPanel) -> Void
+    ) -> URL? {
+        if Thread.isMainThread {
+            let panel = NSOpenPanel()
+            configure(panel)
+            guard panel.runModal() == .OK else { return nil }
+            return panel.url
+        }
+        var picked: URL?
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            configure(panel)
+            if panel.runModal() == .OK {
+                picked = panel.url
+            }
+            done.signal()
+        }
+        while done.wait(timeout: .now() + 0.05) == .timedOut {
+            // Main evaluate loop processes this async block while pumping UI.
+        }
+        return picked
+    }
+    #endif
+
+    // MARK: - Bundle roots (Contents/Resources/…)
+
+    var resourcesURL: URL? {
+        Bundle.main.resourceURL
+    }
+
+    var userTreeURL: URL? {
+        guard let path = UserDefaults.standard.string(forKey: firstRunDefaultDirKey),
+              !path.isEmpty else { return nil }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+              isDir.boolValue else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    var userLibraryURL: URL? {
+        userTreeURL?.appendingPathComponent("Library", isDirectory: true)
+    }
+
+    var bundleLibraryURL: URL? {
+        if let root = resourcesURL {
+            let dir = root.appendingPathComponent("Library", isDirectory: true)
+            if FileManager.default.fileExists(atPath: dir.path) { return dir }
+        }
+        return Bundle.main.url(forResource: "Library", withExtension: nil)
+    }
+
+    /// FROMLIB / EDIT / DIR root — Documents/64Forth/Library after first run.
+    var libraryURL: URL? {
+        let fm = FileManager.default
+        if let user = userLibraryURL,
+           fm.fileExists(atPath: user.path) {
+            return user
+        }
+        return bundleLibraryURL
+    }
+    
+    var autoLoadURL: URL? {
+        let fm = FileManager.default
+        if let user = userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true),
+           fm.fileExists(atPath: user.path) {
+            return user
+        }
+        if let root = resourcesURL {
+            let dir = root.appendingPathComponent("AutoLoad", isDirectory: true)
+            if fm.fileExists(atPath: dir.path) { return dir }
+        }
+        return Bundle.main.url(forResource: "AutoLoad", withExtension: nil)
+    }
+    
+    /// `Resources/AutoLoad/autoload.fth` if present (TZForth boot file name rules).
+    var autoLoadFileURL: URL? {
+        let fm = FileManager.default
+        var candidates: [URL] = []
+
+        // User tree (Documents/64Forth/AutoLoad) — same names as the bundle
+        if let dir = userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true) {
+            candidates.append(dir.appendingPathComponent("autoload.fth"))
+            candidates.append(dir.appendingPathComponent("AutoLoad.fth"))
+            if let files = try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: nil
+            ) {
+                for f in files where f.pathExtension.lowercased() == "fth" {
+                    if f.deletingPathExtension().lastPathComponent.lowercased() == "autoload" {
+                        candidates.append(f)
+                    }
+                }
+            }
+        }
+
+        // Shipped bundle (unchanged)
+        if let u = Bundle.main.url(
+            forResource: "autoload", withExtension: "fth", subdirectory: "AutoLoad"
+        ) {
+            candidates.append(u)
+        }
+        if let u = Bundle.main.url(
+            forResource: "AutoLoad", withExtension: "fth", subdirectory: "AutoLoad"
+        ) {
+            candidates.append(u)
+        }
+        if let root = resourcesURL {
+            candidates.append(root.appendingPathComponent("AutoLoad/autoload.fth"))
+            candidates.append(root.appendingPathComponent("AutoLoad/AutoLoad.fth"))
+            candidates.append(root.appendingPathComponent("autoload.fth"))
+        }
+        if let dir = autoLoadURL,
+           let files = try? fm.contentsOfDirectory(
+               at: dir, includingPropertiesForKeys: nil
+           ) {
+            for f in files where f.pathExtension.lowercased() == "fth" {
+                if f.deletingPathExtension().lastPathComponent.lowercased() == "autoload" {
+                    candidates.append(f)
+                }
+            }
+        }
+
+        for url in candidates {
+            if fm.fileExists(atPath: url.path) { return url }
+        }
+        return nil
+    }
+    
+    var docsURL: URL? {
+        let fm = FileManager.default
+        if let user = userTreeURL?.appendingPathComponent("Docs", isDirectory: true),
+           fm.fileExists(atPath: user.path) {
+            return user
+        }
+        if let root = resourcesURL {
+            let dir = root.appendingPathComponent("Docs", isDirectory: true)
+            if fm.fileExists(atPath: dir.path) { return dir }
+        }
+        if let u = Bundle.main.url(forResource: "Docs", withExtension: nil) {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: u.path, isDirectory: &isDir), isDir.boolValue {
+                return u
+            }
+        }
+        return nil
+    }
+    
+    /// Hypertext / prefs: `Resources/Config` (HYPER.NDX, HYPER.CFG, …).
+    var configURL: URL? {
+        if let root = resourcesURL {
+            let dir = root.appendingPathComponent("Config", isDirectory: true)
+            if FileManager.default.fileExists(atPath: dir.path) { return dir }
+        }
+        if let u = Bundle.main.url(forResource: "Config", withExtension: nil) {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir), isDir.boolValue {
+                return u
+            }
+        }
+        return nil
+    }
+
+    /// `Config/HYPER.NDX` if present (reindex overlay, source tree, or bundle).
+    var hyperNdxURL: URL? {
+        let fm = FileManager.default
+        let overlay = FileAccess.shared.applicationSupportDir()
+            .appendingPathComponent("Config/HYPER.NDX")
+        if fm.fileExists(atPath: overlay.path) { return overlay }
+        if let tree = sourceTreeURL {
+            let u = tree.appendingPathComponent("Resources/Config/HYPER.NDX")
+            if fm.fileExists(atPath: u.path) { return u }
+        }
+        if let u = Bundle.main.url(forResource: "HYPER", withExtension: "NDX", subdirectory: "Config") {
+            if fm.fileExists(atPath: u.path) { return u }
+        }
+        if let dir = configURL {
+            let u = dir.appendingPathComponent("HYPER.NDX")
+            if fm.fileExists(atPath: u.path) { return u }
+        }
+        return nil
+    }
+
+    /// Developer tree root (`…/64Forth` with `Kernel/` + `Resources/`). Optional:
+    /// release builds ship assembly under `Library/Sources/` for VIEW without a tree.
+    private var sourceTreeURLCache: URL?
+    private var sourceTreeURLResolved = false
+
+    var sourceTreeURL: URL? {
+        if sourceTreeURLResolved { return sourceTreeURLCache }
+        sourceTreeURLResolved = true
+        let envKeys = ["HYPER_ROOT", "SIXTYFOURFORTH_SRC", "SIXTYFOURFORTH_ROOT"]
+        for key in envKeys {
+            if let s = ProcessInfo.processInfo.environment[key], !s.isEmpty {
+                let u = URL(fileURLWithPath: s, isDirectory: true).standardizedFileURL
+                if Self.looksLikeSourceTree(u) {
+                    sourceTreeURLCache = u
+                    return u
+                }
+                // Allow env pointing at repo root that contains 64Forth/
+                let nested = u.appendingPathComponent("64Forth", isDirectory: true)
+                if Self.looksLikeSourceTree(nested) {
+                    sourceTreeURLCache = nested
+                    return nested
+                }
+            }
+        }
+        // Compile-time location of this file: …/64Forth/Host/FileHost.swift → …/64Forth
+        let thisFile = URL(fileURLWithPath: #filePath)
+        let hostDir = thisFile.deletingLastPathComponent()
+        let sixtyFour = hostDir.deletingLastPathComponent()
+        if Self.looksLikeSourceTree(sixtyFour) {
+            sourceTreeURLCache = sixtyFour
+            return sixtyFour
+        }
+        sourceTreeURLCache = nil
+        return nil
+    }
+
+    private static func looksLikeSourceTree(_ u: URL) -> Bool {
+        let fm = FileManager.default
+        let kernel = u.appendingPathComponent("Kernel/forth.s")
+        let resLib = u.appendingPathComponent("Resources/Library", isDirectory: true)
+        return fm.fileExists(atPath: kernel.path) && fm.fileExists(atPath: resLib.path)
+    }
+
+    /// Shipped kernel sources in the app bundle (`Library/Sources/forth.s`, …).
+    var librarySourcesURL: URL? {
+        libraryURL?.appendingPathComponent("Sources", isDirectory: true)
+    }
+
+    /// Resolve a HYPER.NDX-style relative path (`Kernel/…`, `Library/…`, `Config/…`).
+    /// Returns nil if the path is not a hyper-style prefix (caller uses normal resolve).
+    func resolveHyperStylePath(_ name: String) -> URL? {
+        var n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\", with: "/")
+        while n.hasPrefix("./") { n = String(n.dropFirst(2)) }
+        guard !n.isEmpty else { return nil }
+
+        let fm = FileManager.default
+
+        if n == "Config" || n.hasPrefix("Config/") {
+            let rest = n == "Config" ? "" : String(n.dropFirst("Config/".count))
+            // 1) Application Support overlay (writable HYPER-REINDEX when bundle is RO)
+            let overlayBase = FileAccess.shared.applicationSupportDir()
+                .appendingPathComponent("Config", isDirectory: true)
+            if !rest.isEmpty {
+                let overlay = overlayBase.appendingPathComponent(rest).standardizedFileURL
+                if fm.fileExists(atPath: overlay.path) { return overlay }
+            }
+            // 2) Developer source tree — always when present (writable Config for reindex)
+            if let tree = sourceTreeURL {
+                let base = tree.appendingPathComponent("Resources/Config", isDirectory: true)
+                let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
+                return u.standardizedFileURL
+            }
+            // 3) Bundled Resources/Config (read; writes redirected via writableURL)
+            if let cfg = configURL {
+                let u = rest.isEmpty ? cfg : cfg.appendingPathComponent(rest)
+                return u.standardizedFileURL
+            }
+            // 4) Overlay path even if missing (CREATE-FILE / first reindex)
+            if !rest.isEmpty {
+                return overlayBase.appendingPathComponent(rest).standardizedFileURL
+            }
+            return overlayBase.standardizedFileURL
+        }
+
+        // Kernel/… in older NDX → Library/Sources/… in the bundle (release VIEW).
+        // Prefer shipped Sources; fall back to developer tree Kernel/.
+        if n.hasPrefix("Kernel/") {
+            let leaf = String(n.dropFirst("Kernel/".count))
+            if let src = librarySourcesURL {
+                let u = src.appendingPathComponent(leaf).standardizedFileURL
+                if fm.fileExists(atPath: u.path) { return u }
+            }
+            if let tree = sourceTreeURL {
+                let u = tree.appendingPathComponent(n).standardizedFileURL
+                if fm.fileExists(atPath: u.path) { return u }
+                return u // allow create-style probes / clearer errors
+            }
+            return nil
+        }
+
+        if n.hasPrefix("Library/") {
+            let rest = String(n.dropFirst("Library/".count))
+            // Prefer bundle Library (same files the app ships)
+            if let lib = libraryURL {
+                let u = lib.appendingPathComponent(rest).standardizedFileURL
+                if fm.fileExists(atPath: u.path) { return u }
+            }
+            // Fall back to developer tree Resources/Library
+            if let tree = sourceTreeURL {
+                let u = tree
+                    .appendingPathComponent("Resources/Library", isDirectory: true)
+                    .appendingPathComponent(rest)
+                    .standardizedFileURL
+                return u
+            }
+            return libraryURL?.appendingPathComponent(rest).standardizedFileURL
+        }
+
+        // AutoLoad/… — product boot scripts (VIEW of MAIN after autoload)
+        if n == "AutoLoad" || n.hasPrefix("AutoLoad/") {
+            let rest = n == "AutoLoad" ? "" : String(n.dropFirst("AutoLoad/".count))
+            if let auto = autoLoadURL {
+                let u = rest.isEmpty ? auto : auto.appendingPathComponent(rest)
+                if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
+            }
+            if let tree = sourceTreeURL {
+                let base = tree.appendingPathComponent("Resources/AutoLoad", isDirectory: true)
+                let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
+                if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
+            }
+            if let res = resourcesURL {
+                let base = res.appendingPathComponent("AutoLoad", isDirectory: true)
+                let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
+                return u.standardizedFileURL
+            }
+            return nil
+        }
+
+        // Legacy VIEW stamp: bare "autoload.fth" (pre-AutoLoad/ keys)
+        if !n.contains("/"), n.lowercased() == "autoload.fth" {
+            return resolveHyperStylePath("AutoLoad/autoload.fth")
+        }
+
+        return nil
+    }
+
+    // MARK: - HYPER.SPECS (Phase 4 reindex file list)
+
+    /// Expand `Config/HYPER.CFG` SPECS into NDX-style paths (`Kernel/…`, `Library/…`).
+    /// Used when Forth opens `Config/HYPER.SPECS` (virtual file) during HYPER-REINDEX.
+    func buildHyperSourceList() -> [String] {
+        var specs: [String] = []
+        var excludes: [String] = []
+
+        if let cfgText = readHyperCfgText() {
+            for raw in cfgText.split(whereSeparator: \.isNewline) {
+                let line = String(raw)
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+                if trimmed == ";" { break }
+                let upper = trimmed.uppercased()
+                if upper.hasPrefix("*EXCLUDE") {
+                    let rest = trimmed.dropFirst(8).trimmingCharacters(in: .whitespaces)
+                    if !rest.isEmpty { excludes.append(rest) }
+                    continue
+                }
+                if upper.hasPrefix("SPECS") {
+                    let rest = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                    if !rest.isEmpty { specs.append(rest) }
+                }
+            }
+        }
+        if specs.isEmpty {
+            specs = [
+                "Resources/Library/Sources/forth.s",
+                "Resources/Library/Sources/boot_words.inc",
+                "Resources/Library/Sources/boot_words_end.inc",
+                "Resources/Library/Sources/colon_words.inc",
+                "Resources/Library/Sources/kernel_api.h",
+                "Resources/Library/**/*.fth",
+                "Resources/Library/**/*.FTH",
+            ]
+        }
+        if excludes.isEmpty {
+            excludes = ["HayesTest", "ANSValidate", "Benchmarks", "HYPER.NDX"]
+        }
+
+        var out: [String] = []
+        var seen = Set<String>()
+        for spec in specs {
+            for path in expandHyperSpec(spec) {
+                let ndx = ndxStylePath(path)
+                // Match excludes against NDX key *and* full filesystem path so
+                // bare last-component keys (symlink prefix mismatch) still drop
+                // HayesTest / ANSValidate / Benchmarks noise.
+                let full = path.resolvingSymlinksInPath().path
+                if excludes.contains(where: {
+                    ndx.localizedCaseInsensitiveContains($0)
+                        || full.localizedCaseInsensitiveContains($0)
+                }) {
+                    continue
+                }
+                // Refuse bare filenames — OPEN-FILE would look in session cwd
+                // and print "HX: skip …" for every SPECS line in a release DMG.
+                if !ndx.contains("/") { continue }
+                if seen.insert(ndx).inserted {
+                    out.append(ndx)
+                }
+            }
+        }
+        return out
+    }
+
+    /// UTF-8 body for the virtual `Config/HYPER.SPECS` file.
+    func hyperSpecsFileData() -> Data {
+        let body = buildHyperSourceList().joined(separator: "\n") + "\n"
+        return Data(body.utf8)
+    }
+
+    private func readHyperCfgText() -> String? {
+        if let u = resolveHyperStylePath("Config/HYPER.CFG"),
+           let t = try? String(contentsOf: u, encoding: .utf8) {
+            return t
+        }
+        if let tree = sourceTreeURL {
+            let u = tree.appendingPathComponent("Resources/Config/HYPER.CFG")
+            if let t = try? String(contentsOf: u, encoding: .utf8) { return t }
+        }
+        if let cfg = configURL {
+            let u = cfg.appendingPathComponent("HYPER.CFG")
+            if let t = try? String(contentsOf: u, encoding: .utf8) { return t }
+        }
+        return nil
+    }
+
+    /// Expand one SPECS pattern relative to source tree or bundle roots.
+    private func expandHyperSpec(_ spec: String) -> [URL] {
+        let fm = FileManager.default
+        let s = spec.replacingOccurrences(of: "\\", with: "/")
+        var roots: [URL] = []
+        if let tree = sourceTreeURL { roots.append(tree) }
+        if let res = resourcesURL, !roots.contains(where: { $0.path == res.path }) {
+            roots.append(res)
+        }
+
+        // Non-glob: direct file under each root
+        if !s.contains("*") && !s.contains("?") {
+            for root in roots {
+                let u = root.appendingPathComponent(s).standardizedFileURL
+                if fm.fileExists(atPath: u.path) { return [u] }
+                // Bundle resourcesURL is already …/Contents/Resources
+                if s.hasPrefix("Resources/Library/"), let lib = libraryURL {
+                    let rest = String(s.dropFirst("Resources/Library/".count))
+                    let u2 = lib.appendingPathComponent(rest).standardizedFileURL
+                    if fm.fileExists(atPath: u2.path) { return [u2] }
+                }
+                if s.hasPrefix("Library/"), let lib = libraryURL {
+                    let rest = String(s.dropFirst("Library/".count))
+                    let u2 = lib.appendingPathComponent(rest).standardizedFileURL
+                    if fm.fileExists(atPath: u2.path) { return [u2] }
+                }
+            }
+            return []
+        }
+
+        // Resources/Library/**/*.fth  or  Library/**/*.fth
+        var results: [URL] = []
+        for root in roots {
+            let libBase: URL
+            if s.hasPrefix("Resources/Library/") || s.hasPrefix("Library/") {
+                if let tree = sourceTreeURL, root.path == tree.path {
+                    libBase = tree.appendingPathComponent("Resources/Library", isDirectory: true)
+                } else if let lib = libraryURL {
+                    libBase = lib
+                } else {
+                    continue
+                }
+            } else {
+                // Other globs: under root
+                libBase = root
+            }
+            let ext: String?
+            if s.lowercased().hasSuffix(".fth") { ext = "fth" }
+            else if s.lowercased().hasSuffix(".fs") { ext = "fs" }
+            else { ext = nil }
+
+            if let en = fm.enumerator(
+                at: libBase,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                for case let fileURL as URL in en {
+                    var isDir: ObjCBool = false
+                    if fm.fileExists(atPath: fileURL.path, isDirectory: &isDir), isDir.boolValue {
+                        continue
+                    }
+                    let name = fileURL.lastPathComponent
+                    if let ext {
+                        if name.lowercased().hasSuffix(".\(ext)") {
+                            results.append(fileURL.standardizedFileURL)
+                        }
+                    } else {
+                        results.append(fileURL.standardizedFileURL)
+                    }
+                }
+            }
+        }
+        return results.sorted { $0.path.lowercased() < $1.path.lowercased() }
+    }
+
+    /// True if `path` is under `root` (symlink-resolved). Returns relative path
+    /// with `/` separators, or nil. Avoids `/var` vs `/private/var` prefix misses
+    /// that made release SPECS fall back to bare filenames → "HX: skip …".
+    private func relativePath(of url: URL, under root: URL?) -> String? {
+        guard let root else { return nil }
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let prefix = root.resolvingSymlinksInPath().standardizedFileURL.path
+        guard path == prefix || path.hasPrefix(prefix + "/") else { return nil }
+        var rel = path == prefix ? "" : String(path.dropFirst(prefix.count))
+        while rel.hasPrefix("/") { rel.removeFirst() }
+        return rel.replacingOccurrences(of: "\\", with: "/")
+    }
+
+    /// Disk path → HYPER.NDX / VIEW path (`Library/…`, `AutoLoad/…`, not absolute).
+    /// Bare lastPathComponent alone is unopenable from a random cwd.
+    private func ndxStylePath(_ url: URL) -> String {
+        if let tree = sourceTreeURL, let rel = relativePath(of: url, under: tree) {
+            if rel.hasPrefix("Resources/Library/") {
+                return "Library/" + String(rel.dropFirst("Resources/Library/".count))
+            }
+            if rel.hasPrefix("Resources/AutoLoad/") {
+                return "AutoLoad/" + String(rel.dropFirst("Resources/AutoLoad/".count))
+            }
+            if rel.hasPrefix("Resources/Config/") {
+                return "Config/" + String(rel.dropFirst("Resources/Config/".count))
+            }
+            if rel.hasPrefix("Resources/") {
+                return String(rel.dropFirst("Resources/".count))
+            }
+            return rel
+        }
+        if let rel = relativePath(of: url, under: libraryURL) {
+            return "Library/" + rel
+        }
+        if let rel = relativePath(of: url, under: autoLoadURL) {
+            return rel.isEmpty ? "AutoLoad/" + url.lastPathComponent : "AutoLoad/" + rel
+        }
+        if let rel = relativePath(of: url, under: resourcesURL) {
+            if rel.hasPrefix("Library/") || rel.hasPrefix("AutoLoad/") || rel.hasPrefix("Config/") {
+                return rel
+            }
+            if !rel.isEmpty { return rel }
+        }
+        // Last resort: absolute path (openable); never bare leaf for SPECS/VIEW.
+        return url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    func resourceRootsDescription() -> String {
+        var lines: [String] = []
+        lines.append("Resources: \(resourcesURL?.path ?? "(not bundled — run the .app from Xcode)")")
+        lines.append("Library:   \(libraryURL?.path ?? "— (missing from bundle)")")
+        lines.append("AutoLoad:  \(autoLoadURL?.path ?? "—")")
+        if let boot = autoLoadFileURL {
+            lines.append("autoload:  \(boot.lastPathComponent)")
+        } else {
+            lines.append("autoload:  (none — pure REPL)")
+        }
+        lines.append("Docs:      \(docsURL?.path ?? "—")")
+        lines.append("Config:    \(configURL?.path ?? "—")")
+        if let ndx = hyperNdxURL {
+            lines.append("HYPER.NDX: \(ndx.lastPathComponent)")
+        } else {
+            lines.append("HYPER.NDX: (none)")
+        }
+        if let src = sourceTreeURL {
+            lines.append("SrcTree:   \(src.path)")
+        } else {
+            lines.append("SrcTree:   — (optional; Kernel VIEW uses Library/Sources)")
+        }
+        if let ks = librarySourcesURL, FileManager.default.fileExists(atPath: ks.appendingPathComponent("forth.s").path) {
+            lines.append("Sources:   \(ks.path)")
+        } else {
+            lines.append("Sources:   — (Library/Sources not in bundle)")
+        }
+        lines.append("Working folder: \(logicalCurrentDirectory)")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: - FROMLIB
+
+    /// Arm next resolve to Resources/Library (TZForth FROMLIB).
+    func armFromLibrary() {
+        fromLibraryArmed = true
+    }
+
+    /// Disarm FROMLIB without loading (e.g. REQUIRE skipped — already loaded).
+    func clearFromLibrary() {
+        fromLibraryArmed = false
+    }
+
+    private func isAbsoluteOrHome(_ spec: String) -> Bool {
+        let s = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.hasPrefix("/") || s.hasPrefix("~")
+    }
+
+    /// Normalize leaf: append `.fth` when no extension.
+    func normalizeSourceSpec(_ spec: String) -> String {
+        let trimmed = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        let leaf = (trimmed as NSString).lastPathComponent
+        if leaf.isEmpty || leaf.contains(".") { return trimmed }
+        return trimmed + ".fth"
+    }
+
+    /// Resolve a load name for FLOAD/INCLUDE/REQUIRE/EDIT/OPEN-FILE.
+    /// - Absolute / ~ → as-is
+    /// - `Kernel/` `Library/` `Config/` → hyper-style roots (VIEW / NDX)
+    /// - Relative + FROMLIB armed → under Resources/Library (flag cleared; path base only —
+    ///   nested relatives use the loaded file's directory via loadCwdStack in pinFileContents)
+    /// - Relative → logicalCurrentDirectory
+    func resolveLoadPath(_ name: String, switchCwdForFromLib: Bool = true) -> URL? {
+        var n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if n.isEmpty { return nil }
+
+        if n.hasPrefix("~") {
+            n = NSString(string: n).expandingTildeInPath
+        }
+
+        if n.hasPrefix("/") {
+            return URL(fileURLWithPath: n)
+        }
+
+        // HYPER.NDX paths (and Config/HYPER.NDX open) before .fth normalization.
+        if let hyper = resolveHyperStylePath(n) {
+            return hyper
+        }
+
+        n = normalizeSourceSpec(n)
+
+        let armed = fromLibraryArmed
+        let base: URL
+        if armed, let lib = libraryURL {
+            clearFromLibrary()
+            base = lib
+            // Remember session cwd so evaluate() can restore after a FROMLIB-named load.
+            // Nested relative FLOAD uses the *file's* folder (see beginLoadCwd), not Library root.
+            if switchCwdForFromLib {
+                pushFromLibrarySessionFrame()
+            }
+        } else {
+            if armed {
+                clearFromLibrary()
+                // Armed but Library missing from bundle
+                lastLoadError = "FROMLIB: Resources/Library not found in app bundle"
+                return nil
+            }
+            base = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+        }
+
+        let path = (base.path as NSString).appendingPathComponent(n)
+        return URL(fileURLWithPath: path).standardizedFileURL
+    }
+
+    /// Resolve a load name to an absolute registry key (consumes FROMLIB like a real load).
+    /// Does not require the file to exist on disk. Does not switch session cwd.
+    func resolveRegistryKey(path: UnsafePointer<CChar>?, pathLen: Int) -> String? {
+        guard let path, pathLen > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: pathLen)
+        for i in 0..<pathLen { bytes[i] = UInt8(bitPattern: path[i]) }
+        let raw = String(bytes: bytes, encoding: .utf8) ?? ""
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // switchCwdForFromLib: false — REQUIRED path-key resolve must not leave cwd at Library.
+        guard !name.isEmpty, let url = resolveLoadPath(name, switchCwdForFromLib: false) else { return nil }
+        return url.standardizedFileURL.path
+    }
+
+    /// Snapshot session cwd for FROMLIB restore (does not change cwd).
+    private func pushFromLibrarySessionFrame() {
+        let frame = (logical: logicalCurrentDirectory, process: FileManager.default.currentDirectoryPath)
+        fromLibraryDirStack.append(frame)
+    }
+
+    func endFromLibraryLoadIfNeeded() {
+        guard let frame = fromLibraryDirStack.popLast() else { return }
+        logicalCurrentDirectory = frame.logical
+        let proc = frame.process.isEmpty ? frame.logical : frame.process
+        if !proc.isEmpty {
+            _ = FileManager.default.changeCurrentDirectoryPath(proc)
+        }
+    }
+
+    func endAllFromLibraryLoads() {
+        while !fromLibraryDirStack.isEmpty {
+            endFromLibraryLoadIfNeeded()
+        }
+    }
+
+    // MARK: - Per-file load cwd (nested relative FLOAD)
+
+    /// Enter the loaded file's directory for the duration of its INCLUDE SOURCE.
+    private func beginLoadCwd(forFileURL url: URL) {
+        let parent = url.deletingLastPathComponent().path
+        let frame = (logical: logicalCurrentDirectory, process: FileManager.default.currentDirectoryPath)
+        loadCwdStack.append(frame)
+        logicalCurrentDirectory = parent
+        _ = FileManager.default.changeCurrentDirectoryPath(parent)
+        if ProcessInfo.processInfo.environment["FORTH64_TRACE_LOAD_CWD"] == "1" {
+            msg("[load-cwd BEGIN depth=\(loadCwdStack.count)] file=\(url.lastPathComponent) cwd=\(parent)\n")
+        }
+    }
+
+    /// High-level INCLUDED / BEGIN-LOAD-CWD: push load cwd for a resolved file path.
+    /// Nested relative OPEN-FILE / FLOAD then resolve against that file's folder.
+    func beginLoadCwd(forPath path: String) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        beginLoadCwd(forFileURL: URL(fileURLWithPath: trimmed))
+    }
+
+    /// Restore cwd when a file INCLUDE/FLOAD SOURCE ends (kernel SOURCE-ID was > 0).
+    func endLoadCwdIfNeeded() {
+        let depthBefore = loadCwdStack.count
+        guard let frame = loadCwdStack.popLast() else {
+            if ProcessInfo.processInfo.environment["FORTH64_TRACE_LOAD_CWD"] == "1" {
+                msg("[load-cwd END empty-stack]\n")
+            }
+            return
+        }
+        logicalCurrentDirectory = frame.logical
+        let proc = frame.process.isEmpty ? frame.logical : frame.process
+        if !proc.isEmpty {
+            _ = FileManager.default.changeCurrentDirectoryPath(proc)
+        }
+        if ProcessInfo.processInfo.environment["FORTH64_TRACE_LOAD_CWD"] == "1" {
+            msg("[load-cwd END depth \(depthBefore)->\(loadCwdStack.count)] cwd=\(logicalCurrentDirectory)\n")
+        }
+    }
+
+    func endAllLoadCwds() {
+        while !loadCwdStack.isEmpty {
+            endLoadCwdIfNeeded()
+        }
+    }
+
+    // MARK: - CHDIR (TZForth-style)
+
+    /// Named CHDIR. Honors FROMLIB for relative paths (permanent chdir under Library).
+    func changeDirectory(spec: String) {
+        let s = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty {
+            presentDirectoryPicker()
+            return
+        }
+
+        // FROMLIB + relative → under Library permanently
+        if fromLibraryArmed {
+            clearFromLibrary()
+            if !isAbsoluteOrHome(s), let lib = libraryURL {
+                let expanded = (s as NSString).expandingTildeInPath
+                let target = (lib.path as NSString).appendingPathComponent(expanded)
+                applyChdir(URL(fileURLWithPath: target).standardizedFileURL)
+                return
+            }
+        }
+
+        let expanded = (s as NSString).expandingTildeInPath
+        let newURL: URL
+        if expanded.hasPrefix("/") {
+            newURL = URL(fileURLWithPath: expanded)
+        } else {
+            newURL = URL(fileURLWithPath: logicalCurrentDirectory)
+                .appendingPathComponent(expanded)
+                .standardizedFileURL
+        }
+        applyChdir(newURL)
+    }
+
+    /// Bare CHDIR: folder picker. FROMLIB arms start at Library.
+    func presentDirectoryPicker() {
+        #if !os(macOS)
+        msg("? bare CHDIR: use CHDIR with a path on iOS (folder dialog not yet available)\n")
+        return
+        #else
+        let startDir: URL
+        if fromLibraryArmed {
+            clearFromLibrary()
+            if let lib = libraryURL {
+                startDir = lib
+            } else {
+                startDir = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+            }
+        } else if let override = fileDialogStartDirectoryOverride {
+            startDir = URL(fileURLWithPath: override, isDirectory: true)
+            fileDialogStartDirectoryOverride = nil
+        } else {
+            startDir = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+        }
+
+        guard let url = pickWithOpenPanelOnMain(configure: { panel in
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.prompt = "Choose"
+            panel.message = "CHDIR — set working directory"
+            panel.directoryURL = startDir
+        }) else {
+            msg("(CHDIR cancelled)\n")
+            return
+        }
+        applyChdir(url)
+        #endif
+    }
+
+    private func applyChdir(_ url: URL) {
+        endAllLoadCwds()
+        endAllFromLibraryLoads()
+        clearFromLibrary()
+        logicalCurrentDirectory = url.path
+        _ = FileManager.default.changeCurrentDirectoryPath(url.path)
+        rememberScopedURL(url)
+        UserDefaults.standard.set(url.path, forKey: lastCwdDefaultsKey)
+        msg("Current directory: \(logicalCurrentDirectory)\n")
+    }
+
+    func printPwd() {
+        msg("Current directory: \(logicalCurrentDirectory)\n")
+    }
+
+    // MARK: - SYSTEM (shell command)
+
+    /// Run `cmd` via `/bin/sh -c` in `logicalCurrentDirectory`.
+    /// Returns process exit status (0 = success), or -1 if launch/wait failed.
+    /// Stdout and stderr are forwarded to the Forth console via `onMessage`.
+    func runSystemCommand(_ cmd: String) -> Int {
+        let trimmed = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            msg("SYSTEM: empty command\n")
+            return -1
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", trimmed]
+        process.currentDirectoryURL = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+        process.standardInput = FileHandle.nullDevice
+
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            if let s = String(data: data, encoding: .utf8) {
+                self.msg(s)
+            } else {
+                self.msg(String(decoding: data, as: UTF8.self))
+            }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            if let s = String(data: data, encoding: .utf8) {
+                self.msg(s)
+            } else {
+                self.msg(String(decoding: data, as: UTF8.self))
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+            msg("SYSTEM: failed to launch: \(error.localizedDescription)\n")
+            return -1
+        }
+
+        process.waitUntilExit()
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+
+        // Drain any residual data the handlers may have missed.
+        let restOut = outPipe.fileHandleForReading.readDataToEndOfFile()
+        if !restOut.isEmpty {
+            if let s = String(data: restOut, encoding: .utf8) { msg(s) }
+            else { msg(String(decoding: restOut, as: UTF8.self)) }
+        }
+        let restErr = errPipe.fileHandleForReading.readDataToEndOfFile()
+        if !restErr.isEmpty {
+            if let s = String(data: restErr, encoding: .utf8) { msg(s) }
+            else { msg(String(decoding: restErr, as: UTF8.self)) }
+        }
+
+        switch process.terminationReason {
+        case .exit:
+            return Int(process.terminationStatus)
+        case .uncaughtSignal:
+            msg("SYSTEM: terminated by signal \(process.terminationStatus)\n")
+            return -1
+        @unknown default:
+            return -1
+        }
+    }
+
+    // MARK: - DIR (TZForth-style)
+
+    /// List directory. Bare → cwd (or Library if FROMLIB). Named path / `*.fth` wildcards.
+    func listDirectory(spec: String) {
+        let fm = FileManager.default
+        var basePath = logicalCurrentDirectory
+        var filter = ""
+        let raw = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // FROMLIB: bare or relative lists under Resources/Library (then clear flag)
+        if fromLibraryArmed {
+            clearFromLibrary()
+            if let lib = libraryURL {
+                if raw.isEmpty {
+                    emitDirectoryListing(of: lib.path, filter: "")
+                    return
+                }
+                if !isAbsoluteOrHome(raw) {
+                    let expanded = (raw as NSString).expandingTildeInPath
+                    let hasWild = expanded.contains("*") || expanded.contains("?")
+                    if hasWild {
+                        if let lastSlash = expanded.lastIndex(of: "/") {
+                            let dirPart = String(expanded[..<lastSlash])
+                            filter = String(expanded[expanded.index(after: lastSlash)...])
+                            let dirPath = dirPart.isEmpty
+                                ? lib.path
+                                : (lib.path as NSString).appendingPathComponent(dirPart)
+                            emitDirectoryListing(of: dirPath, filter: filter)
+                        } else {
+                            emitDirectoryListing(of: lib.path, filter: expanded)
+                        }
+                    } else {
+                        let target = (lib.path as NSString).appendingPathComponent(expanded)
+                        var isD: ObjCBool = false
+                        if fm.fileExists(atPath: target, isDirectory: &isD), isD.boolValue {
+                            emitDirectoryListing(of: target, filter: "")
+                        } else {
+                            // treat as filter in Library root
+                            emitDirectoryListing(of: lib.path, filter: expanded)
+                        }
+                    }
+                    return
+                }
+                // absolute with FROMLIB armed: fall through after clear
+            } else {
+                msg("DIR: FROMLIB armed but Resources/Library missing\n")
+                return
+            }
+        }
+
+        if !raw.isEmpty {
+            let expanded = (raw as NSString).expandingTildeInPath
+            let hasWild = expanded.contains("*") || expanded.contains("?")
+            if hasWild {
+                if let lastSlash = expanded.lastIndex(of: "/") {
+                    let dirPart = String(expanded[..<lastSlash])
+                    filter = String(expanded[expanded.index(after: lastSlash)...])
+                    if dirPart.isEmpty {
+                        basePath = "/"
+                    } else {
+                        let dirExpanded = (dirPart as NSString).expandingTildeInPath
+                        if dirExpanded.hasPrefix("/") {
+                            basePath = dirExpanded
+                        } else {
+                            basePath = (basePath as NSString).appendingPathComponent(dirExpanded)
+                        }
+                    }
+                } else {
+                    filter = expanded
+                }
+            } else {
+                let testURL: URL
+                if expanded.hasPrefix("/") {
+                    testURL = URL(fileURLWithPath: expanded)
+                } else {
+                    testURL = URL(fileURLWithPath: basePath).appendingPathComponent(expanded)
+                }
+                var isD: ObjCBool = false
+                if fm.fileExists(atPath: testURL.path, isDirectory: &isD), isD.boolValue {
+                    basePath = testURL.path
+                    filter = ""
+                } else {
+                    filter = expanded
+                }
+            }
+        }
+
+        emitDirectoryListing(of: basePath, filter: filter)
+    }
+
+    private func emitDirectoryListing(of basePath: String, filter: String) {
+        let fm = FileManager.default
+        let listURL = URL(fileURLWithPath: basePath)
+        do {
+            let contents = try fm.contentsOfDirectory(
+                at: listURL,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+            msg("\nDirectory of \(listURL.path)\n\n")
+            var count = 0
+            for fileURL in contents.sorted(by: {
+                $0.lastPathComponent.lowercased() < $1.lastPathComponent.lowercased()
+            }) {
+                let name = fileURL.lastPathComponent
+                if !filter.isEmpty, !matchesWildcard(filter, in: name) {
+                    continue
+                }
+                var isDir: ObjCBool = false
+                fm.fileExists(atPath: fileURL.path, isDirectory: &isDir)
+                if isDir.boolValue {
+                    let padded = name.padding(toLength: 30, withPad: " ", startingAt: 0)
+                    msg(" \(padded) <DIR>\n")
+                } else {
+                    let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    let padded = name.padding(toLength: 30, withPad: " ", startingAt: 0)
+                    let sizeStr = String(size).padding(toLength: 12, withPad: " ", startingAt: 0)
+                    msg(" \(padded) \(sizeStr)\n")
+                }
+                count += 1
+            }
+            msg("\n \(count) file(s)\n\n")
+        } catch {
+            msg("DIR error: Cannot read directory '\(listURL.path)'\n")
+            msg("  (Use bare FLOAD or CHDIR to open/authorize a folder if access fails.)\n")
+        }
+    }
+
+    /// MS-DOS style * and ? wildcards, case-insensitive.
+    private func matchesWildcard(_ pattern: String, in name: String) -> Bool {
+        let regexPattern = "^" + NSRegularExpression.escapedPattern(for: pattern)
+            .replacingOccurrences(of: "\\*", with: ".*")
+            .replacingOccurrences(of: "\\?", with: ".")
+            + "$"
+        guard let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) else {
+            return false
+        }
+        let range = NSRange(location: 0, length: name.utf16.count)
+        return regex.firstMatch(in: name, options: [], range: range) != nil
+    }
+
+    // MARK: - Bookmarks / persistence (Phase 5)
+
+    private func rememberScopedURL(_ url: URL) {
+        // Prefer security-scoped bookmarks when the URL supports them (panel picks).
+        #if os(macOS)
+        let opts: URL.BookmarkCreationOptions = [.withSecurityScope]
+        #else
+        let opts: URL.BookmarkCreationOptions = []
+        #endif
+        guard let data = try? url.bookmarkData(
+            options: opts,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) else { return }
+        scopedBookmarkData.removeAll { $0 == data }
+        scopedBookmarkData.append(data)
+        // Cap list
+        if scopedBookmarkData.count > 32 {
+            scopedBookmarkData.removeFirst(scopedBookmarkData.count - 32)
+        }
+        UserDefaults.standard.set(scopedBookmarkData, forKey: bookmarksDefaultsKey)
+    }
+
+    /// Copy shipped Library / AutoLoad / Docs into Documents/64Forth.
+    /// replaceExisting: true = wipe those three folders first (first-run or explicit restore).
+    private func userTreeDisplayPath() -> String {
+        "Documents/64Forth"
+    }
+
+    @discardableResult
+    func installUserTree(replaceExisting: Bool) -> Bool {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+        let dest = docs.appendingPathComponent("64Forth", isDirectory: true)
+        do {
+            try fm.createDirectory(at: dest, withIntermediateDirectories: true)
+            if let res = Bundle.main.resourceURL {
+                for name in ["Library", "AutoLoad", "Docs"] {
+                    let from = res.appendingPathComponent(name, isDirectory: true)
+                    let to = dest.appendingPathComponent(name, isDirectory: true)
+                    guard fm.fileExists(atPath: from.path) else { continue }
+                    if replaceExisting, fm.fileExists(atPath: to.path) {
+                        try fm.removeItem(at: to)
+                    }
+                    if !fm.fileExists(atPath: to.path) {
+                        try fm.copyItem(at: from, to: to)
+                    }
+                }
+            }
+            UserDefaults.standard.set(dest.path, forKey: firstRunDefaultDirKey)
+            logicalCurrentDirectory = dest.path
+            _ = fm.changeCurrentDirectoryPath(dest.path)
+            if replaceExisting {
+                msg("\n64Forth files restored\n")
+            } else {
+                msg("\nUpdated User folder: \(userTreeDisplayPath())\n")
+            }
+            return true
+        } catch {
+            msg("installUserTree: \(error.localizedDescription)\n")
+            return false
+        }
+    }
+
+    private func firstRunDefaultDir() {
+        if let path = UserDefaults.standard.string(forKey: firstRunDefaultDirKey),
+           !path.isEmpty {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+               isDir.boolValue {
+                logicalCurrentDirectory = path
+                _ = FileManager.default.changeCurrentDirectoryPath(path)
+                return
+            }
+        }
+        _ = installUserTree(replaceExisting: true)
+    }
+    
+    private func restorePersistedAccess() {
+        if let path = UserDefaults.standard.string(forKey: lastCwdDefaultsKey),
+           !path.isEmpty {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
+                logicalCurrentDirectory = path
+                _ = FileManager.default.changeCurrentDirectoryPath(path)
+            }
+        }
+        if let saved = UserDefaults.standard.array(forKey: bookmarksDefaultsKey) as? [Data] {
+            scopedBookmarkData = saved
+            for data in scopedBookmarkData {
+                var isStale = false
+                #if os(macOS)
+                let resolveOpts: URL.BookmarkResolutionOptions = [.withSecurityScope]
+                #else
+                let resolveOpts: URL.BookmarkResolutionOptions = []
+                #endif
+                guard let url = try? URL(
+                    resolvingBookmarkData: data,
+                    options: resolveOpts,
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                ) else { continue }
+                _ = url.startAccessingSecurityScopedResource()
+            }
+        }
+    }
+
+    // MARK: - Load for kernel hook
+
+    /// Kernel load_file_hook. path_len == 0 → bare FLOAD dialog (TZForth).
+    /// Returns 0 and sets outPtr/outLen on success; −1 on failure/cancel.
+    func loadFileForKernel(
+        path: UnsafePointer<CChar>?,
+        pathLen: Int,
+        outPtr: UnsafeMutablePointer<UnsafePointer<CChar>?>?,
+        outLen: UnsafeMutablePointer<Int>?
+    ) -> Int32 {
+        lastLoadError = nil
+
+        // Bare FLOAD / INCLUDE → open panel
+        if path == nil || pathLen == 0 {
+            return loadViaOpenPanel(outPtr: outPtr, outLen: outLen)
+        }
+
+        let name = String(cString: path!)
+        guard let url = resolveLoadPath(name) else {
+            let err = lastLoadError ?? "can't open: \(name) (resolve failed)"
+            lastLoadError = err
+            msg(err + "\n")
+            if libraryURL == nil {
+                msg("  hint: Library missing from app bundle — check Copy Bundle Resources\n")
+            } else if fromLibraryArmed == false {
+                msg("  Working folder: \(logicalCurrentDirectory)\n")
+                msg("  Library: \(libraryURL?.path ?? "—")\n")
+                msg("  try: FROMLIB FLOAD \(normalizeSourceSpec(name))\n")
+                msg("  or:  CHDIR then FLOAD, or bare FLOAD (dialog)\n")
+            }
+            return -1
+        }
+
+        return pinFileContents(url: url, displayName: name, outPtr: outPtr, outLen: outLen)
+    }
+
+    private func loadViaOpenPanel(
+        outPtr: UnsafeMutablePointer<UnsafePointer<CChar>?>?,
+        outLen: UnsafeMutablePointer<Int>?
+    ) -> Int32 {
+        #if !os(macOS)
+        msg("? bare FLOAD: use INCLUDE with a path on iOS (file dialog not yet available)\n")
+        preserveSessionCwdAfterFileOp = false
+        return -1
+        #else
+        // Capture start dir / preserve flag on the kernel thread; create the
+        // panel only on main (AppKit main-thread rule).
+        let startDir: URL
+        if fromLibraryArmed, let lib = libraryURL {
+            clearFromLibrary()
+            startDir = lib
+            preserveSessionCwdAfterFileOp = true
+        } else if let override = fileDialogStartDirectoryOverride {
+            startDir = URL(fileURLWithPath: override, isDirectory: true)
+            fileDialogStartDirectoryOverride = nil
+        } else {
+            clearFromLibrary()
+            startDir = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+        }
+
+        guard let url = pickWithOpenPanelOnMain(configure: { panel in
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [
+                UTType(filenameExtension: "fth") ?? .plainText,
+                UTType(filenameExtension: "fs") ?? .plainText,
+                UTType(filenameExtension: "4th") ?? .plainText,
+                .plainText
+            ]
+            panel.prompt = "Load"
+            panel.message = "FLOAD / INCLUDE — choose a Forth source file"
+            panel.directoryURL = startDir
+        }) else {
+            msg("(FLOAD cancelled)\n")
+            preserveSessionCwdAfterFileOp = false
+            return -1
+        }
+
+        // TZForth bare pick: permanently chdir to parent unless FROMLIB preserve flag.
+        // Nested relatives still use beginLoadCwd inside pinFileContents either way
+        // (FROMLIB bare: temp cwd for the load only; restore when SOURCE ends).
+        if !preserveSessionCwdAfterFileOp {
+            let parent = url.deletingLastPathComponent()
+            logicalCurrentDirectory = parent.path
+            _ = FileManager.default.changeCurrentDirectoryPath(parent.path)
+            rememberScopedURL(parent)
+            rememberScopedURL(url)
+            UserDefaults.standard.set(parent.path, forKey: lastCwdDefaultsKey)
+            msg("Current directory: \(logicalCurrentDirectory)\n")
+        } else {
+            // FROMLIB bare FLOAD: do not permanently change session CHDIR, but nested
+            // FLOAD must still resolve next to the picked file (pinFileContents chdirs).
+            rememberScopedURL(url)
+        }
+        preserveSessionCwdAfterFileOp = false
+
+        return pinFileContents(url: url, displayName: url.lastPathComponent, outPtr: outPtr, outLen: outLen)
+        #endif
+    }
+
+    private func pinFileContents(
+        url: URL,
+        displayName: String,
+        outPtr: UnsafeMutablePointer<UnsafePointer<CChar>?>?,
+        outLen: UnsafeMutablePointer<Int>?
+    ) -> Int32 {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            let err = "can't open: \(displayName)\n  path: \(url.path)\n  \(error.localizedDescription)"
+            lastLoadError = err
+            msg(err + "\n")
+            return -1
+        }
+
+        // Must fit largest Hayes FP test (paranoia.4th ~70 KiB) and room to grow.
+        let maxBytes = 262_144
+        let n = min(data.count, maxBytes)
+        if data.count > maxBytes {
+            msg("(warning: \(displayName) truncated to \(maxBytes) bytes)\n")
+        }
+        let p = UnsafeMutablePointer<CChar>.allocate(capacity: n + 1)
+        if n > 0 {
+            data.copyBytes(to: UnsafeMutableRawPointer(p).assumingMemoryBound(to: UInt8.self), count: n)
+        }
+        p[n] = 0
+        includeAllocs.append(p)
+
+        // Nested FLOAD/INCLUDE resolve relative to this file's folder for the duration
+        // of its SOURCE (restored when the kernel finishes the include — endLoadCwdIfNeeded).
+        beginLoadCwd(forFileURL: url)
+
+        // REQUIRED registry key must match resolveRegistryKey (absolute path).
+        // Using ndxStylePath (e.g. bare "foo.fth" or "Library/…") made a second
+        // REQUIRED of "/tmp/foo.fth" miss the registry and reload the file.
+        // VIEW stamps this same key; absolute paths open fine (status shows a tail).
+        lastLoadRegistryKey = url.standardizedFileURL.path
+        outPtr?.pointee = UnsafePointer(p)
+        outLen?.pointee = n
+        return 0
+    }
+
+    func releaseIncludeBuffers() {
+        for p in includeAllocs {
+            p.deallocate()
+        }
+        includeAllocs.removeAll()
+    }
+
+    // MARK: - EDIT (TZForth-style: open in system editor, update cwd)
+
+    /// Kernel EDIT hook. path_len == 0 → open panel. Named: resolve (FROMLIB ok), open, chdir.
+    /// FROMLIB EDIT does not permanently leave session cwd at Library (same as TZForth).
+    func editForKernel(path: UnsafePointer<CChar>?, pathLen: Int) {
+        lastLoadError = nil
+        if path == nil || pathLen == 0 {
+            presentEditPicker()
+            return
+        }
+
+        var bytes = [UInt8](repeating: 0, count: pathLen)
+        for i in 0..<pathLen { bytes[i] = UInt8(bitPattern: path![i]) }
+        let raw = String(bytes: bytes, encoding: .utf8) ?? ""
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            presentEditPicker()
+            return
+        }
+
+        // FROMLIB named EDIT: open under Library but restore session cwd afterward.
+        let preserveCwd = fromLibraryArmed
+        let savedLogical = logicalCurrentDirectory
+        let savedProcess = FileManager.default.currentDirectoryPath
+
+        guard var url = resolveLoadPath(name) else {
+            let err = lastLoadError ?? "can't edit: \(name) (resolve failed)"
+            lastLoadError = err
+            msg(err + "\n")
+            if preserveCwd {
+                restoreSessionDirectory(logical: savedLogical, process: savedProcess)
+            }
+            return
+        }
+
+        // Auto .fth fallback (like FLOAD/EDIT in TZForth) when leaf has no extension.
+        let leaf = url.lastPathComponent
+        if !leaf.contains(".") {
+            let alt = url.deletingLastPathComponent().appendingPathComponent(leaf + ".fth")
+            if !FileManager.default.fileExists(atPath: url.path),
+               FileManager.default.fileExists(atPath: alt.path) {
+                url = alt
+            }
+        }
+
+        if !FileManager.default.fileExists(atPath: url.path) {
+            msg("can't edit: \(url.path) (not found)\n")
+            if preserveCwd {
+                restoreSessionDirectory(logical: savedLogical, process: savedProcess)
+                endAllFromLibraryLoads()
+            }
+            return
+        }
+
+        openInSystemEditor(url, line: 0)
+
+        if preserveCwd || preserveSessionCwdAfterFileOp {
+            preserveSessionCwdAfterFileOp = false
+            restoreSessionDirectory(logical: savedLogical, process: savedProcess)
+            endAllFromLibraryLoads()
+        } else {
+            // Session cwd → file's folder (named EDIT without FROMLIB).
+            let parent = url.deletingLastPathComponent()
+            applyChdir(parent)
+        }
+    }
+
+    /// DEBUG pause: scroll/open 64Edit to VIEW path:line without console spam.
+    /// Writes pending-goto every pause; launches 64Edit only when the path changes
+    /// **and** no sock client is connected (sock `debugLocation` already switches tabs).
+    /// Returns the resolved absolute file URL (for sock `debugLocation`), or nil.
+    @discardableResult
+    func revealForDebug(path: String, line: Int) -> URL? {
+        let name = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, line > 0 else { return nil }
+
+        let url: URL
+        if name.hasPrefix("/"), FileManager.default.fileExists(atPath: name) {
+            url = URL(fileURLWithPath: name)
+        } else if let resolved = resolveLoadPath(name) {
+            url = resolved
+        } else {
+            return nil
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+
+        let standardized = url.standardizedFileURL
+        let pathChanged = lastDebugRevealPath != standardized.path
+        lastDebugRevealPath = standardized.path
+
+        #if os(macOS)
+        let sockLive = ForthEditorServer.shared.hasConnectedClients
+        // Sock-connected 64Edit already gets `debugLocation` from host_debug_paint.
+        // Skip pending-goto + `open -a` so we do not double-open or reactivate
+        // the window on every pause / path change (visible flash).
+        // Cold path (no sock yet): pending-goto + launch when the path changes.
+        // Abort/DBG-OFF paint after disarm + clearDebugReveal must not reopen 64Edit.
+        if sockLive {
+            return standardized
+        }
+        writePendingGoto(path: standardized.path, line: line, mode: "view")
+        if pathChanged, KernelBridge.shared.isAnyDebugArmed {
+            activateSixtyFourEdit(opening: standardized)
+        }
+        #else
+        writePendingGoto(path: standardized.path, line: line, mode: "view")
+        #endif
+        return standardized
+    }
+
+    /// Clear DEBUG open-path cache when the stepper disarms.
+    func clearDebugReveal() {
+        lastDebugRevealPath = nil
+    }
+
+    /// Kernel EDIT-AT / VIEW: open path at 1-based line in 64Edit (no cwd change).
+    func editAtForKernel(path: UnsafePointer<CChar>?, pathLen: Int, line: Int) {
+        lastLoadError = nil
+        guard let path, pathLen > 0 else {
+            msg("? EDIT-AT needs a path\n")
+            return
+        }
+        var bytes = [UInt8](repeating: 0, count: pathLen)
+        for i in 0..<pathLen { bytes[i] = UInt8(bitPattern: path[i]) }
+        let raw = String(bytes: bytes, encoding: .utf8) ?? ""
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            msg("? EDIT-AT needs a path\n")
+            return
+        }
+
+        let url: URL
+        if name.hasPrefix("/"), FileManager.default.fileExists(atPath: name) {
+            url = URL(fileURLWithPath: name)
+        } else if let resolved = resolveLoadPath(name) {
+            url = resolved
+        } else {
+            let err = lastLoadError ?? "can't edit: \(name) (resolve failed)"
+            lastLoadError = err
+            msg(err + "\n")
+            return
+        }
+
+        if !FileManager.default.fileExists(atPath: url.path) {
+            msg("can't edit: \(url.path) (not found)\n")
+            return
+        }
+        openInSystemEditor(url, line: max(0, line))
+        editAtOpenCount &+= 1
+    }
+
+    /// Bare EDIT: file open panel. FROMLIB arms start at Library without permanent CHDIR.
+    func presentEditPicker() {
+        #if !os(macOS)
+        msg("? bare EDIT: use EDIT with a path on iOS (file dialog not yet available)\n")
+        return
+        #else
+        let preserveCwd: Bool
+        let savedLogical = logicalCurrentDirectory
+        let savedProcess = FileManager.default.currentDirectoryPath
+        let startDir: URL
+        let panelMessage: String
+
+        if fromLibraryArmed, let lib = libraryURL {
+            clearFromLibrary()
+            startDir = lib
+            preserveCwd = true
+            preserveSessionCwdAfterFileOp = true
+            panelMessage = "Select a library source file to open in the system default editor."
+        } else if let override = fileDialogStartDirectoryOverride {
+            startDir = URL(fileURLWithPath: override, isDirectory: true)
+            fileDialogStartDirectoryOverride = nil
+            preserveCwd = preserveSessionCwdAfterFileOp
+            panelMessage = preserveCwd
+                ? "Select a library source file to open in the system default editor."
+                : "Select a file to open in the system default editor. The current directory will change to the file's folder."
+        } else {
+            clearFromLibrary()
+            startDir = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
+            preserveCwd = false
+            panelMessage = "Select a file to open in the system default editor. The current directory will change to the file's folder."
+        }
+
+        guard let url = pickWithOpenPanelOnMain(configure: { panel in
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [
+                UTType(filenameExtension: "fth") ?? .plainText,
+                UTType(filenameExtension: "fs") ?? .plainText,
+                UTType(filenameExtension: "4th") ?? .plainText,
+                .plainText,
+                .text
+            ]
+            panel.prompt = "Edit"
+            panel.message = panelMessage
+            panel.directoryURL = startDir
+        }) else {
+            msg("(EDIT cancelled)\n")
+            if preserveCwd {
+                restoreSessionDirectory(logical: savedLogical, process: savedProcess)
+            }
+            preserveSessionCwdAfterFileOp = false
+            return
+        }
+
+        rememberScopedURL(url)
+        openInSystemEditor(url, line: 0)
+
+        if preserveCwd {
+            restoreSessionDirectory(logical: savedLogical, process: savedProcess)
+            preserveSessionCwdAfterFileOp = false
+        } else {
+            applyChdir(url.deletingLastPathComponent())
+        }
+        #endif
+    }
+
+    /// Application Support JSON read by 64Edit to scroll after open (cold or warm).
+    private static var pendingGotoURL: URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = root.appendingPathComponent("64Forth", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("pending-goto.json")
+    }
+
+    /// `mode` is `"view"` (VIEW / EDIT-AT) or `"edit"` (EDIT). Line 0 skips scroll.
+    private func writePendingGoto(path: String, line: Int, mode: String) {
+        var payload: [String: Any] = [
+            "path": path,
+            "mode": mode,
+            "created": Date().timeIntervalSince1970
+        ]
+        if line > 0 {
+            payload["line"] = line
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) else { return }
+        try? data.write(to: Self.pendingGotoURL, options: .atomic)
+        var info: [AnyHashable: Any] = ["path": path, "mode": mode]
+        if line > 0 { info["line"] = line }
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name("com.Win32Forth.64Edit.goto"),
+            object: nil,
+            userInfo: info,
+            deliverImmediately: true
+        )
+    }
+
+    /// Open `url` in 64Edit. Uses `locateSixtyFourEditApp()` (Release: sibling
+    /// or `/Applications`; Debug: DerivedData first). Falls back to the default
+    /// system opener only if 64Edit cannot be found or launched.
+    /// Writes `pending-goto.json`: VIEW (`line` > 0) opens read-only view mode;
+    /// EDIT opens edit mode (and can clear a prior VIEW lock on the same file).
+    ///
+    /// When a sock client is connected, pending-goto + DistributedNotification is
+    /// enough — `open -a App file` (or even bare activate) reactivates the window
+    /// and flashes. Cold launch still passes the file path to Launch Services.
+    private func openInSystemEditor(_ url: URL, line: Int) {
+        #if os(macOS)
+        let viewMode = line > 0
+        writePendingGoto(path: url.path, line: line, mode: viewMode ? "view" : "edit")
+        if locateSixtyFourEditApp() != nil {
+            if ForthEditorServer.shared.hasConnectedClients {
+                // Editor already live on edit.sock; notification delivers the goto.
+                if viewMode {
+                    msg("VIEW (64Edit): \(url.path):\(line)\n")
+                } else {
+                    msg("EDIT (64Edit): \(url.path)\n")
+                }
+                return
+            }
+            // Running but not sock-connected yet: activate without re-opening the
+            // file path (pending-goto handles the buffer). Cold launch passes file.
+            let passFile = !isSixtyFourEditRunning()
+            let status = activateSixtyFourEdit(opening: passFile ? url : nil)
+            if status == 0 {
+                if viewMode {
+                    msg("VIEW (64Edit): \(url.path):\(line)\n")
+                } else {
+                    msg("EDIT (64Edit): \(url.path)\n")
+                }
+            } else if status >= 0 {
+                msg("? EDIT 64Edit open failed (status \(status)): \(url.path)\n")
+            } else {
+                msg("? EDIT 64Edit launch failed: \(url.path)\n")
+            }
+            return
+        }
+        msg("? 64Edit.app not found (build Debug or install in /Applications); using system opener\n")
+        let ok = NSWorkspace.shared.open(url)
+        if ok {
+            msg("EDIT: \(url.path)\n")
+        } else {
+            msg("? EDIT could not open: \(url.path)\n")
+        }
+        #else
+        msg("? EDIT open in system editor is not available on iOS: \(url.path)\n")
+        #endif
+    }
+
+    #if os(macOS)
+    /// True if a 64Edit process is already running (any build / path).
+    private func isSixtyFourEditRunning() -> Bool {
+        NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == "com.Win32Forth.SixtyFourEdit"
+        }
+    }
+
+    /// Activate or launch 64Edit. Pass `opening` only for a cold launch so
+    /// Launch Services opens that file; when nil, pending-goto / sock deliver
+    /// the path without an `open -a App file` reactivation flash.
+    /// Returns `open` termination status, or -1 on Process failure.
+    @discardableResult
+    private func activateSixtyFourEdit(opening file: URL?) -> Int32 {
+        guard let app = locateSixtyFourEditApp() else { return -1 }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        if let file {
+            task.arguments = ["-a", app.path, file.path]
+        } else {
+            task.arguments = ["-a", app.path]
+        }
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus
+        } catch {
+            return -1
+        }
+    }
+    #endif
+
+    #if os(macOS)
+    /// Locate companion `64Edit.app` for `EDIT` / `VIEW` / DEBUG open.
+    ///
+    /// Flavor match: Debug Forth opens Debug 64Edit; Release Forth opens
+    /// sibling or `/Applications` (never a Debug DerivedData build).
+    /// **Debug:** sibling (same Products folder), then newest DerivedData Debug.
+    /// **Release:** sibling, then `/Applications/64Edit.app`.
+    ///
+    /// Socket IPC (`edit.sock`) does not depend on this path — only `open -a`.
+    private func locateSixtyFourEditApp() -> URL? {
+        let fm = FileManager.default
+
+        func existsApp(_ url: URL) -> URL? {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+                return nil
+            }
+            return url
+        }
+
+        // Side-by-side install: Desktop or Applications folder containing both apps.
+        let sibling = Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("64Edit.app", isDirectory: true)
+        let applications = URL(fileURLWithPath: "/Applications/64Edit.app", isDirectory: true)
+
+        func derivedDataCandidate(config: String) -> URL? {
+            let home = fm.homeDirectoryForCurrentUser
+            let dd = home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)
+            var candidates: [(url: URL, date: Date)] = []
+            if let dirs = try? fm.contentsOfDirectory(
+                at: dd,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                for dir in dirs where dir.lastPathComponent.hasPrefix("64Edit-") {
+                    let app = dir
+                        .appendingPathComponent("Build/Products/\(config)/64Edit.app", isDirectory: true)
+                    guard let url = existsApp(app) else { continue }
+                    let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                    candidates.append((url, vals?.contentModificationDate ?? .distantPast))
+                }
+            }
+            return candidates.sorted(by: { $0.date > $1.date }).first?.url
+        }
+
+        #if DEBUG
+        if let s = existsApp(sibling) { return s }
+        if let dd = derivedDataCandidate(config: "Debug") { return dd }
+        #else
+        if let s = existsApp(sibling) { return s }
+        if let a = existsApp(applications) { return a }
+        #endif
+        return nil
+    }
+    #endif
+
+    private func restoreSessionDirectory(logical: String, process: String) {
+        logicalCurrentDirectory = logical
+        _ = FileManager.default.changeCurrentDirectoryPath(process)
+    }
+
+    // MARK: - Finder
+
+    /// Open a folder (or select a file) in Finder (macOS). On iOS, print the path.
+    /// `activateFileViewerSelecting` is flaky for directories inside the .app
+    /// package (Library/AutoLoad/Docs under Contents/Resources); `open` is reliable.
+    func revealInFinder(_ url: URL?) {
+        guard let url else {
+            msg("? folder not available in this build (missing from app bundle)\n")
+            return
+        }
+        let path = url.standardizedFileURL.path
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir) else {
+            msg("? missing: \(path)\n")
+            return
+        }
+        #if os(macOS)
+        let fileURL = URL(fileURLWithPath: path, isDirectory: isDir.boolValue)
+        if isDir.boolValue {
+            if !NSWorkspace.shared.open(fileURL) {
+                // Fallback: select the folder in its parent
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            }
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        }
+        #else
+        msg("folder: \(path)\n")
+        #endif
+    }
+
+    /// Programmatic CHDIR (Tools menu / host).
+    @discardableResult
+    func setCurrentDirectory(_ path: String) -> Bool {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+            msg("can't chdir: \(path)\n")
+            return false
+        }
+        applyChdir(url)
+        return true
+    }
+}
+
+#if os(macOS)
+import AppKit
+
+extension FileHost {
+    func confirmRestoreShippedFiles() {
+        DispatchQueue.main.async {
+            self.confirmRestoreShippedFilesOnMain()
+        }
+    }
+
+    private func confirmRestoreShippedFilesOnMain() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical          // caution icon
+        alert.messageText = "Restore shipped 64Forth files?"
+        alert.informativeText =
+            "This replaces Library, AutoLoad, and Docs in Documents/64Forth. " +
+            "Any changes you made in that folder will be lost unless you rename it first."
+        alert.addButton(withTitle: "Rename 64Forth")      // .alertFirstButtonReturn
+        alert.addButton(withTitle: "Replace 64Forth")     // .alertSecondButtonReturn
+        alert.addButton(withTitle: "Cancel")              // .alertThirdButtonReturn
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            if renameUserTreeForBackup() {
+                _ = installUserTree(replaceExisting: true)
+                msg("\n64Forth files restored\n")
+            }
+        case .alertSecondButtonReturn:
+            if confirmReplaceUserTree() {
+                _ = installUserTree(replaceExisting: true)
+                msg("\n64Forth files restored\n")
+            }
+        default:
+            break
+        }
+    }
+
+    private func confirmReplaceUserTree() -> Bool {
+        guard userTreeURL != nil else { return true }
+        let sure = NSAlert()
+        sure.alertStyle = .critical
+        sure.messageText = "Are you sure?"
+        sure.informativeText =
+            "Documents/64Forth will be overwritten. Your edits in that folder will be deleted."
+        sure.addButton(withTitle: "Yes")
+        sure.addButton(withTitle: "Cancel")
+        return sure.runModal() == .alertFirstButtonReturn
+    }
+
+    /// 64Forth → 64Forth.User, then .User1 … .User9. False if all names taken.
+    @discardableResult
+    func renameUserTreeForBackup() -> Bool {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+        let src = docs.appendingPathComponent("64Forth", isDirectory: true)
+        guard fm.fileExists(atPath: src.path) else { return true }
+
+        var suffixes = ["User"]
+        suffixes.append(contentsOf: (1...9).map { "User\($0)" })
+
+        for suffix in suffixes {
+            let dest = docs.appendingPathComponent("64Forth.\(suffix)", isDirectory: true)
+            guard !fm.fileExists(atPath: dest.path) else { continue }
+            do {
+                try fm.moveItem(at: src, to: dest)
+                msg("\nRenamed Documents/64Forth to Documents/64Forth.\(suffix)\n")
+                return true
+            } catch {
+                msg("renameUserTree: \(error.localizedDescription)\n")
+                return false
+            }
+        }
+
+        let full = NSAlert()
+        full.alertStyle = .warning
+        full.messageText = "Cannot rename Documents/64Forth"
+        full.informativeText =
+            "Documents already has 64Forth.User through 64Forth.User9. " +
+            "Remove or rename one of those folders, then try again."
+        full.addButton(withTitle: "OK")
+        full.runModal()
+        return false
+    }
+}
+#endif

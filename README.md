@@ -4,7 +4,7 @@
 
 **EditForth** is a greenfield macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-Current marketing version: **0.1.0** / build **1**.
+Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
 ## Not eForth
 
@@ -12,14 +12,22 @@ Current marketing version: **0.1.0** / build **1**.
 
 ## Layout
 
-Two sibling app folders in one repo (same idea as separate 64Edit / 64Forth trees, but colocated here):
+Sibling app folders in one repo:
 
-| Folder | Role |
-|--------|------|
-| `Editor/` | Editor app sources (copied from 64Edit **1.5.4**; symbols still say 64Edit until renamed) |
-| `Forth/` | Future Forth runtime app (separate process; empty placeholder for now) |
+| Folder / project | Role |
+|------------------|------|
+| `Editor/` + `EditForth.xcodeproj` | Editor app (from 64Edit). Product display name **EditForth**; sources still 64Edit / SixtyFourEdit*. |
+| `Forth/` + `Forth.xcodeproj` | Forth runtime (from 64Forth). Target / app still **64Forth** (`64Forth.app`, same bundle id and App Support paths). |
 
-One Xcode project (`EditForth.xcodeproj`) builds the editor target today. A second target for `Forth/` comes later.
+```text
+EditForth/
+  EditForth.xcodeproj   # editor
+  Forth.xcodeproj       # Forth runtime (scheme 64Forth)
+  Editor/
+  Forth/                # App, Host, Kernel, Resources, …
+  README.md
+  DESIGN.md
+```
 
 ## Direction
 
@@ -30,16 +38,20 @@ One Xcode project (`EditForth.xcodeproj`) builds the editor target today. A seco
 
 ## Status
 
-Editor target builds from the 64Edit source copy under `Editor/`. It still talks to **64Forth** over `edit.sock` until the EditForth `Forth/` app exists. Display names and types still say 64Edit in places — rename pass comes next.
+Both trees build. The editor still connects over `~/Library/Application Support/64Forth/edit.sock` to a **64Forth** process (the one from `Forth.xcodeproj` or the standalone 64Forth app — same paths).
 
 ## Build
 
-Open `EditForth.xcodeproj` in Xcode and run the **EditForth** scheme (Debug).
-
 ```text
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
-  xcodebuild -project EditForth.xcodeproj -scheme EditForth \
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+
+# Editor
+xcodebuild -project EditForth.xcodeproj -scheme EditForth \
   -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
+
+# Forth runtime (internal name 64Forth)
+xcodebuild -project Forth.xcodeproj -scheme 64Forth \
+  -configuration Debug -derivedDataPath DerivedData/Forth-debug build
 ```
 
 ## License
