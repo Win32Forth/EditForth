@@ -68,6 +68,9 @@ struct DockedConsoleView: NSViewRepresentable {
             self.forth = forth
         }
 
+        /// UTF-16 length of engine-owned (non-editable) prefix.
+        var protectedLength: Int { protectedUTF16 }
+
         func attach(textView: DockedConsoleTextView, scrollView: NSScrollView) {
             self.textView = textView
             self.scrollView = scrollView
@@ -118,7 +121,29 @@ struct DockedConsoleView: NSViewRepresentable {
             guard let tv = textView else { return }
             isProgrammatic = true
             let atEnd = tv.selectedRange().location >= (tv.string as NSString).length
-            tv.replaceCharacters(in: NSRange(location: (tv.string as NSString).length, length: 0), with: s)
+            // Apply BS (0x08) against protected text — DEBUG block cursor erase.
+            var i = s.startIndex
+            while i < s.endIndex {
+                let ch = s[i]
+                i = s.index(after: i)
+                if ch == "\u{8}" {
+                    let full = tv.string as NSString
+                    if full.length > 0 {
+                        let delAt = full.length - 1
+                        tv.replaceCharacters(in: NSRange(location: delAt, length: 1), with: "")
+                        if protectedUTF16 > delAt {
+                            protectedUTF16 = (tv.string as NSString).length
+                        }
+                    }
+                } else {
+                    let ns = String(ch)
+                    tv.replaceCharacters(
+                        in: NSRange(location: (tv.string as NSString).length, length: 0),
+                        with: ns
+                    )
+                    protectedUTF16 = (tv.string as NSString).length
+                }
+            }
             protectedUTF16 = (tv.string as NSString).length
             if atEnd {
                 tv.setSelectedRange(NSRange(location: protectedUTF16, length: 0))
@@ -224,9 +249,15 @@ final class DockedConsoleTextView: NSTextView {
     }
 
     override func paste(_ sender: Any?) {
-        // Paste only into the editable tail.
-        let prot = coordinator.map { _ in 0 } // clamp in shouldChange
+        // Paste only into the editable tail (never into protected engine output).
+        if let coord = coordinator {
+            let prot = coord.protectedLength
+            let end = (string as NSString).length
+            let sel = selectedRange()
+            if sel.location < prot {
+                setSelectedRange(NSRange(location: end, length: 0))
+            }
+        }
         super.paste(sender)
-        _ = prot
     }
 }
