@@ -257,6 +257,9 @@ final class ForthEditorServer {
         case .dock(let x, let y, let width, let height):
             let rect = CGRect(x: x, y: y, width: width, height: height)
             DispatchQueue.main.async {
+                DockController.shared.setDragOutHandler { [weak self] in
+                    self?.broadcast(.dockState(docked: false))
+                }
                 DockController.shared.applyDock(rect: rect)
                 self.broadcast(.dockState(docked: true))
             }

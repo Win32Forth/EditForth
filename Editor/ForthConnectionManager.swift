@@ -612,6 +612,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             breakpointEntries = entries
         case .dockState(let docked):
             isForthDocked = docked
+            if !docked {
+                // Forth drag-out or Undock from Forth side — show Dock control again.
+                preferDocked = false
+                lastDockFrame = .null
+            }
         }
     }
 

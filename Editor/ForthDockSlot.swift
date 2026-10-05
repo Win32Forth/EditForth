@@ -103,7 +103,15 @@ struct ForthDockSlot: NSViewRepresentable {
             observe(window: window)
             // Layout may still be zero during the first SwiftUI pass — skip until real.
             guard view.bounds.width >= 40, view.bounds.height >= 40 else { return }
-            let rect = window.convertToScreen(view.convert(view.bounds, to: nil))
+            let slot = window.convertToScreen(view.convert(view.bounds, to: nil))
+            // Never ask Forth to extend past the editor’s visible content (fixes overhang).
+            let content = window.convertToScreen(window.contentLayoutRect)
+            var rect = slot.intersection(content)
+            // Bottom inset: titled Forth chrome + avoid hanging past the editor edge (~5/8").
+            let bottomInset: CGFloat = 20
+            if rect.height > bottomInset + 40 {
+                rect.size.height -= bottomInset
+            }
             guard rect.width >= 40, rect.height >= 40 else { return }
             if !lastReported.isNull, framesMatch(rect, lastReported) { return }
             lastReported = rect
