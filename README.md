@@ -32,19 +32,19 @@ Two **separate processes**; one project window in Xcode.
 
 ## Direction
 
-- Editor workspace with a **Ping** panel that stays in the editor.
-- The Forth REPL lives **inside** the editor under Ping (embedded console).
-- **64Forth** runs as a headless **companion** (`--companion`): kernel + `edit.sock`, no console window.
-- Later: detach as its own window, still lifecycle-tied (quit either side shuts both down).
+- Editor workspace with a status strip and **Start Forth**.
+- The Forth REPL lives **inside** the editor when docked (embedded console).
+- **64Forth** runs as a headless **companion** (`--companion`): kernel + `edit.sock`, no console window of its own.
+- **Undock** moves the REPL to a floating window; the red close button **hides** it (**Unhide Forth** brings it back); **Dock** embeds it under the strip again.
 - 64Forth and 64Edit remain the shipped companion pair; EditForth is the place to try the combined direction without interfering with them.
 
 ## Status
 
-Both targets build. Ping launches this project’s **64Forth** as a companion (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
+Both targets build. **Start Forth** launches this project’s **64Forth** as a companion (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
 
 ### Embedded companion console
 
-Ping starts `64Forth --companion` (accessory activation, no Forth window). The editor shows an embedded character console under Ping (`DockedConsoleView`); typing and output go over `edit.sock` (`executeCommand`, `pushKey`, `consoleOutput`). The splitter resizes the console with the editor window. **Undock** moves that console into a floating titled window (same companion); **Dock** or closing the floating window returns it under Ping. Quit EditForth terminates the Ping-launched companion.
+**Start Forth** runs `64Forth --companion` (accessory activation, no Forth app window). While connected, Start Forth is hidden. The editor hosts `DockedConsoleView` when docked; typing and output go over `edit.sock`. **Undock** opens a floating titled window; closing that window with the red traffic light hides the console (companion keeps running) and the strip shows **Unhide Forth**. **Dock** returns the console under the strip. Quit EditForth terminates the launched companion.
 
 ## Build
 
