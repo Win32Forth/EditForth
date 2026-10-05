@@ -78,7 +78,12 @@ struct DockedConsoleView: NSViewRepresentable {
             guard !didBootstrap, let tv = textView else { return }
             didBootstrap = true
             isProgrammatic = true
-            tv.string = "=== EditForth console ===\nPing to start companion 64Forth.\n"
+            if !forth.consoleTranscript.isEmpty {
+                // Remount after Hide/Show (or view recreation): restore session text.
+                tv.string = forth.consoleTranscript
+            } else {
+                tv.string = "=== EditForth console ===\nPing to start companion 64Forth.\n"
+            }
             protectedUTF16 = (tv.string as NSString).length
             isProgrammatic = false
             lastEmitSeq = forth.consoleEmitSeq

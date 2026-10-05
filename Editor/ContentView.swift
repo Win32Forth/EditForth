@@ -63,11 +63,13 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                if showForthChrome {
-                    if forth.isDebugSessionArmed {
-                        DebugToolbar(forth: forth)
-                    }
+                // Keep the console mounted while "hidden" so Show Forth Console can
+                // restore the same NSView / transcript (removing it wiped DockedConsoleView).
+                if forth.isDebugSessionArmed, showForthChrome {
+                    DebugToolbar(forth: forth)
+                }
 
+                if showForthChrome {
                     ConsoleSplitter(
                         onDrag: { translationY in
                             let base = dragStartHeight ?? clampedConsole
@@ -83,16 +85,27 @@ struct ContentView: View {
                             storedConsoleHeight = consoleHeight
                         }
                     )
-
-                    consolePane
-                        .frame(height: clampedConsole)
                 }
+
+                consolePane
+                    .frame(height: showForthChrome ? clampedConsole : 0)
+                    .clipped()
+                    .opacity(showForthChrome ? 1 : 0)
+                    .allowsHitTesting(showForthChrome)
+                    .accessibilityHidden(!showForthChrome)
             }
             .onChange(of: geo.size.height) { _, _ in
                 guard showForthChrome else { return }
                 if consoleHeight > maxConsole {
                     consoleHeight = maxConsole
                     storedConsoleHeight = maxConsole
+                }
+            }
+            .onChange(of: showForthChrome) { _, show in
+                guard show else { return }
+                // Restore a usable height if storage/clamp left the pane collapsed.
+                if consoleHeight < Self.consoleMinHeight {
+                    consoleHeight = max(storedConsoleHeight, Self.consoleMinHeight)
                 }
             }
         }

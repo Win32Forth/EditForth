@@ -52,6 +52,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var isForthDocked = false
     /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
     @Published private(set) var consoleEmitSeq: UInt = 0
+    /// Durable full transcript for remount / Show Forth Console (not cleared by takeConsoleEmit).
+    @Published private(set) var consoleTranscript: String = ""
     /// Enabled BREAK names (pale-red wash).
     var breakpointNames: [String] {
         breakpointEntries.filter(\.enabled).map(\.name)
@@ -589,6 +591,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// Also feeds the raw emit buffer for DockedConsoleView.
     private func appendConsole(_ text: String) {
         guard !text.isEmpty else { return }
+        if text.contains("\u{0c}") {
+            consoleTranscript = text.replacingOccurrences(of: "\u{0c}", with: "")
+        } else {
+            consoleTranscript.append(text)
+        }
         consoleEmitBuffer.append(text)
         consoleEmitSeq &+= 1
         var lines = consoleLines
