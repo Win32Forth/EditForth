@@ -21,7 +21,6 @@ struct ContentView: View {
     @AppStorage("showForthChrome") private var showForthChrome = true
     /// View → Show Line Numbers.
     @AppStorage("showLineNumbers") private var showLineNumbers = true
-    @State private var commandLine = ""
     @State private var gotoObserver: NSObjectProtocol?
     @State private var dragStartHeight: CGFloat?
     @State private var debugKeys = DebugKeyMonitor()
@@ -215,8 +214,9 @@ struct ContentView: View {
 
     // MARK: - Console
 
+    /// Ping strip + dock slot only. No cloned transcript / command line — typing is in 64Forth.
     private var consolePane: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(forth.isConnected ? "Engine connected" : "Engine down")
                 if forth.isDebugSessionArmed {
@@ -225,6 +225,9 @@ struct ContentView: View {
                 }
                 if forth.preferDocked {
                     Text(forth.isForthDocked ? "· docked" : "· docking…")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("· undocked")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -238,67 +241,43 @@ struct ContentView: View {
                     forth.ping()
                 }
             }
+            .font(.system(size: 12, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
             if let err = forth.lastError {
                 Text(err)
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.red)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
             }
-            // Faint rule between status/Ping header and the transcript / dock slot.
+
             Rectangle()
                 .fill(Color(nsColor: .separatorColor).opacity(0.55))
                 .frame(height: 1)
                 .frame(maxWidth: .infinity)
 
-            if forth.preferDocked {
-                ZStack {
+            ZStack {
+                if forth.preferDocked {
                     ForthDockSlot { rect in
                         forth.sendDockFrame(rect)
                     }
-                    if !forth.isConnected {
-                        Text("Ping to dock 64Forth")
-                            .foregroundStyle(.secondary)
-                    }
+                } else {
+                    Color(nsColor: .controlBackgroundColor)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onChange(of: forth.dockFrameRequestSeq) { _, _ in
-                    // Slot reports on next layout; null last frame so identical rects resend.
-                }
-            } else {
-                ConsoleTranscriptView(
-                    lines: forth.consoleLines,
-                    fontSize: 12,
-                    refreshSeq: forth.consoleRefreshSeq,
-                    onCommandClickWord: { word in forth.viewWord(word) }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                HStack {
-                    TextField(
-                        forth.isDebugSessionArmed
-                            ? "Debugger paused — use Step / F5–F8"
-                            : "Forth command",
-                        text: $commandLine
-                    )
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(forth.isDebugSessionArmed)
-                        .onSubmit(sendCommand)
-                    Button("Send", action: sendCommand)
-                        .disabled(
-                            forth.isDebugSessionArmed
-                                || commandLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        )
+                if !forth.isConnected {
+                    Text("Ping to dock 64Forth")
+                        .foregroundStyle(.secondary)
+                } else if !forth.preferDocked {
+                    Text("64Forth undocked — Dock to embed under Ping")
+                        .foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .font(.system(size: 12, design: .monospaced))
-        .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    private func sendCommand() {
-        let cmd = commandLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cmd.isEmpty else { return }
-        forth.send(.executeCommand(command: cmd))
-        commandLine = ""
     }
 
     private func installGotoObserver() {

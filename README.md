@@ -43,7 +43,7 @@ Both targets build. Ping launches this project’s **64Forth** scheme app (sibli
 
 ### Dock (slice 1)
 
-Default: the real **64Forth** console window docks under Ping (borderless, follows the editor slot). The editor hides its cloned transcript/command line while docked. Use **Undock** / **Dock** on the Ping strip. Quit EditForth terminates a 64Forth that Ping launched. Click the Forth surface for KEY focus.
+Default: the real **64Forth** console window docks under Ping (borderless, follows the editor slot). EditForth has **no cloned Forth transcript or command line** — Ping strip + dock slot only; typing is in 64Forth. Use **Undock** / **Dock** on the Ping strip. Quit EditForth terminates a 64Forth that Ping launched. Click the Forth surface for KEY focus.
 
 ## Build
 
