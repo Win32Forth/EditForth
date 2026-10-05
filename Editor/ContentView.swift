@@ -260,7 +260,7 @@ struct ContentView: View {
 
             ZStack {
                 if forth.preferDocked {
-                    ForthDockSlot { rect in
+                    ForthDockSlot(forceSeq: forth.dockFrameRequestSeq) { rect in
                         forth.sendDockFrame(rect)
                     }
                 } else {

@@ -10,6 +10,8 @@ import SwiftUI
 
 /// Placeholder region whose screen rect is the Forth console dock target.
 struct ForthDockSlot: NSViewRepresentable {
+    /// Bumps from the connection manager to force a resend after Ping/connect.
+    var forceSeq: UInt = 0
     var onScreenFrameChange: (CGRect) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -26,6 +28,7 @@ struct ForthDockSlot: NSViewRepresentable {
     func updateNSView(_ nsView: DockSlotView, context: Context) {
         context.coordinator.onScreenFrameChange = onScreenFrameChange
         context.coordinator.attach(to: nsView)
+        context.coordinator.applyForceSeq(forceSeq)
         context.coordinator.reportIfNeeded()
     }
 
@@ -34,6 +37,8 @@ struct ForthDockSlot: NSViewRepresentable {
         private weak var view: DockSlotView?
         private var windowObs: [NSObjectProtocol] = []
         private var lastReported: CGRect = .null
+        private var lastForceSeq: UInt = 0
+        private var observedWindow: NSWindow?
 
         init(onScreenFrameChange: @escaping (CGRect) -> Void) {
             self.onScreenFrameChange = onScreenFrameChange
@@ -45,6 +50,12 @@ struct ForthDockSlot: NSViewRepresentable {
             }
         }
 
+        func applyForceSeq(_ seq: UInt) {
+            guard seq != lastForceSeq else { return }
+            lastForceSeq = seq
+            lastReported = .null
+        }
+
         func attach(to view: DockSlotView) {
             self.view = view
             view.postsFrameChangedNotifications = true
@@ -52,6 +63,7 @@ struct ForthDockSlot: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(o)
             }
             windowObs.removeAll()
+            observedWindow = nil
             windowObs.append(
                 NotificationCenter.default.addObserver(
                     forName: NSView.frameDidChangeNotification,
@@ -64,10 +76,11 @@ struct ForthDockSlot: NSViewRepresentable {
             if let window = view.window {
                 observe(window: window)
             }
-            // If window is nil, DockSlotView.viewDidMoveToWindow will re-attach.
         }
 
         private func observe(window: NSWindow) {
+            if observedWindow === window { return }
+            observedWindow = window
             let names: [Notification.Name] = [
                 NSWindow.didMoveNotification,
                 NSWindow.didResizeNotification,
@@ -87,11 +100,21 @@ struct ForthDockSlot: NSViewRepresentable {
 
         func reportIfNeeded() {
             guard let view, let window = view.window else { return }
+            observe(window: window)
+            // Layout may still be zero during the first SwiftUI pass — skip until real.
+            guard view.bounds.width >= 40, view.bounds.height >= 40 else { return }
             let rect = window.convertToScreen(view.convert(view.bounds, to: nil))
             guard rect.width >= 40, rect.height >= 40 else { return }
-            if rect.integral == lastReported.integral { return }
+            if !lastReported.isNull, framesMatch(rect, lastReported) { return }
             lastReported = rect
             onScreenFrameChange(rect)
+        }
+
+        private func framesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
+            abs(a.origin.x - b.origin.x) < 0.5
+                && abs(a.origin.y - b.origin.y) < 0.5
+                && abs(a.width - b.width) < 0.5
+                && abs(a.height - b.height) < 0.5
         }
     }
 }
@@ -102,7 +125,8 @@ final class DockSlotView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        // Slightly distinct fill so the empty slot is visible before Forth docks.
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     }
 
     required init?(coder: NSCoder) {

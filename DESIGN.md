@@ -33,8 +33,10 @@ Ping in the editor launches the **EditForth** project’s `64Forth.app` (same Pr
 
 - IPC: `EditorRequest.dock(x:y:width:height:)` / `.undock`; `ForthResponse.dockState(docked:)`.
 - Editor: `ForthDockSlot` reports Cocoa screen bounds; Ping strip Dock/Undock; cloned console hidden while `preferDocked`.
-- Forth: `DockController` borderless `setFrame` into the slot (console window only).
+- Forth: `DockController` borderless `setFrame` into the slot (console window only). Clears SwiftUI min/max size while docked so the window can shrink to the slot.
+- Editor: dock-frame settle retries after connect; no cloned transcript.
 - Lifecycle: editor quit terminates Ping-launched companion `64Forth` (path match). Full quit-either-ends-both still open.
+- While docked there is no titlebar (by design); use **Undock** to drag freely.
 
 ## Intended architecture (dock)
 

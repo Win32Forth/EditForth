@@ -240,7 +240,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     func sendDockFrame(_ rect: CGRect) {
         guard preferDocked, isConnected else { return }
         guard rect.width >= 40, rect.height >= 40 else { return }
-        if !lastDockFrame.isNull, rect.integral == lastDockFrame.integral {
+        if !lastDockFrame.isNull, dockFramesMatch(rect, lastDockFrame) {
             return
         }
         lastDockFrame = rect
@@ -250,6 +250,13 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             width: Double(rect.width),
             height: Double(rect.height)
         ))
+    }
+
+    private func dockFramesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.origin.x - b.origin.x) < 0.5
+            && abs(a.origin.y - b.origin.y) < 0.5
+            && abs(a.width - b.width) < 0.5
+            && abs(a.height - b.height) < 0.5
     }
 
     func dockForth() {
@@ -285,8 +292,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
     private func requestDockFrameAfterConnect() {
         guard preferDocked else { return }
-        lastDockFrame = .null
-        dockFrameRequestSeq &+= 1
+        // Several passes: slot layout and Forth window creation settle over ~1s after Ping.
+        let delays: [TimeInterval] = [0, 0.08, 0.2, 0.45, 0.9, 1.5]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.preferDocked, self.isConnected else { return }
+                self.lastDockFrame = .null
+                self.dockFrameRequestSeq &+= 1
+            }
+        }
     }
 
     /// After launching Forth, retry `start()` until sock connects or attempts run out.
