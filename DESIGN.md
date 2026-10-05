@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.0.0** / build **1** for both targets (EditForth + companion 64Forth). Starting major for this product line; ship DMG/GitHub only when asked.
+Marketing **2.0.0** / build **1** for both targets (EditForth + companion 64Forth). First ship: `Releases/EditForth-2.0.0-macOS.dmg` and GitHub tag **v2.0.0** (dual-app: `EditForth.app` + companion `64Forth.app`).
 
 ## Why a new project
 
@@ -25,6 +25,7 @@ EditForth/                 # repo root
   EditForth.xcodeproj      # ONE project, two targets
   Editor/                  # EditForth target (64Edit sources)
   Forth/                   # 64Forth target (64Forth sources)
+  Releases/                # versioned dual-app DMG + Gatekeeper aids
   README.md
   DESIGN.md
 ```

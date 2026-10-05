@@ -34,6 +34,8 @@ final class ForthEditorServer {
     /// Updated on the calling thread (under lock) so `broadcastOkPrompt` sees TYPE before the async sock write.
     private let emitLock = NSLock()
     private var emitEndsWithNewline = true
+    /// Bumped in `noteConsoleEmit` so executeCommand can tell “Forth printed” vs silence.
+    private var emitGeneration: UInt = 0
 
     /// True when at least one 64Edit sock client is connected (edit.sock).
     /// Used to skip `open -a` on DEBUG/EDIT when the editor can take pending-goto
@@ -283,11 +285,28 @@ final class ForthEditorServer {
                 if kernel.isAnyDebugArmed {
                     response = .error(message: "debugger paused — use Step/Continue")
                 } else {
+                    // Editor submitLine always appends \n after the input line before
+                    // results stream. If Forth emits nothing, that client newline already
+                    // ended the line — forcing another \n before ok made blank lines
+                    // between prompts (empty Return / silent words like `1`).
+                    self.emitLock.lock()
+                    let genBefore = self.emitGeneration
+                    self.emitLock.unlock()
                     let st = kernel.evaluate(command)
                     kernel.forceFlushEmitSync()
                     if st == 0 {
+                        self.emitLock.lock()
+                        if self.emitGeneration == genBefore {
+                            self.emitEndsWithNewline = true
+                        }
+                        self.emitLock.unlock()
                         // Mirror GUI ConsoleView: newline before ok when TYPE left mid-line.
                         self.broadcastOkPrompt()
+                        response = .consoleOutput(text: "")
+                    } else if st == 1 {
+                        // BYE — ask EditForth to quit (dirty review); do not
+                        // report status=1 as an error or exit the companion here.
+                        self.broadcast(.requestQuit)
                         response = .consoleOutput(text: "")
                     } else {
                         response = .error(message: "status=\(st)")
@@ -379,9 +398,15 @@ final class ForthEditorServer {
     }
 
     func broadcast(_ response: ForthResponse) {
+        var response = response
         if case .consoleOutput(let text) = response, !text.isEmpty {
+            // NSTextView treats \r and \n as separate line breaks — collapse to \n.
+            let normalized = text
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+            response = .consoleOutput(text: normalized)
             emitLock.lock()
-            noteConsoleEmit(text)
+            noteConsoleEmit(normalized)
             emitLock.unlock()
         }
         queue.async {
@@ -400,18 +425,19 @@ final class ForthEditorServer {
         emitLock.lock()
         let prefix = emitEndsWithNewline ? "" : "\n"
         let text = "\(prefix)ok(\(n))> "
-        noteConsoleEmit(text)
         emitLock.unlock()
+        // `broadcast` notes emit + recentConsole once (avoid double noteConsoleEmit).
         broadcast(.consoleOutput(text: text))
     }
 
     private func noteConsoleEmit(_ text: String) {
+        emitGeneration &+= 1
         if text.contains("\u{0c}") {
             emitEndsWithNewline = true
             return
         }
         if let last = text.last {
-            emitEndsWithNewline = (last == "\n" || last == "\r")
+            emitEndsWithNewline = (last == "\n")
         }
     }
 

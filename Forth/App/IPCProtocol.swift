@@ -64,6 +64,12 @@ enum ForthResponse: Codable, Equatable {
     case breakpoints(entries: [BreakpointEntry])
     /// Forth window docked under the editor Ping slot (or undocked).
     case dockState(docked: Bool)
+    /// Bare EDIT while EditForth is on edit.sock — show the editor Open panel
+    /// (companion must not block on its own NSOpenPanel).
+    case requestEditOpen
+    /// BYE from the companion — EditForth should quit (dirty Save sheets first),
+    /// then terminate the companion. Companion must not exit on its own.
+    case requestQuit
 }
 
 // MARK: - JSON on the wire (NSXPC cannot pass Swift enums)

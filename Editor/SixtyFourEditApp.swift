@@ -34,7 +34,7 @@ struct SixtyFourEditApp: App {
                 .frame(minWidth: 640, minHeight: 420)
                 .onAppear {
                     appDelegate.attach(workspace: workspace, forth: forth)
-                    forth.start()
+                    // ContentView owns connect/launch from Show Forth Console visibility.
                 }
         }
         .defaultSize(width: 960, height: 700)

@@ -1535,11 +1535,19 @@ final class FileHost {
     }
 
     /// Bare EDIT: file open panel. FROMLIB arms start at Library without permanent CHDIR.
+    /// When EditForth (or 64Edit) is on edit.sock, ask that editor to show the panel
+    /// instead of blocking the companion on NSOpenPanel (evaluate would never return).
     func presentEditPicker() {
         #if !os(macOS)
         msg("? bare EDIT: use EDIT with a path on iOS (file dialog not yet available)\n")
         return
         #else
+        if ForthEditorServer.shared.hasConnectedClients {
+            clearFromLibrary()
+            ForthEditorServer.shared.broadcast(.requestEditOpen)
+            msg("EDIT: choose a file in EditForth…\n")
+            return
+        }
         let preserveCwd: Bool
         let savedLogical = logicalCurrentDirectory
         let savedProcess = FileManager.default.currentDirectoryPath

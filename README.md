@@ -4,7 +4,7 @@
 
 **EditForth** is a greenfield macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.0.0** (build **1**) for both `EditForth.app` and companion `64Forth.app` — baseline for a future release (DMG/GitHub tag not cut yet).
+**Version:** **2.0.0** (build **1**) for both `EditForth.app` and companion `64Forth.app`. First public release: DMG at `Releases/EditForth-2.0.0-macOS.dmg` and GitHub tag **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -26,6 +26,7 @@ EditForth/
   EditForth.xcodeproj   # schemes: EditForth, 64Forth
   Editor/
   Forth/                # App, Host, Kernel, Resources, …
+  Releases/             # EditForth-*-macOS.dmg + install aids
   README.md
   DESIGN.md
 ```
@@ -61,6 +62,12 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 xcodebuild -project EditForth.xcodeproj -scheme EditForth \
   -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
 ```
+
+## Install (DMG)
+
+1. Open `Releases/EditForth-2.0.0-macOS.dmg` (or the matching GitHub release asset).
+2. Drag **EditForth.app** and **64Forth.app** into Applications (or keep them side by side in the same folder).
+3. Approve each app once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`). Approving one app does not approve the other.
 
 ## License
 

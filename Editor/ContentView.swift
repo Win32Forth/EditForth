@@ -118,13 +118,22 @@ struct ContentView: View {
                 if consoleHeight < Self.consoleMinHeight {
                     consoleHeight = max(storedConsoleHeight, Self.consoleMinHeight)
                 }
+                // Console became visible — connect or launch companion.
+                forth.ping()
             }
         }
         .background(WindowChrome(url: workspace.selectedTab?.fileURL))
         .onAppear {
             consoleHeight = storedConsoleHeight
             installGotoObserver()
-            forth.start()
+            // Visible console (docked or undocked) → auto-start companion.
+            // Hidden (Show Forth Console off) → connect only if already listening;
+            // do not launch; user can Start Forth after showing the console.
+            if showForthChrome {
+                forth.ping()
+            } else {
+                forth.start()
+            }
             debugKeys.attach(forth: forth, workspace: workspace)
             // File opens / pending-goto / initial untitled are owned by AppDelegate.attach
             // (runs from SixtyFourEditApp) so we do not create a stray Untitled tab first.
@@ -183,6 +192,11 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 FindSupport.searchSource(for: word)
             }
+        }
+        .onChange(of: forth.editOpenRequestSeq) { _, _ in
+            // Bare EDIT from the companion — Open panel lives in EditForth.
+            NSApp.activate(ignoringOtherApps: true)
+            workspace.openPanel()
         }
     }
 

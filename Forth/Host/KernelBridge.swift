@@ -2876,8 +2876,15 @@ final class KernelBridge {
 
         if status == 1 {
             #if os(macOS)
-            DispatchQueue.main.async {
-                NSApplication.shared.terminate(nil)
+            // Companion / edit.sock: EditForth owns quit so dirty tabs get
+            // Save / Don’t Save / Cancel, then terminateLaunchedCompanion.
+            // Standalone GUI BYE still terminates this process.
+            let deferQuit = CompanionChannel.isRequested
+                || ForthEditorServer.shared.hasConnectedClients
+            if !deferQuit {
+                DispatchQueue.main.async {
+                    NSApplication.shared.terminate(nil)
+                }
             }
             #endif
         }

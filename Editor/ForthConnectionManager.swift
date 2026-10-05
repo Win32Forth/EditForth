@@ -42,6 +42,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var viewMissSeq: UInt = 0
     /// Token from the last `viewResult(opened: false)` (empty when none).
     @Published private(set) var viewMissWord: String = ""
+    /// Bumps when companion bare EDIT asks EditForth to show its Open panel.
+    @Published private(set) var editOpenRequestSeq: UInt = 0
     /// Bumps on successful VIEW so the console transcript can refresh even when
     /// `consoleLines` are unchanged (editor open/layout left the clip view blank).
     @Published private(set) var consoleRefreshSeq: UInt = 0
@@ -80,6 +82,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var viewMissSeqCounter: UInt = 0
     /// Cancels an in-flight Start Forth launch reconnect when pressed again.
     private var launchConnectGeneration: UInt = 0
+    /// True between launch and first successful sock connect (blocks re-entrant ping chatter).
+    private var companionLaunchInFlight = false
     /// Raw companion emit stream for DockedConsoleView (not line-split).
     private var consoleEmitBuffer = ""
     /// Bundle URL of 64Forth launched via Start Forth this session (lifecycle terminate).
@@ -135,11 +139,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     /// Keep floating window in sync after connect / preference changes.
+    /// While a companion launch is in flight, keep the undocked window up so the
+    /// EditForth banner and "Starting…" are visible before edit.sock connects.
     private func syncUndockedWindow() {
-        if preferDocked || consoleHidden || !isConnected {
+        if preferDocked || consoleHidden {
             ForthConsoleWindowController.shared.closeQuietly()
-        } else {
+        } else if isConnected || companionLaunchInFlight {
             ForthConsoleWindowController.shared.show(forth: self)
+        } else {
+            ForthConsoleWindowController.shared.closeQuietly()
         }
     }
 
@@ -160,6 +168,19 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleEmitSeq &+= 1
         consoleRefreshSeq &+= 1
     }
+
+    /// First paint of the empty console — keep banner in durable transcript too.
+    func seedConsoleBannerIfEmpty(_ banner: String = EditForthConsoleBanner.text) {
+        guard consoleTranscript.isEmpty, !banner.isEmpty else { return }
+        consoleTranscript = banner
+    }
+
+    /// Drop buffered emit that is already reflected in `consoleTranscript` (remount).
+    func discardPendingConsoleEmit(syncing lastSeq: inout UInt) {
+        consoleEmitBuffer = ""
+        lastSeq = consoleEmitSeq
+    }
+
     func start() {
         guard fd < 0 else { return }
 
@@ -199,6 +220,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
         fd = cfd
         isConnected = true
+        companionLaunchInFlight = false
         isForthDocked = preferDocked
         lastError = nil
         syncUndockedWindow()
@@ -353,32 +375,49 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         for (i, delay) in delays.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.launchConnectGeneration == gen else { return }
-                if self.isConnected { return }
-                if self.fd >= 0 { self.stop() }
+                if self.isConnected {
+                    self.companionLaunchInFlight = false
+                    return
+                }
+                // Tear down a half-open sock without closing the undocked console window
+                // (remount would race Autoload emit and drop the EditForth banner).
+                if self.fd >= 0 { self.disconnectSock(closeUndockedWindow: false) }
                 self.start()
                 if self.isConnected {
                     self.lastError = nil
+                    self.companionLaunchInFlight = false
                     return
                 }
                 if i == delays.count - 1 {
+                    self.companionLaunchInFlight = false
                     self.lastError = self.lastError ?? "64Forth launched but edit.sock not ready"
                     self.appendConsole("Start Forth: launched 64Forth, still not connected\n")
+                    self.syncUndockedWindow()
                 }
             }
         }
     }
 
-    func stop() {
+    /// Drop the edit.sock client without terminating the companion process.
+    private func disconnectSock(closeUndockedWindow: Bool) {
         readSource?.cancel()
         readSource = nil
         fd = -1
         isConnected = false
-        consoleHidden = false
-        isForthDocked = preferDocked
         isDebugSessionArmed = false
         debugLocation = nil
         breakpointEntries = []
-        ForthConsoleWindowController.shared.closeQuietly()
+        if closeUndockedWindow {
+            ForthConsoleWindowController.shared.closeQuietly()
+        }
+    }
+
+    func stop() {
+        companionLaunchInFlight = false
+        launchConnectGeneration &+= 1
+        disconnectSock(closeUndockedWindow: true)
+        consoleHidden = false
+        isForthDocked = preferDocked
     }
 
     func stepOver() { send(.stepOver) }
@@ -500,14 +539,23 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// (Debug→sibling / EditForth DerivedData; Release→sibling or `/Applications`)
     /// and retries connect.
     func ping() {
+        // Banner before any "Starting…" so undocked (window mounts later) still
+        // restores `=== EditForth … ===` from consoleTranscript.
+        seedConsoleBannerIfEmpty()
+
         if fd >= 0, !isConnected {
-            stop()
+            disconnectSock(closeUndockedWindow: false)
         }
         if fd < 0 {
             start()
         }
         if isConnected {
+            companionLaunchInFlight = false
             lastError = nil
+            return
+        }
+        // SwiftUI may call onAppear/onChange twice — one launch, one "Starting…".
+        if companionLaunchInFlight {
             return
         }
 
@@ -522,12 +570,17 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             return
         }
 
-        appendConsole("Starting 64Forth…\n")
+        companionLaunchInFlight = true
         lastError = nil
         consoleHidden = false
+        appendConsole("Starting EditForth…\n")        // Undocked: show the floating console immediately so the banner is visible
+        // while Autoload runs (edit.sock is not up yet).
+        syncUndockedWindow()
         guard launchSixtyFourForth() else {
+            companionLaunchInFlight = false
             lastError = "failed to launch 64Forth"
             appendConsole("Start Forth: failed to launch 64Forth\n")
+            syncUndockedWindow()
             return
         }
         scheduleLaunchConnectRetries()
@@ -660,6 +713,14 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         case .dockState:
             // Legacy window-dock ack — editor owns dock/undock via preferDocked.
             isForthDocked = preferDocked
+        case .requestEditOpen:
+            editOpenRequestSeq &+= 1
+        case .requestQuit:
+            // BYE from companion: same path as Cmd-Q (dirty Save sheets, then
+            // terminateLaunchedCompanion via AppDelegate).
+            lastError = nil
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.terminate(nil)
         }
     }
 

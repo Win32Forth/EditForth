@@ -85,11 +85,14 @@ struct DockedConsoleView: NSViewRepresentable {
                 // Remount after Hide/Show (or view recreation): restore session text.
                 tv.string = forth.consoleTranscript
             } else {
-                tv.string = "=== EditForth console ===\nPing to start companion 64Forth.\n"
+                forth.seedConsoleBannerIfEmpty()
+                tv.string = EditForthConsoleBanner.text
             }
             protectedUTF16 = (tv.string as NSString).length
             isProgrammatic = false
-            lastEmitSeq = forth.consoleEmitSeq
+            // Transcript is authoritative; drop buffered chunks already merged into it
+            // so remount/undock does not reprint "Starting EditForth…" / Autoload lines.
+            forth.discardPendingConsoleEmit(syncing: &lastEmitSeq)
         }
 
         func setConnected(_ connected: Bool, debugArmed: Bool) {
