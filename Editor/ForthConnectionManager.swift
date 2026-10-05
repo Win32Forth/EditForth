@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import AppKit
 
 final class ForthConnectionManager: NSObject, ObservableObject {
     static var socketURL: URL {
@@ -46,6 +47,14 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleRefreshSeq: UInt = 0
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
+    /// User preference: keep the real 64Forth window under Ping (persisted).
+    @Published var preferDocked: Bool {
+        didSet { UserDefaults.standard.set(preferDocked, forKey: Self.preferDockedKey) }
+    }
+    /// Forth ack’d dock mode (borderless window in the slot).
+    @Published private(set) var isForthDocked = false
+    /// Bumps when a dock frame should be (re)sent after connect.
+    @Published private(set) var dockFrameRequestSeq: UInt = 0
     /// Enabled BREAK names (pale-red wash).
     var breakpointNames: [String] {
         breakpointEntries.filter(\.enabled).map(\.name)
@@ -55,6 +64,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         breakpointEntries.map(\.name)
     }
 
+    private static let preferDockedKey = "forthDocked"
     private var fd: Int32 = -1
     private var readSource: DispatchSourceRead?
     private let ioQueue = DispatchQueue(label: "com.Win32Forth.SixtyFourForth.edit-client")
@@ -63,7 +73,18 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var viewMissSeqCounter: UInt = 0
     /// Cancels an in-flight Ping launch reconnect when Ping is pressed again.
     private var launchConnectGeneration: UInt = 0
+    private var lastDockFrame: CGRect = .null
+    /// Bundle URL of 64Forth launched via Ping this session (lifecycle terminate).
+    private var launchedForthURL: URL?
 
+    override init() {
+        if UserDefaults.standard.object(forKey: Self.preferDockedKey) == nil {
+            preferDocked = true
+        } else {
+            preferDocked = UserDefaults.standard.bool(forKey: Self.preferDockedKey)
+        }
+        super.init()
+    }
     func start() {
         guard fd < 0 else { return }
 
@@ -104,6 +125,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         fd = cfd
         isConnected = true
         lastError = nil
+        requestDockFrameAfterConnect()
 
         let src = DispatchSource.makeReadSource(fileDescriptor: cfd, queue: ioQueue)
         src.setEventHandler { [weak self] in
@@ -204,10 +226,67 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         do {
             try task.run()
             task.waitUntilExit()
-            return task.terminationStatus == 0
+            let ok = task.terminationStatus == 0
+            if ok {
+                launchedForthURL = app
+            }
+            return ok
         } catch {
             return false
         }
+    }
+
+    /// Publish the dock slot’s Cocoa screen rect to a connected Forth.
+    func sendDockFrame(_ rect: CGRect) {
+        guard preferDocked, isConnected else { return }
+        guard rect.width >= 40, rect.height >= 40 else { return }
+        if !lastDockFrame.isNull, rect.integral == lastDockFrame.integral {
+            return
+        }
+        lastDockFrame = rect
+        send(.dock(
+            x: Double(rect.origin.x),
+            y: Double(rect.origin.y),
+            width: Double(rect.width),
+            height: Double(rect.height)
+        ))
+    }
+
+    func dockForth() {
+        preferDocked = true
+        lastDockFrame = .null
+        dockFrameRequestSeq &+= 1
+        if isConnected, !lastDockFrame.isNull {
+            // Slot will report again via dockFrameRequestSeq.
+        }
+    }
+
+    func undockForth() {
+        preferDocked = false
+        isForthDocked = false
+        lastDockFrame = .null
+        if isConnected {
+            send(.undock)
+        }
+    }
+
+    /// Quit the 64Forth we launched via Ping (EditForth lifecycle tie).
+    func terminateLaunchedCompanion() {
+        guard let launched = launchedForthURL else { return }
+        let matches = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == "com.win32forth.SixtyFourForth"
+                && $0.bundleURL?.standardizedFileURL == launched.standardizedFileURL
+        }
+        for app in matches {
+            app.terminate()
+        }
+        launchedForthURL = nil
+    }
+
+    private func requestDockFrameAfterConnect() {
+        guard preferDocked else { return }
+        lastDockFrame = .null
+        dockFrameRequestSeq &+= 1
     }
 
     /// After launching Forth, retry `start()` until sock connects or attempts run out.
@@ -238,6 +317,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         readSource = nil
         fd = -1
         isConnected = false
+        isForthDocked = false
         isDebugSessionArmed = false
         debugLocation = nil
         breakpointEntries = []
@@ -423,6 +503,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         if n <= 0 {
             DispatchQueue.main.async {
                 self.isConnected = false
+                self.isForthDocked = false
                 self.isDebugSessionArmed = false
                 self.debugLocation = nil
                 self.breakpointEntries = []
@@ -515,6 +596,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             }
         case .breakpoints(let entries):
             breakpointEntries = entries
+        case .dockState(let docked):
+            isForthDocked = docked
         }
     }
 

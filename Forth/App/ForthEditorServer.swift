@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 final class ForthEditorServer {
     static let shared = ForthEditorServer()
@@ -251,6 +252,19 @@ final class ForthEditorServer {
                 let entries = kernel.breakEntries()
                 broadcast(.breakpoints(entries: entries))
                 writeResponse(.breakpoints(entries: entries), to: fd)
+            }
+            return
+        case .dock(let x, let y, let width, let height):
+            let rect = CGRect(x: x, y: y, width: width, height: height)
+            DispatchQueue.main.async {
+                DockController.shared.applyDock(rect: rect)
+                self.broadcast(.dockState(docked: true))
+            }
+            return
+        case .undock:
+            DispatchQueue.main.async {
+                DockController.shared.undock()
+                self.broadcast(.dockState(docked: false))
             }
             return
         case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:

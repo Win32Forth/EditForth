@@ -33,7 +33,7 @@ struct SixtyFourEditApp: App {
                 .environmentObject(forth)
                 .frame(minWidth: 640, minHeight: 420)
                 .onAppear {
-                    appDelegate.attach(workspace: workspace)
+                    appDelegate.attach(workspace: workspace, forth: forth)
                     forth.start()
                 }
         }

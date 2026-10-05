@@ -24,12 +24,23 @@
 		B1000017 /* AgentChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000118 /* AgentChannel.swift */; };
 		B1000018 /* AppOutputHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000119 /* AppOutputHost.swift */; };
 		B1000019 /* FacilityEditorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100011A /* FacilityEditorHost.swift */; };
+		EFEDD0CC0000000100000002 /* DockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000001 /* DockController.swift */; };
 		FA6AA0DF301916D30007C369 /* 64Forth.jpg in Resources */ = {isa = PBXBuildFile; fileRef = FA6AA0DE301916D30007C369 /* 64Forth.jpg */; };
 		FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85D7306D82790035B509 /* IPCProtocol.swift */; };
 		FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85DB306D832B0035B509 /* ForthEngine.swift */; };
 		FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */; };
 		FAE0DA1C30636EA600B77B7C /* xref.fth in Resources */ = {isa = PBXBuildFile; fileRef = FAE0DA1B30636EA600B77B7C /* xref.fth */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		EFED17010000000100000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EFED17010000000100000020 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1000400;
+			remoteInfo = 64Forth;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		B1000100 /* 64Forth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = 64Forth.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -57,6 +68,8 @@
 		B1000118 /* AgentChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChannel.swift; sourceTree = "<group>"; };
 		B1000119 /* AppOutputHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOutputHost.swift; sourceTree = "<group>"; };
 		B100011A /* FacilityEditorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilityEditorHost.swift; sourceTree = "<group>"; };
+		EFED17010000000100000001 /* EditForth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditForth.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFEDD0CC0000000100000001 /* DockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockController.swift; sourceTree = "<group>"; };
 		FA1CDF343048632900D22FCE /* app-output.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = "app-output.fth"; sourceTree = "<group>"; };
 		FA1CDF353048634500D22FCE /* app-points.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = "app-points.fth"; sourceTree = "<group>"; };
 		FA38151E304B00A900EB8DE3 /* boot_words_end.inc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.pascal; path = boot_words_end.inc; sourceTree = "<group>"; };
@@ -70,7 +83,6 @@
 		FAEB4C7F30425B4800F5334E /* kernel2.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = kernel2.fth; sourceTree = "<group>"; };
 		FAEB4C8030425C0000F5334E /* vocemit.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = vocemit.fth; sourceTree = "<group>"; };
 		FAEB4C8130425D0000F5334E /* vocsys.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = vocsys.fth; sourceTree = "<group>"; };
-		EFED17010000000100000001 /* EditForth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditForth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -97,10 +109,8 @@
 /* Begin PBXFrameworksBuildPhase section */
 		B1000200 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		EFED17010000000100000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -137,6 +147,7 @@
 				B1000102 /* ContentView.swift */,
 				B1000103 /* ConsoleView.swift */,
 				B1000110 /* ConsoleTextView.swift */,
+				EFEDD0CC0000000100000001 /* DockController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -222,8 +233,6 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			name = 64Forth;
 			productName = 64Forth;
 			productReference = B1000100 /* 64Forth.app */;
@@ -252,24 +261,6 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXContainerItemProxy section */
-		EFED17010000000100000041 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = EFED17010000000100000020 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = B1000400;
-			remoteInfo = 64Forth;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		EFED17010000000100000040 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = B1000400 /* 64Forth */;
-			targetProxy = EFED17010000000100000041 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin PBXProject section */
 		EFED17010000000100000020 /* Project object */ = {
 			isa = PBXProject;
@@ -278,11 +269,11 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
-					EFED17010000000100000010 = {
-						CreatedOnToolsVersion = 27.0;
-					};
 					B1000400 = {
 						CreatedOnToolsVersion = 14.0;
+					};
+					EFED17010000000100000010 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -309,13 +300,11 @@
 /* Begin PBXResourcesBuildPhase section */
 		B1000402 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				B1000007 /* Assets.xcassets in Resources */,
 				FA6AA0DF301916D30007C369 /* 64Forth.jpg in Resources */,
 				FAE0DA1C30636EA600B77B7C /* xref.fth in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		EFED17010000000100000012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
@@ -328,11 +317,6 @@
 		B1000700 /* Touch forth.s if .incbin sources newer */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Forth/Kernel/kernel1.fth",
 				"$(SRCROOT)/Forth/Kernel/kernel2.fth",
@@ -346,108 +330,186 @@
 				"$(SRCROOT)/Forth/Kernel/colon_words.inc",
 			);
 			name = "Touch forth.s if .incbin sources newer";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nKERN=\"${SRCROOT}/Forth/Kernel\"\nASM=\"${KERN}/forth.s\"\nneed=0\nfor f in kernel1.fth kernel2.fth vocemit.fth vocsys.fth app-output.fth app-points.fth xref.fth boot_words.inc boot_words_end.inc colon_words.inc; do\n  if [ -f \"${KERN}/$f\" ] && [ \"${KERN}/$f\" -nt \"$ASM\" ]; then need=1; break; fi\ndone\nif [ \"$need\" = 1 ]; then\n  touch \"$ASM\"\n  echo \"note: touched forth.s (embedded .fth/.inc newer)\"\nfi\n";
+			shellScript = (
+				"set -e",
+				"KERN=\"${SRCROOT}/Forth/Kernel\"",
+				"ASM=\"${KERN}/forth.s\"",
+				"need=0",
+				"for f in kernel1.fth kernel2.fth vocemit.fth vocsys.fth app-output.fth app-points.fth xref.fth boot_words.inc boot_words_end.inc colon_words.inc; do",
+				"  if [ -f \"${KERN}/$f\" ] && [ \"${KERN}/$f\" -nt \"$ASM\" ]; then need=1; break; fi",
+				"done",
+				"if [ \"$need\" = 1 ]; then",
+				"  touch \"$ASM\"",
+				"  echo \"note: touched forth.s (embedded .fth/.inc newer)\"",
+				"fi",
+				"",
+			);
 		};
 		B1000701 /* Copy AutoLoad */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Forth/Resources/AutoLoad",
 			);
 			name = "Copy AutoLoad";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AutoLoad",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"${SRCROOT}/Forth/Resources/AutoLoad\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AutoLoad\"\n# Copy everything in Resources/AutoLoad → Contents/Resources/AutoLoad/\n# (ENABLE_USER_SCRIPT_SANDBOXING is OFF so the whole folder is readable.)\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nif [ -d \"${SRC}\" ]; then\n  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do\n    [ -e \"$f\" ] || continue\n    base=$(basename \"$f\")\n    case \"$base\" in\n      .DS_Store|*.swp|*~) continue ;;\n    esac\n    if [ -f \"$f\" ]; then\n      cp -f \"$f\" \"${DEST}/\"\n    elif [ -d \"$f\" ]; then\n      cp -R \"$f\" \"${DEST}/\"\n    fi\n  done\nfi\n";
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/AutoLoad\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AutoLoad\"",
+				"# Copy everything in Resources/AutoLoad → Contents/Resources/AutoLoad/",
+				"# (ENABLE_USER_SCRIPT_SANDBOXING is OFF so the whole folder is readable.)",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
 		};
 		B1000702 /* Copy Library */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Forth/Resources/Library",
 			);
 			name = "Copy Library";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Library",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"${SRCROOT}/Forth/Resources/Library\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Library\"\nKERN=\"${SRCROOT}/Forth/Kernel\"\nLIBSRC=\"${SRC}/Sources\"\n\n# 1) Sync Kernel → Resources/Library/Sources (source tree) so repo VIEW/index\n#    and the bundle all match the assembly that is being linked.\nmkdir -p \"${LIBSRC}\"\nif [ -d \"${KERN}\" ]; then\n  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do\n    if [ -f \"${KERN}/$f\" ]; then\n      cp -f \"${KERN}/$f\" \"${LIBSRC}/\"\n    fi\n  done\nfi\n\n# 2) Fresh copy Library → app bundle (includes updated Sources/).\n#    Avoids stale FROMLIB sources from folder-ref caching.\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nif [ -d \"${SRC}\" ]; then\n  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do\n    [ -e \"$f\" ] || continue\n    base=$(basename \"$f\")\n    case \"$base\" in\n      .DS_Store|*.swp|*~) continue ;;\n    esac\n    if [ -f \"$f\" ]; then\n      cp -f \"$f\" \"${DEST}/\"\n    elif [ -d \"$f\" ]; then\n      cp -R \"$f\" \"${DEST}/\"\n    fi\n  done\nfi\n";
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/Library\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Library\"",
+				"KERN=\"${SRCROOT}/Forth/Kernel\"",
+				"LIBSRC=\"${SRC}/Sources\"",
+				"",
+				"# 1) Sync Kernel → Resources/Library/Sources (source tree) so repo VIEW/index",
+				"#    and the bundle all match the assembly that is being linked.",
+				"mkdir -p \"${LIBSRC}\"",
+				"if [ -d \"${KERN}\" ]; then",
+				"  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do",
+				"    if [ -f \"${KERN}/$f\" ]; then",
+				"      cp -f \"${KERN}/$f\" \"${LIBSRC}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+				"# 2) Fresh copy Library → app bundle (includes updated Sources/).",
+				"#    Avoids stale FROMLIB sources from folder-ref caching.",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
 		};
 		B1000703 /* Copy Docs */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Forth/Resources/Docs",
 			);
 			name = "Copy Docs";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Docs",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"${SRCROOT}/Forth/Resources/Docs\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Docs\"\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nif [ -d \"${SRC}\" ]; then\n  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do\n    [ -e \"$f\" ] || continue\n    base=$(basename \"$f\")\n    case \"$base\" in\n      .DS_Store|*.swp|*~) continue ;;\n    esac\n    if [ -f \"$f\" ]; then\n      cp -f \"$f\" \"${DEST}/\"\n    elif [ -d \"$f\" ]; then\n      cp -R \"$f\" \"${DEST}/\"\n    fi\n  done\nfi\n";
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/Docs\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Docs\"",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
 		};
 		B1000704 /* Copy Config */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Forth/Resources/Config",
 			);
 			name = "Copy Config";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Config",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"${SRCROOT}/Forth/Resources/Config\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Config\"\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nif [ -d \"${SRC}\" ]; then\n  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do\n    [ -e \"$f\" ] || continue\n    base=$(basename \"$f\")\n    case \"$base\" in\n      .DS_Store|*.swp|*~) continue ;;\n    esac\n    if [ -f \"$f\" ]; then\n      cp -f \"$f\" \"${DEST}/\"\n    elif [ -d \"$f\" ]; then\n      cp -R \"$f\" \"${DEST}/\"\n    fi\n  done\nfi\n";
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/Config\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Config\"",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B1000401 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				B1000016 /* AppMain.swift in Sources */,
 				B1000017 /* AgentChannel.swift in Sources */,
 				FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */,
+				EFEDD0CC0000000100000002 /* DockController.swift in Sources */,
 				B1000001 /* SixtyFourForthApp.swift in Sources */,
 				B1000015 /* ForthApplication.swift in Sources */,
 				B1000002 /* ContentView.swift in Sources */,
@@ -465,7 +527,6 @@
 				B1000006 /* forth.s in Sources */,
 				FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		EFED17010000000100000011 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -474,8 +535,16 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		EFED17010000000100000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1000400 /* 64Forth */;
+			targetProxy = EFED17010000000100000041 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		B1000602 /* Debug */ = {
+		B1000602 /* Debug configuration for PBXNativeTarget "64Forth" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -510,7 +579,7 @@
 			};
 			name = Debug;
 		};
-		B1000603 /* Release */ = {
+		B1000603 /* Release configuration for PBXNativeTarget "64Forth" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -741,10 +810,9 @@
 		B1000502 /* Build configuration list for PBXNativeTarget "64Forth" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B1000602 /* Debug */,
-				B1000603 /* Release */,
+				B1000602 /* Debug configuration for PBXNativeTarget "64Forth" */,
+				B1000603 /* Release configuration for PBXNativeTarget "64Forth" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		EFED17010000000100000021 /* Build configuration list for PBXProject "EditForth" */ = {

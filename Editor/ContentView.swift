@@ -223,8 +223,17 @@ struct ContentView: View {
                     Text("· debugging")
                         .foregroundStyle(.orange)
                 }
+                if forth.preferDocked {
+                    Text(forth.isForthDocked ? "· docked" : "· docking…")
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
+                if forth.preferDocked {
+                    Button("Undock") { forth.undockForth() }
+                } else {
+                    Button("Dock") { forth.dockForth() }
+                }
                 Button("Ping") {
                     forth.ping()
                 }
@@ -233,33 +242,50 @@ struct ContentView: View {
                 Text(err)
                     .foregroundStyle(.red)
             }
-            // Faint rule between status/Ping header and the transcript.
+            // Faint rule between status/Ping header and the transcript / dock slot.
             Rectangle()
                 .fill(Color(nsColor: .separatorColor).opacity(0.55))
                 .frame(height: 1)
                 .frame(maxWidth: .infinity)
-            ConsoleTranscriptView(
-                lines: forth.consoleLines,
-                fontSize: 12,
-                refreshSeq: forth.consoleRefreshSeq,
-                onCommandClickWord: { word in forth.viewWord(word) }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            HStack {
-                TextField(
-                    forth.isDebugSessionArmed
-                        ? "Debugger paused — use Step / F5–F8"
-                        : "Forth command",
-                    text: $commandLine
+
+            if forth.preferDocked {
+                ZStack {
+                    ForthDockSlot { rect in
+                        forth.sendDockFrame(rect)
+                    }
+                    if !forth.isConnected {
+                        Text("Ping to dock 64Forth")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onChange(of: forth.dockFrameRequestSeq) { _, _ in
+                    // Slot reports on next layout; null last frame so identical rects resend.
+                }
+            } else {
+                ConsoleTranscriptView(
+                    lines: forth.consoleLines,
+                    fontSize: 12,
+                    refreshSeq: forth.consoleRefreshSeq,
+                    onCommandClickWord: { word in forth.viewWord(word) }
                 )
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(forth.isDebugSessionArmed)
-                    .onSubmit(sendCommand)
-                Button("Send", action: sendCommand)
-                    .disabled(
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack {
+                    TextField(
                         forth.isDebugSessionArmed
-                            || commandLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? "Debugger paused — use Step / F5–F8"
+                            : "Forth command",
+                        text: $commandLine
                     )
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(forth.isDebugSessionArmed)
+                        .onSubmit(sendCommand)
+                    Button("Send", action: sendCommand)
+                        .disabled(
+                            forth.isDebugSessionArmed
+                                || commandLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
+                }
             }
         }
         .font(.system(size: 12, design: .monospaced))

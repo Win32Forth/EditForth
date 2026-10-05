@@ -35,6 +35,10 @@ enum EditorRequest: Codable, Equatable {
     case stepOut
     case resume
     case stop
+    /// Align the Forth console window to this screen rect (points, Cocoa bottom-left origin).
+    case dock(x: Double, y: Double, width: Double, height: Double)
+    /// Leave dock mode; restore a normal movable Forth window.
+    case undock
 }
 
 // MARK: - Messages from 64Forth to 64Edit
@@ -55,6 +59,8 @@ enum ForthResponse: Codable, Equatable {
     case viewResult(word: String, opened: Bool)
     /// Current BREAK table (after toggle/remove/enable, or on connect).
     case breakpoints(entries: [BreakpointEntry])
+    /// Forth window docked under the editor Ping slot (or undocked).
+    case dockState(docked: Bool)
 }
 
 // MARK: - JSON on the wire (NSXPC cannot pass Swift enums)

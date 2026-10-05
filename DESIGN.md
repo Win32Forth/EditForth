@@ -29,6 +29,13 @@ Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth
 
 Ping in the editor launches the **EditForth** project’s `64Forth.app` (same Products folder, then `EditForth-*` DerivedData). It does not prefer the standalone Win32Forth/64Forth DerivedData tree.
 
+### Dock slice 1 (shipped in-tree)
+
+- IPC: `EditorRequest.dock(x:y:width:height:)` / `.undock`; `ForthResponse.dockState(docked:)`.
+- Editor: `ForthDockSlot` reports Cocoa screen bounds; Ping strip Dock/Undock; cloned console hidden while `preferDocked`.
+- Forth: `DockController` borderless `setFrame` into the slot (console window only).
+- Lifecycle: editor quit terminates Ping-launched companion `64Forth` (path match). Full quit-either-ends-both still open.
+
 ## Intended architecture (dock)
 
 1. When docked, the editor shows the **real** Forth UI under the Ping panel — not a cloned character console.

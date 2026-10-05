@@ -10,12 +10,16 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var workspace: WorkspaceModel?
+    weak var forth: ForthConnectionManager?
     private var queuedURLs: [URL] = []
     private var isReviewingTermination = false
     private let windowGuard = WorkspaceWindowGuard()
 
-    func attach(workspace: WorkspaceModel) {
+    func attach(workspace: WorkspaceModel, forth: ForthConnectionManager? = nil) {
         self.workspace = workspace
+        if let forth {
+            self.forth = forth
+        }
         windowGuard.workspace = workspace
         windowGuard.appDelegate = self
         let urls = queuedURLs
@@ -57,15 +61,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let workspace else { return .terminateNow }
-        guard workspace.tabs.contains(where: \.isDirty) else { return .terminateNow }
+        guard let workspace else {
+            forth?.terminateLaunchedCompanion()
+            return .terminateNow
+        }
+        guard workspace.tabs.contains(where: \.isDirty) else {
+            forth?.terminateLaunchedCompanion()
+            return .terminateNow
+        }
         if isReviewingTermination { return .terminateLater }
         isReviewingTermination = true
         workspace.reviewDirtyTabsForTermination { [weak self] allow in
             self?.isReviewingTermination = false
+            if allow {
+                self?.forth?.terminateLaunchedCompanion()
+            }
             NSApp.reply(toApplicationShouldTerminate: allow)
         }
         return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        forth?.terminateLaunchedCompanion()
     }
 
     /// Red-close while dirty: keep the window up for sheets, then quit if allowed.

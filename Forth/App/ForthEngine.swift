@@ -62,6 +62,10 @@ final class ForthEngine: NSObject, ForthEngineXPC {
             return .consoleOutput(text: "resume")
         case .stop:
             return .executionFinished(exitCode: 0)
+        case .dock:
+            return .dockState(docked: true)
+        case .undock:
+            return .dockState(docked: false)
         }
 
     }

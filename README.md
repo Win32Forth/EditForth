@@ -41,6 +41,10 @@ Two **separate processes**; one project window in Xcode.
 
 Both targets build. Ping launches this project’s **64Forth** scheme app (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
 
+### Dock (slice 1)
+
+Default: the real **64Forth** console window docks under Ping (borderless, follows the editor slot). The editor hides its cloned transcript/command line while docked. Use **Undock** / **Dock** on the Ping strip. Quit EditForth terminates a 64Forth that Ping launched. Click the Forth surface for KEY focus.
+
 ## Build
 
 In Xcode, the scheme menu (next to the Run button) lists **EditForth** and **64Forth**.  
