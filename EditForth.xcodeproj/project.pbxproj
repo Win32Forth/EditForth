@@ -25,6 +25,7 @@
 		B1000018 /* AppOutputHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000119 /* AppOutputHost.swift */; };
 		B1000019 /* FacilityEditorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100011A /* FacilityEditorHost.swift */; };
 		EFEDD0CC0000000100000002 /* DockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000001 /* DockController.swift */; };
+		EFEDD0CC0000000100000012 /* CompanionChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000011 /* CompanionChannel.swift */; };
 		FA6AA0DF301916D30007C369 /* 64Forth.jpg in Resources */ = {isa = PBXBuildFile; fileRef = FA6AA0DE301916D30007C369 /* 64Forth.jpg */; };
 		FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85D7306D82790035B509 /* IPCProtocol.swift */; };
 		FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85DB306D832B0035B509 /* ForthEngine.swift */; };
@@ -70,6 +71,7 @@
 		B100011A /* FacilityEditorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilityEditorHost.swift; sourceTree = "<group>"; };
 		EFED17010000000100000001 /* EditForth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditForth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EFEDD0CC0000000100000001 /* DockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockController.swift; sourceTree = "<group>"; };
+		EFEDD0CC0000000100000011 /* CompanionChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChannel.swift; sourceTree = "<group>"; };
 		FA1CDF343048632900D22FCE /* app-output.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = "app-output.fth"; sourceTree = "<group>"; };
 		FA1CDF353048634500D22FCE /* app-points.fth */ = {isa = PBXFileReference; lastKnownFileType = text; path = "app-points.fth"; sourceTree = "<group>"; };
 		FA38151E304B00A900EB8DE3 /* boot_words_end.inc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.pascal; path = boot_words_end.inc; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 				B1000103 /* ConsoleView.swift */,
 				B1000110 /* ConsoleTextView.swift */,
 				EFEDD0CC0000000100000001 /* DockController.swift */,
+				EFEDD0CC0000000100000011 /* CompanionChannel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -510,6 +513,7 @@
 				B1000017 /* AgentChannel.swift in Sources */,
 				FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */,
 				EFEDD0CC0000000100000002 /* DockController.swift in Sources */,
+				EFEDD0CC0000000100000012 /* CompanionChannel.swift in Sources */,
 				B1000001 /* SixtyFourForthApp.swift in Sources */,
 				B1000015 /* ForthApplication.swift in Sources */,
 				B1000002 /* ContentView.swift in Sources */,

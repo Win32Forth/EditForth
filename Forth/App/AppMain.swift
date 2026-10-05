@@ -15,6 +15,10 @@ enum AppMain {
         if AgentChannel.isRequested {
             AgentChannel.runAndExit()
         }
+        if CompanionChannel.isRequested {
+            CompanionChannel.run()
+            return
+        }
         // Normal interactive product.
         ForthEditorServer.shared.start()
         SixtyFourForthApp.main()

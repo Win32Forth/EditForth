@@ -29,23 +29,22 @@ Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth
 
 Ping in the editor launches the **EditForth** project’s `64Forth.app` (same Products folder, then `EditForth-*` DerivedData). It does not prefer the standalone Win32Forth/64Forth DerivedData tree.
 
-### Dock slice 1 (shipped in-tree)
+### Companion embed (current)
 
-- IPC: `EditorRequest.dock(x:y:width:height:)` / `.undock`; `ForthResponse.dockState(docked:)`.
-- Editor: `ForthDockSlot` reports Cocoa screen bounds; Ping strip Dock/Undock; cloned console hidden while `preferDocked`.
-- Forth: `DockController` borderless `setFrame` into the slot (console window only). Clears SwiftUI min/max size while docked so the window can shrink to the slot.
-- Editor: dock-frame settle retries after connect; no cloned transcript.
-- Lifecycle: editor quit terminates Ping-launched companion `64Forth` (path match). Full quit-either-ends-both still open.
-- While docked there is no titlebar (by design); use **Undock** to drag freely.
+Window overlay docking (separate NSWindow `setFrame` into a slot) failed UX (float/z-order/overhang). Replaced by:
 
-## Intended architecture (dock)
+- **64Forth `--companion` / `FORTH64_COMPANION=1`**: `CompanionChannel` — kernel + `edit.sock`, `NSApp` activation policy `.accessory`, no WindowGroup.
+- **Editor** `DockedConsoleView` under Ping: protected transcript + editable tail; `executeCommand` / `pushKey` / streamed `consoleOutput`.
+- IPC: `EditorRequest.pushKey`; legacy `dock`/`undock` are no-ops that ack `dockState`.
+- Lifecycle: editor quit terminates Ping-launched companion (Process + bundle-URL match). Full quit-either-ends-both still open.
+- GRAPHICS App Output / facility windows remain out of scope while headless.
 
-1. When docked, the editor shows the **real** Forth UI under the Ping panel — not a cloned character console.
-2. **Ping stays in the editor** whether Forth is docked or floating.
-3. Undock = separate window; **quit either app ends both** (lifecycle-tied).
+## Intended architecture (dock / detach)
+
+1. Default: embedded companion console under Ping (one editor window).
+2. **Ping stays in the editor**.
+3. Later undock = separate Forth window; **quit either app ends both**.
 4. Re-dock always lands **below Ping**.
-
-IPC / embedding details deferred until dock work starts.
 
 ## Commit exclusions
 

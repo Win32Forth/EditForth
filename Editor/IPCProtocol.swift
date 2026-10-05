@@ -36,9 +36,12 @@ enum EditorRequest: Codable, Equatable {
     case resume
     case stop
     /// Align the Forth console window to this screen rect (points, Cocoa bottom-left origin).
+    /// Unused when EditForth embeds the console; kept for protocol compatibility.
     case dock(x: Double, y: Double, width: Double, height: Double)
     /// Leave dock mode; restore a normal movable Forth window.
     case undock
+    /// Push one KEY code while the companion kernel waits (ASCII or tagged).
+    case pushKey(code: Int32)
 }
 
 // MARK: - Messages from 64Forth to 64Edit

@@ -66,6 +66,8 @@ final class ForthEngine: NSObject, ForthEngineXPC {
             return .dockState(docked: true)
         case .undock:
             return .dockState(docked: false)
+        case .pushKey:
+            return .consoleOutput(text: "")
         }
 
     }

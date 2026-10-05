@@ -47,14 +47,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleRefreshSeq: UInt = 0
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
-    /// User preference: keep the real 64Forth window under Ping (persisted).
-    @Published var preferDocked: Bool {
-        didSet { UserDefaults.standard.set(preferDocked, forKey: Self.preferDockedKey) }
-    }
-    /// Forth ack’d dock mode (borderless window in the slot).
+    /// True while the embedded console should treat Forth as present under Ping.
+    /// (Legacy window-dock ack; companion mode sets this on connect.)
     @Published private(set) var isForthDocked = false
-    /// Bumps when a dock frame should be (re)sent after connect.
-    @Published private(set) var dockFrameRequestSeq: UInt = 0
+    /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
+    @Published private(set) var consoleEmitSeq: UInt = 0
     /// Enabled BREAK names (pale-red wash).
     var breakpointNames: [String] {
         breakpointEntries.filter(\.enabled).map(\.name)
@@ -64,7 +61,6 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         breakpointEntries.map(\.name)
     }
 
-    private static let preferDockedKey = "forthDocked"
     private var fd: Int32 = -1
     private var readSource: DispatchSourceRead?
     private let ioQueue = DispatchQueue(label: "com.Win32Forth.SixtyFourForth.edit-client")
@@ -73,17 +69,24 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var viewMissSeqCounter: UInt = 0
     /// Cancels an in-flight Ping launch reconnect when Ping is pressed again.
     private var launchConnectGeneration: UInt = 0
-    private var lastDockFrame: CGRect = .null
+    /// Raw companion emit stream for DockedConsoleView (not line-split).
+    private var consoleEmitBuffer = ""
     /// Bundle URL of 64Forth launched via Ping this session (lifecycle terminate).
     private var launchedForthURL: URL?
+    /// Retained so Process deinit does not SIGTERM the companion.
+    private var companionProcess: Process?
 
     override init() {
-        if UserDefaults.standard.object(forKey: Self.preferDockedKey) == nil {
-            preferDocked = true
-        } else {
-            preferDocked = UserDefaults.standard.bool(forKey: Self.preferDockedKey)
-        }
         super.init()
+    }
+
+    /// Drain companion emit text since `lastSeq`. Updates `lastSeq` to `consoleEmitSeq`.
+    func takeConsoleEmit(since lastSeq: inout UInt) -> String {
+        guard consoleEmitSeq != lastSeq else { return "" }
+        lastSeq = consoleEmitSeq
+        let chunk = consoleEmitBuffer
+        consoleEmitBuffer = ""
+        return chunk
     }
     func start() {
         guard fd < 0 else { return }
@@ -124,8 +127,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
         fd = cfd
         isConnected = true
+        isForthDocked = true
         lastError = nil
-        requestDockFrameAfterConnect()
 
         let src = DispatchSource.makeReadSource(fileDescriptor: cfd, queue: ioQueue)
         src.setEventHandler { [weak self] in
@@ -216,69 +219,46 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         return nil
     }
 
-    /// Launch the flavor-matched 64Forth.app via `/usr/bin/open -a`.
+    /// Launch this project’s 64Forth.app in headless companion mode (`--companion`).
     @discardableResult
     private func launchSixtyFourForth() -> Bool {
         guard let app = locateSixtyFourForthApp() else { return false }
+        let exe = app.appendingPathComponent("Contents/MacOS/64Forth")
+        guard FileManager.default.isExecutableFile(atPath: exe.path) else {
+            // Fallback: Launch Services with arguments.
+            let config = NSWorkspace.OpenConfiguration()
+            config.arguments = ["--companion"]
+            config.activates = false
+            config.environment = ["FORTH64_COMPANION": "1"]
+            NSWorkspace.shared.openApplication(at: app, configuration: config) { _, _ in }
+            launchedForthURL = app
+            return true
+        }
+        // Terminate a prior Ping companion before relaunch.
+        terminateLaunchedCompanion()
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        task.arguments = ["-a", app.path]
+        task.executableURL = exe
+        task.arguments = ["--companion"]
+        var env = ProcessInfo.processInfo.environment
+        env["FORTH64_COMPANION"] = "1"
+        task.environment = env
         do {
             try task.run()
-            task.waitUntilExit()
-            let ok = task.terminationStatus == 0
-            if ok {
-                launchedForthURL = app
-            }
-            return ok
+            companionProcess = task
+            launchedForthURL = app
+            return true
         } catch {
+            companionProcess = nil
             return false
-        }
-    }
-
-    /// Publish the dock slot’s Cocoa screen rect to a connected Forth.
-    func sendDockFrame(_ rect: CGRect) {
-        guard preferDocked, isConnected else { return }
-        guard rect.width >= 40, rect.height >= 40 else { return }
-        if !lastDockFrame.isNull, dockFramesMatch(rect, lastDockFrame) {
-            return
-        }
-        lastDockFrame = rect
-        send(.dock(
-            x: Double(rect.origin.x),
-            y: Double(rect.origin.y),
-            width: Double(rect.width),
-            height: Double(rect.height)
-        ))
-    }
-
-    private func dockFramesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
-        abs(a.origin.x - b.origin.x) < 0.5
-            && abs(a.origin.y - b.origin.y) < 0.5
-            && abs(a.width - b.width) < 0.5
-            && abs(a.height - b.height) < 0.5
-    }
-
-    func dockForth() {
-        preferDocked = true
-        lastDockFrame = .null
-        dockFrameRequestSeq &+= 1
-        if isConnected, !lastDockFrame.isNull {
-            // Slot will report again via dockFrameRequestSeq.
-        }
-    }
-
-    func undockForth() {
-        preferDocked = false
-        isForthDocked = false
-        lastDockFrame = .null
-        if isConnected {
-            send(.undock)
         }
     }
 
     /// Quit the 64Forth we launched via Ping (EditForth lifecycle tie).
     func terminateLaunchedCompanion() {
+        if let proc = companionProcess, proc.isRunning {
+            proc.terminate()
+            companionProcess = nil
+        }
         guard let launched = launchedForthURL else { return }
         let matches = NSWorkspace.shared.runningApplications.filter {
             $0.bundleIdentifier == "com.win32forth.SixtyFourForth"
@@ -288,19 +268,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             app.terminate()
         }
         launchedForthURL = nil
-    }
-
-    private func requestDockFrameAfterConnect() {
-        guard preferDocked else { return }
-        // Several passes: slot layout and Forth window creation settle over ~1s after Ping.
-        let delays: [TimeInterval] = [0, 0.08, 0.2, 0.45, 0.9, 1.5]
-        for delay in delays {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.preferDocked, self.isConnected else { return }
-                self.lastDockFrame = .null
-                self.dockFrameRequestSeq &+= 1
-            }
-        }
+        companionProcess = nil
     }
 
     /// After launching Forth, retry `start()` until sock connects or attempts run out.
@@ -478,11 +446,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             return
         }
 
-        appendConsole("Launching 64Forth…\n")
+        appendConsole("Launching companion 64Forth…\n")
         lastError = nil
         guard launchSixtyFourForth() else {
-            lastError = "failed to launch 64Forth"
-            appendConsole("ping: failed to launch 64Forth\n")
+            lastError = "failed to launch companion 64Forth"
+            appendConsole("ping: failed to launch companion 64Forth\n")
             return
         }
         scheduleLaunchConnectRetries()
@@ -611,19 +579,18 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         case .breakpoints(let entries):
             breakpointEntries = entries
         case .dockState(let docked):
-            isForthDocked = docked
-            if !docked {
-                // Forth drag-out or Undock from Forth side — show Dock control again.
-                preferDocked = false
-                lastDockFrame = .null
-            }
+            // Companion ignores window dock; keep embedded console marked present.
+            isForthDocked = docked || isConnected
         }
     }
 
     /// Stream console text like 64Forth's ConsoleView: mid-line chunks stay on the
     /// current line, and BS (0x08) erases the DEBUG block cursor (U+2588).
+    /// Also feeds the raw emit buffer for DockedConsoleView.
     private func appendConsole(_ text: String) {
         guard !text.isEmpty else { return }
+        consoleEmitBuffer.append(text)
+        consoleEmitSeq &+= 1
         var lines = consoleLines
         if lines.isEmpty {
             lines.append("")

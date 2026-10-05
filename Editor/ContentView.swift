@@ -214,7 +214,7 @@ struct ContentView: View {
 
     // MARK: - Console
 
-    /// Ping strip + dock slot only. No cloned transcript / command line — typing is in 64Forth.
+    /// Ping strip + embedded companion console (no separate Forth window).
     private var consolePane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -223,20 +223,12 @@ struct ContentView: View {
                     Text("· debugging")
                         .foregroundStyle(.orange)
                 }
-                if forth.preferDocked {
-                    Text(forth.isForthDocked ? "· docked" : "· docking…")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("· undocked")
+                if forth.isConnected {
+                    Text("· companion")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
-                if forth.preferDocked {
-                    Button("Undock") { forth.undockForth() }
-                } else {
-                    Button("Dock") { forth.dockForth() }
-                }
                 Button("Ping") {
                     forth.ping()
                 }
@@ -258,23 +250,8 @@ struct ContentView: View {
                 .frame(height: 1)
                 .frame(maxWidth: .infinity)
 
-            ZStack {
-                if forth.preferDocked {
-                    ForthDockSlot(forceSeq: forth.dockFrameRequestSeq) { rect in
-                        forth.sendDockFrame(rect)
-                    }
-                } else {
-                    Color(nsColor: .controlBackgroundColor)
-                }
-                if !forth.isConnected {
-                    Text("Ping to dock 64Forth")
-                        .foregroundStyle(.secondary)
-                } else if !forth.preferDocked {
-                    Text("64Forth undocked — Dock to embed under Ping")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            DockedConsoleView(forth: forth)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))

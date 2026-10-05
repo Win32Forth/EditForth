@@ -254,20 +254,16 @@ final class ForthEditorServer {
                 writeResponse(.breakpoints(entries: entries), to: fd)
             }
             return
-        case .dock(let x, let y, let width, let height):
-            let rect = CGRect(x: x, y: y, width: width, height: height)
-            DispatchQueue.main.async {
-                DockController.shared.setDragOutHandler { [weak self] in
-                    self?.broadcast(.dockState(docked: false))
-                }
-                DockController.shared.applyDock(rect: rect)
-                self.broadcast(.dockState(docked: true))
-            }
+        case .dock:
+            // EditForth embeds the console; ignore legacy window-dock requests.
+            writeResponse(.dockState(docked: true), to: fd)
             return
         case .undock:
-            DispatchQueue.main.async {
-                DockController.shared.undock()
-                self.broadcast(.dockState(docked: false))
+            writeResponse(.dockState(docked: false), to: fd)
+            return
+        case .pushKey(let code):
+            if !kernel.pushKey(code) {
+                // Not waiting for KEY — ignore quietly (typing into idle console).
             }
             return
         case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:
@@ -285,9 +281,13 @@ final class ForthEditorServer {
                 } else {
                     let st = kernel.evaluate(command)
                     kernel.forceFlushEmitSync()
-                    response = st == 0
-                        ? .consoleOutput(text: "ok(\(kernel.dataStackDepth))")
-                        : .error(message: "status=\(st)")
+                    if st == 0 {
+                        // Mirror GUI ConsoleView appendPrompt after evaluate.
+                        self.broadcast(.consoleOutput(text: "ok(\(kernel.dataStackDepth))> "))
+                        response = .consoleOutput(text: "")
+                    } else {
+                        response = .error(message: "status=\(st)")
+                    }
                 }
             case .viewWord(let name):
                 // Soft (VIEW): no ' abort. opened ⇔ EDIT-AT ran (stamp → 64Edit).

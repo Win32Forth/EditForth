@@ -33,17 +33,18 @@ Two **separate processes**; one project window in Xcode.
 ## Direction
 
 - Editor workspace with a **Ping** panel that stays in the editor.
-- A real Forth console/UI can **dock under Ping** and later **detach** as its own window, still lifecycle-tied (quit either side shuts both down).
-- Prefer hosting a real Forth UI over cloning a second REPL inside the editor.
+- The Forth REPL lives **inside** the editor under Ping (embedded console).
+- **64Forth** runs as a headless **companion** (`--companion`): kernel + `edit.sock`, no console window.
+- Later: detach as its own window, still lifecycle-tied (quit either side shuts both down).
 - 64Forth and 64Edit remain the shipped companion pair; EditForth is the place to try the combined direction without interfering with them.
 
 ## Status
 
-Both targets build. Ping launches this project’s **64Forth** scheme app (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
+Both targets build. Ping launches this project’s **64Forth** as a companion (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
 
-### Dock (slice 1)
+### Embedded companion console
 
-Default: the real **64Forth** console window docks under Ping (titled frame, follows the editor slot, stays above the editor while you drag it). EditForth has **no cloned Forth transcript or command line** — Ping strip + dock slot only; typing is in 64Forth. Drag the Forth titlebar away to undock, or use **Undock** / **Dock** on the Ping strip. Quit EditForth terminates a 64Forth that Ping launched.
+Ping starts `64Forth --companion` (accessory activation, no Forth window). The editor shows an embedded character console under Ping (`DockedConsoleView`); typing and output go over `edit.sock` (`executeCommand`, `pushKey`, `consoleOutput`). The splitter resizes the console with the editor window. Quit EditForth terminates the Ping-launched companion.
 
 ## Build
 
