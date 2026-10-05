@@ -14,20 +14,32 @@ Product and repo name: **EditForth**. Bundle id: `com.Win32Forth.EditForth`.
 
 README must keep the **not a derivative of eForth** note (names only resemble each other).
 
-## Intended architecture (not implemented in the scaffold)
+## Repo layout
 
-1. **Separate processes** for editor shell and Forth runtime (not one process with two windows sharing KernelBridge).
-2. **Same packaging story later** (multi-target Xcode project or shared DMG) is allowed; process boundary still holds.
-3. When docked, the editor shows the **real** Forth UI under the Ping panel — not a cloned character console.
-4. **Ping stays in the editor** whether Forth is docked or floating.
-5. Undock = separate window; **quit either app ends both** (lifecycle-tied).
-6. Re-dock always lands **below Ping**.
+Sibling folders (like 64Edit and 64Forth as separate trees, but one git repo):
 
-IPC details (sock vs XPC, how the docked surface is embedded) are deferred until the first real Forth host lands.
+```text
+EditForth/                 # repo root
+  EditForth.xcodeproj      # editor target now; Forth target later
+  Editor/                  # editor app (from 64Edit; rename pass deferred)
+  Forth/                   # Forth runtime app (placeholder)
+  README.md
+  DESIGN.md
+```
 
-## Scaffold contents
+Two **separate processes** when both apps exist. One packaging story later (multi-target project / shared DMG) is fine; the process boundary still holds.
 
-- Single macOS SwiftUI app target `EditForth`.
-- Placeholder layout: editor region, Ping strip, Forth dock stub.
-- Version **0.1.0** / build **1**.
-- No copy of 64Forth kernel or 64Edit sources in this first commit.
+## Intended architecture (dock)
+
+1. When docked, the editor shows the **real** Forth UI under the Ping panel — not a cloned character console.
+2. **Ping stays in the editor** whether Forth is docked or floating.
+3. Undock = separate window; **quit either app ends both** (lifecycle-tied).
+4. Re-dock always lands **below Ping**.
+
+IPC details (sock vs XPC, how the docked surface is embedded) are deferred until the first real Forth host lands under `Forth/`.
+
+## Current state
+
+- `Editor/` is a straight copy of 64Edit **1.5.4** sources (filenames and symbols still 64Edit / SixtyFourEdit*).
+- Product display name and bundle id for the Xcode target remain **EditForth** / `com.Win32Forth.EditForth`.
+- Until `Forth/` has a runtime, the editor still expects a running **64Forth** on `edit.sock`.

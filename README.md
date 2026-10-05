@@ -4,15 +4,24 @@
 
 **EditForth** is a greenfield macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-Current marketing version: **0.1.0** / build **1** (scaffold only).
+Current marketing version: **0.1.0** / build **1**.
 
 ## Not eForth
 
 **EditForth is not a derivative of eForth.** The names are only a little alike. If it *were* a derivative of eForth, it would probably be a pretty nice Forth.
 
-## Direction (scaffold)
+## Layout
 
-Long-term shape (subject to change as we build):
+Two sibling app folders in one repo (same idea as separate 64Edit / 64Forth trees, but colocated here):
+
+| Folder | Role |
+|--------|------|
+| `Editor/` | Editor app sources (copied from 64Edit **1.5.4**; symbols still say 64Edit until renamed) |
+| `Forth/` | Future Forth runtime app (separate process; empty placeholder for now) |
+
+One Xcode project (`EditForth.xcodeproj`) builds the editor target today. A second target for `Forth/` comes later.
+
+## Direction
 
 - Editor workspace with a **Ping** panel that stays in the editor.
 - A real Forth console/UI can **dock under Ping** and later **detach** as its own window, still lifecycle-tied (quit either side shuts both down).
@@ -21,7 +30,7 @@ Long-term shape (subject to change as we build):
 
 ## Status
 
-Empty SwiftUI shell that builds and opens a window with placeholder Editor / Ping / Forth dock regions. No kernel, no IPC, no file tabs yet.
+Editor target builds from the 64Edit source copy under `Editor/`. It still talks to **64Forth** over `edit.sock` until the EditForth `Forth/` app exists. Display names and types still say 64Edit in places — rename pass comes next.
 
 ## Build
 
