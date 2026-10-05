@@ -27,6 +27,8 @@ EditForth/                 # repo root
 
 Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
 
+Ping in the editor launches the **EditForth** project’s `64Forth.app` (same Products folder, then `EditForth-*` DerivedData). It does not prefer the standalone Win32Forth/64Forth DerivedData tree.
+
 ## Intended architecture (dock)
 
 1. When docked, the editor shows the **real** Forth UI under the Ping panel — not a cloned character console.

@@ -39,7 +39,7 @@ Two **separate processes**; one project window in Xcode.
 
 ## Status
 
-Both targets build. The editor still connects over `~/Library/Application Support/64Forth/edit.sock` to a **64Forth** process (scheme `64Forth` here, or the standalone 64Forth app).
+Both targets build. Ping launches this project’s **64Forth** scheme app (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
 
 ## Build
 
