@@ -210,6 +210,10 @@ struct DockedConsoleView: NSViewRepresentable {
             forth.send(.pushKey(code: c))
         }
 
+        func viewWord(_ word: String) {
+            forth.viewWord(word)
+        }
+
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
             if isProgrammatic { return true }
             if affectedCharRange.location < protectedUTF16 {
@@ -238,6 +242,24 @@ struct DockedConsoleView: NSViewRepresentable {
 
 final class DockedConsoleTextView: NSTextView {
     weak var coordinator: DockedConsoleView.Coordinator?
+
+    override func mouseDown(with event: NSEvent) {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command) {
+            let pt = convert(event.locationInWindow, from: nil)
+            let idx = characterIndexForInsertion(at: pt)
+            let ns = string as NSString
+            if let word = EditorNSTextView.forthToken(at: idx, in: ns),
+               word.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
+                let caret = min(max(0, idx), ns.length)
+                setSelectedRange(NSRange(location: caret, length: 0))
+                window?.makeFirstResponder(self)
+                coordinator?.viewWord(word)
+                return
+            }
+        }
+        super.mouseDown(with: event)
+    }
 
     override func keyDown(with event: NSEvent) {
         // Forward printable keys to companion for KEY waits; still insert locally via super.

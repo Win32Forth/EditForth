@@ -26,7 +26,10 @@ enum CompanionChannel {
     static func run() {
         #if os(macOS)
         _ = NSApplication.shared
-        NSApp.setActivationPolicy(.accessory)
+        // .regular so 64Forth appears in the Dock with its own menu bar when
+        // frontmost (File/Tools/Help). EditForth still owns the console UI.
+        NSApp.setActivationPolicy(.regular)
+        CompanionMenus.install()
         #endif
 
         ForthEditorServer.shared.start()
