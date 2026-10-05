@@ -14,13 +14,14 @@
 
 \ Boot loads: debugger helpers, Emitter, Hyper. SZ-EDITOR is out of Autoload
 \ (external 64Edit + XPC). Empty EDITOR vocab keeps Hyper's ALSO EDITOR safe.
+\ Paths are relative to Documents/EditForth (no FROMLIB) — dig into Library/….
 \ FILE-ECHO ON
     \ ITC DEBUG (hub loads Debugger/*; leaves ALSO DEBUGGER on the order)
-    FROMLIB REQUIRE Debugger/debugger.fth
+    REQUIRE Library/Debugger/debugger.fth
     [UNDEFINED] EDITOR [IF] VOCABULARY EDITOR [THEN]
-    FROMLIB REQUIRE Emitter/emitter.fth
+    REQUIRE Library/Emitter/emitter.fth
     \ Load the hyper text code, and finally re-index so everything is up to date
-    FROMLIB REQUIRE HYPER/HYPER.fth
+    REQUIRE Library/HYPER/HYPER.fth
     \ Classic VOCABULARY replaces CONTEXT — ALSO keeps FORTH while setting
     \ HYPER-VOC's MIN-HYPER-NOISE (quiet reindex). Bare HYPER-VOC … FORTH
     \ after Hyper's FORTH-first order left only HYPER-VOC and undefined ON.

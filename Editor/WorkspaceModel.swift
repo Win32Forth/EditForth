@@ -132,6 +132,7 @@ final class WorkspaceModel: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.plainText, .text, .utf8PlainText, .forthSource]
+        panel.directoryURL = ForthMenuSupport.userTreeURL
         panel.prompt = "Open"
         let accessory = OpenPanelNewFileAccessory(panel: panel)
         panel.accessoryView = accessory.view

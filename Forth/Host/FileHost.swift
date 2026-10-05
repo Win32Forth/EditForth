@@ -58,9 +58,10 @@ final class FileHost {
 
     /// Security-scoped bookmark blobs (Phase 5; useful if App Sandbox is enabled later).
     private var scopedBookmarkData: [Data] = []
-    private let bookmarksDefaultsKey = "SixtyFourForth.SecurityScopedBookmarks"
-    private let lastCwdDefaultsKey = "SixtyFourForth.LastLogicalCwd"
-    private let firstRunDefaultDirKey = "SixtyFourForth.UserTreePath"
+    private let bookmarksDefaultsKey = "EditForth.SecurityScopedBookmarks"
+    private let lastCwdDefaultsKey = "EditForth.LastLogicalCwd"
+    /// Documents/EditForth (EditForth project — not Documents/64Forth).
+    private let firstRunDefaultDirKey = "EditForth.UserTreePath"
 
     private init() {
         logicalCurrentDirectory = FileManager.default.currentDirectoryPath
@@ -133,7 +134,7 @@ final class FileHost {
         return Bundle.main.url(forResource: "Library", withExtension: nil)
     }
 
-    /// FROMLIB / EDIT / DIR root — Documents/64Forth/Library after first run.
+    /// Library root — Documents/EditForth/Library after first run.
     var libraryURL: URL? {
         let fm = FileManager.default
         if let user = userLibraryURL,
@@ -161,7 +162,7 @@ final class FileHost {
         let fm = FileManager.default
         var candidates: [URL] = []
 
-        // User tree (Documents/64Forth/AutoLoad) — same names as the bundle
+        // User tree (Documents/EditForth/AutoLoad) — same names as the bundle
         if let dir = userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true) {
             candidates.append(dir.appendingPathComponent("autoload.fth"))
             candidates.append(dir.appendingPathComponent("AutoLoad.fth"))
@@ -1141,10 +1142,10 @@ final class FileHost {
         UserDefaults.standard.set(scopedBookmarkData, forKey: bookmarksDefaultsKey)
     }
 
-    /// Copy shipped Library / AutoLoad / Docs into Documents/64Forth.
+    /// Copy shipped Library / AutoLoad / Docs into Documents/EditForth.
     /// replaceExisting: true = wipe those three folders first (first-run or explicit restore).
     private func userTreeDisplayPath() -> String {
-        "Documents/64Forth"
+        "Documents/EditForth"
     }
 
     @discardableResult
@@ -1152,7 +1153,7 @@ final class FileHost {
         let fm = FileManager.default
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
-        let dest = docs.appendingPathComponent("64Forth", isDirectory: true)
+        let dest = docs.appendingPathComponent("EditForth", isDirectory: true)
         do {
             try fm.createDirectory(at: dest, withIntermediateDirectories: true)
             if let res = Bundle.main.resourceURL {
@@ -1168,11 +1169,16 @@ final class FileHost {
                     }
                 }
             }
+            // Config lives under the user tree for EditForth (not only App Support).
+            let configDest = dest.appendingPathComponent("Config", isDirectory: true)
+            if !fm.fileExists(atPath: configDest.path) {
+                try fm.createDirectory(at: configDest, withIntermediateDirectories: true)
+            }
             UserDefaults.standard.set(dest.path, forKey: firstRunDefaultDirKey)
             logicalCurrentDirectory = dest.path
             _ = fm.changeCurrentDirectoryPath(dest.path)
             if replaceExisting {
-                msg("\n64Forth files restored\n")
+                msg("\nEditForth files restored\n")
             } else {
                 msg("\nUpdated User folder: \(userTreeDisplayPath())\n")
             }
@@ -1829,24 +1835,24 @@ extension FileHost {
     private func confirmRestoreShippedFilesOnMain() {
         let alert = NSAlert()
         alert.alertStyle = .critical          // caution icon
-        alert.messageText = "Restore shipped 64Forth files?"
+        alert.messageText = "Restore shipped EditForth files?"
         alert.informativeText =
-            "This replaces Library, AutoLoad, and Docs in Documents/64Forth. " +
+            "This replaces Library, AutoLoad, and Docs in Documents/EditForth. " +
             "Any changes you made in that folder will be lost unless you rename it first."
-        alert.addButton(withTitle: "Rename 64Forth")      // .alertFirstButtonReturn
-        alert.addButton(withTitle: "Replace 64Forth")     // .alertSecondButtonReturn
+        alert.addButton(withTitle: "Rename EditForth")    // .alertFirstButtonReturn
+        alert.addButton(withTitle: "Replace EditForth")   // .alertSecondButtonReturn
         alert.addButton(withTitle: "Cancel")              // .alertThirdButtonReturn
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             if renameUserTreeForBackup() {
                 _ = installUserTree(replaceExisting: true)
-                msg("\n64Forth files restored\n")
+                msg("\nEditForth files restored\n")
             }
         case .alertSecondButtonReturn:
             if confirmReplaceUserTree() {
                 _ = installUserTree(replaceExisting: true)
-                msg("\n64Forth files restored\n")
+                msg("\nEditForth files restored\n")
             }
         default:
             break
@@ -1859,30 +1865,30 @@ extension FileHost {
         sure.alertStyle = .critical
         sure.messageText = "Are you sure?"
         sure.informativeText =
-            "Documents/64Forth will be overwritten. Your edits in that folder will be deleted."
+            "Documents/EditForth will be overwritten. Your edits in that folder will be deleted."
         sure.addButton(withTitle: "Yes")
         sure.addButton(withTitle: "Cancel")
         return sure.runModal() == .alertFirstButtonReturn
     }
 
-    /// 64Forth → 64Forth.User, then .User1 … .User9. False if all names taken.
+    /// EditForth → EditForth.User, then .User1 … .User9. False if all names taken.
     @discardableResult
     func renameUserTreeForBackup() -> Bool {
         let fm = FileManager.default
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
-        let src = docs.appendingPathComponent("64Forth", isDirectory: true)
+        let src = docs.appendingPathComponent("EditForth", isDirectory: true)
         guard fm.fileExists(atPath: src.path) else { return true }
 
         var suffixes = ["User"]
         suffixes.append(contentsOf: (1...9).map { "User\($0)" })
 
         for suffix in suffixes {
-            let dest = docs.appendingPathComponent("64Forth.\(suffix)", isDirectory: true)
+            let dest = docs.appendingPathComponent("EditForth.\(suffix)", isDirectory: true)
             guard !fm.fileExists(atPath: dest.path) else { continue }
             do {
                 try fm.moveItem(at: src, to: dest)
-                msg("\nRenamed Documents/64Forth to Documents/64Forth.\(suffix)\n")
+                msg("\nRenamed Documents/EditForth to Documents/EditForth.\(suffix)\n")
                 return true
             } catch {
                 msg("renameUserTree: \(error.localizedDescription)\n")
@@ -1892,9 +1898,9 @@ extension FileHost {
 
         let full = NSAlert()
         full.alertStyle = .warning
-        full.messageText = "Cannot rename Documents/64Forth"
+        full.messageText = "Cannot rename Documents/EditForth"
         full.informativeText =
-            "Documents already has 64Forth.User through 64Forth.User9. " +
+            "Documents already has EditForth.User through EditForth.User9. " +
             "Remove or rename one of those folders, then try again."
         full.addButton(withTitle: "OK")
         full.runModal()

@@ -11,15 +11,14 @@ import UniformTypeIdentifiers
 
 enum ForthMenuSupport {
 
-    /// Documents/64Forth tree (same layout FileHost uses for user data).
+    /// Documents/EditForth tree (FileHost user data for this project).
     static var userTreeURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("64Forth", isDirectory: true)
+            .appendingPathComponent("EditForth", isDirectory: true)
     }
 
     static var configURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return appSupport.appendingPathComponent("64Forth/Config", isDirectory: true)
+        userTreeURL.appendingPathComponent("Config", isDirectory: true)
     }
 
     static func revealInFinder(_ url: URL?) {
@@ -47,9 +46,9 @@ enum ForthMenuSupport {
             UTType(filenameExtension: "4th") ?? .plainText,
             .plainText
         ]
-        panel.directoryURL = userTreeURL.appendingPathComponent("Library", isDirectory: true)
+        panel.directoryURL = userTreeURL
         panel.prompt = "Load"
-        panel.message = "FLOAD / INCLUDE a Forth source file"
+        panel.message = "FLOAD / INCLUDE a Forth source file (Documents/EditForth)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let path = url.path
         let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")

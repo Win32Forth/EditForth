@@ -2924,13 +2924,15 @@ final class KernelBridge {
         guard isKernelLive else { return false }
         guard let autoURL = FileHost.shared.autoLoadFileURL else { return false }
 
-        let autoDir = autoURL.deletingLastPathComponent()
         let host = FileHost.shared
-        let savedLogical = host.logicalCurrentDirectory
+        // EditForth: boot with cwd at Documents/EditForth so Autoload can
+        // REQUIRE Library/… without FROMLIB (AutoLoad is a subfolder of the tree).
+        let bootRoot = host.userTreeURL
+            ?? autoURL.deletingLastPathComponent().deletingLastPathComponent()
         let savedProcess = FileManager.default.currentDirectoryPath
 
-        host.logicalCurrentDirectory = autoDir.path
-        _ = FileManager.default.changeCurrentDirectoryPath(autoDir.path)
+        host.logicalCurrentDirectory = bootRoot.path
+        _ = FileManager.default.changeCurrentDirectoryPath(bootRoot.path)
 
         // Embed kernel_eval never prints "ok"; ConsoleView prints ok(n)> once after boot.
         // SEE/HELP are defined in the kernel bootstrap (forth_init_str).
@@ -2938,8 +2940,12 @@ final class KernelBridge {
         // Optional: sample apps may define MAIN; product autoload does not.
         _ = evaluate("[DEFINED] MAIN [IF] MAIN [THEN]")
 
-        host.logicalCurrentDirectory = savedLogical
-        _ = FileManager.default.changeCurrentDirectoryPath(savedProcess)
+        // Session default remains the user tree root (CHDIR changes it later).
+        host.logicalCurrentDirectory = bootRoot.path
+        _ = FileManager.default.changeCurrentDirectoryPath(bootRoot.path)
+        if bootRoot.path != savedProcess {
+            // leave process cwd at boot root
+        }
         host.endAllLoadCwds()
         host.endAllFromLibraryLoads()
         host.clearFromLibrary()

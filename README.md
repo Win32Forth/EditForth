@@ -40,7 +40,7 @@ Two **separate processes**; one project window in Xcode.
 
 ## Status
 
-Both targets build. **Start Forth** launches this project’s **64Forth** as a companion (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`.
+Both targets build. **Start Forth** launches this project’s **64Forth** as a companion (sibling Products / `EditForth-*` DerivedData in Debug; Release uses sibling or `/Applications`). Connection is still `~/Library/Application Support/64Forth/edit.sock`. User files and the default Forth working directory are **`~/Documents/EditForth`** (Library / AutoLoad / Docs / Config under that tree). FLOAD/CHDIR start there; dig into subfolders as needed (no FROMLIB for normal loads).
 
 ### Embedded companion console
 

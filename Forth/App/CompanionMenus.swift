@@ -187,7 +187,8 @@ enum CompanionMenus {
             UTType(filenameExtension: "4th") ?? .plainText,
             .plainText
         ]
-        panel.directoryURL = URL(fileURLWithPath: host.logicalCurrentDirectory, isDirectory: true)
+        panel.directoryURL = host.userTreeURL
+            ?? URL(fileURLWithPath: host.logicalCurrentDirectory, isDirectory: true)
         panel.prompt = "Load"
         panel.message = "FLOAD / INCLUDE a Forth source file"
         NSApp.activate(ignoringOtherApps: true)
