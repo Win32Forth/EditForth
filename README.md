@@ -43,13 +43,15 @@ Both targets build. Ping launches this project’s **64Forth** scheme app (sibli
 
 ## Build
 
+In Xcode, the scheme menu (next to the Run button) lists **EditForth** and **64Forth**.  
+Choose **EditForth** and Build/Run — that also builds the **64Forth** target into the same Products folder (so Ping can launch the sibling app).  
+Choose **64Forth** only when you want to run the Forth app alone.
+
 ```text
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 
+# Builds both 64Forth.app and EditForth.app
 xcodebuild -project EditForth.xcodeproj -scheme EditForth \
-  -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
-
-xcodebuild -project EditForth.xcodeproj -scheme 64Forth \
   -configuration Debug -derivedDataPath DerivedData/EditForth-debug build
 ```
 

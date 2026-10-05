@@ -374,11 +374,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         }
 
         #if DEBUG
-        let missingHint = "64Forth Debug not found — build scheme 64Forth in EditForth"
+        let missingHint = "64Forth Debug not found — Product → Build (EditForth scheme builds 64Forth too)"
         #else
         let missingHint = "64Forth not found — install beside EditForth or in /Applications"
         #endif
-
         guard locateSixtyFourForthApp() != nil else {
             lastError = missingHint
             appendConsole("ping: \(missingHint)\n")
