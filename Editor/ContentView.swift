@@ -63,13 +63,13 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                // Keep the console mounted while "hidden" so Show Forth Console can
-                // restore the same NSView / transcript (removing it wiped DockedConsoleView).
+                // Keep the docked console mounted while chrome is "hidden" so Show
+                // Forth Console can restore the same NSView / transcript.
                 if forth.isDebugSessionArmed, showForthChrome {
                     DebugToolbar(forth: forth)
                 }
 
-                if showForthChrome {
+                if showForthChrome, forth.preferDocked {
                     ConsoleSplitter(
                         onDrag: { translationY in
                             let base = dragStartHeight ?? clampedConsole
@@ -87,12 +87,21 @@ struct ContentView: View {
                     )
                 }
 
-                consolePane
-                    .frame(height: showForthChrome ? clampedConsole : 0)
-                    .clipped()
-                    .opacity(showForthChrome ? 1 : 0)
-                    .allowsHitTesting(showForthChrome)
-                    .accessibilityHidden(!showForthChrome)
+                if showForthChrome, forth.preferDocked {
+                    consolePane
+                        .frame(height: clampedConsole)
+                } else if showForthChrome {
+                    // Undocked: Ping status strip only — no empty dock well.
+                    consolePane
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if forth.preferDocked {
+                    consolePane
+                        .frame(height: 0)
+                        .clipped()
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .onChange(of: geo.size.height) { _, _ in
                 guard showForthChrome else { return }
@@ -227,7 +236,7 @@ struct ContentView: View {
 
     // MARK: - Console
 
-    /// Ping strip + companion console under Ping, or undock placeholder.
+    /// Ping strip + (when docked) companion console. Undocked: strip only.
     private var consolePane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -266,25 +275,22 @@ struct ContentView: View {
                     .padding(.bottom, 4)
             }
 
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor).opacity(0.55))
-                .frame(height: 1)
-                .frame(maxWidth: .infinity)
-
-            // Only one DockedConsoleView may drain emit — floating window owns it when undocked.
             if forth.preferDocked {
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor).opacity(0.55))
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+
+                // Only one DockedConsoleView may drain emit — floating window owns it when undocked.
                 DockedConsoleView(forth: forth)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ZStack {
-                    Color(nsColor: .controlBackgroundColor)
-                    Text("64Forth undocked — Dock to embed under Ping")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: forth.preferDocked ? .infinity : nil,
+            alignment: .topLeading
+        )
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
