@@ -1,5 +1,9 @@
 # EditForth design notes
 
+## Version
+
+Marketing **2.0.0** / build **1** for both targets (EditForth + companion 64Forth). Starting major for this product line; ship DMG/GitHub only when asked.
+
 ## Why a new project
 
 - **64Forth** stays free to remain a console-first Forth app.

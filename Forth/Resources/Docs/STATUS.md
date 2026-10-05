@@ -1,7 +1,24 @@
 # 64Forth development status
 
-**Current:** **1.5.4** (build **48**) — dual-app DMG ready; GitHub release pending  
-**Last updated:** 2026-10-04
+**Current:** **2.0.0** (build **1**) — EditForth baseline; GitHub/DMG release not cut yet  
+**Last updated:** 2026-10-05
+
+---
+
+## v2.0.0 — EditForth baseline (pre-release)
+
+**Version strings:** marketing **2.0.0**, build **1** for both **EditForth** and the in-tree companion **64Forth** (lockstep). Starting major for the EditForth product line; no DMG/GitHub tag until asked.
+
+**Console header stamp** (`ConsoleView.swift` `banner`):
+
+```text
+=== 64Forth 2.0.0 === Oct 5, 2026 5:28 PM ===
+```
+
+### Highlights (vs in-tree 1.5.4 copy)
+
+- **EditForth workspace:** docked/undocked companion console, Documents/EditForth user tree, Forth menu, ⌘-click VIEW.
+- **Soft VIEW across vocabs:** `(VIEW-XT)` tries search-order `FIND`, then `XREF-COLLECT-WIDS` + `SEARCH-WORDLIST`, so Emitter-only names like `/EMIT-CONSOLE` resolve without `ALSO EMITTER`.
 
 ---
 
