@@ -69,7 +69,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 2. Drag **EditForth.app** and **64Forth.app** into Applications (or keep them side by side in the same folder).
 3. Approve each app once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`). Approving one app does not approve the other.
 
-**Getting EditForth to run on your Ma****c:** All of the latest security changes Apple has made to MacOS, have made it fairly difficult to run apps obtained from outside the Apple App Store, but it is not impossible. Here is how you to it;
+**Getting EditForth to run on your Mac:** All of the latest security changes Apple has made to MacOS, have made it fairly difficult to run apps obtained from outside the Apple App Store, but it is not impossible. Here is how you to it;
 1. Open and view the .jpg image called 'Getting EditForth to run.jpg'.
 2. This image shows a collage of the dialogs you have to traverse to get the MacOS to allow you to open the app. 
 3. Don't despair, it's not that hard, just follow along;
@@ -85,6 +85,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 13. After you click Open Anyway in that dialog, another dialog will pop up and ask you for your password. This is the final system dialog that is keeping you from running 64Forth (or EditFoth). Simply type in your "Macs" password, and 64Forth will open and display it's Opening screen.
 14. Go back to step 6. and Repeat Control-click Open / Open Anyway once for EditForth.app the first time you launch it (or the first time 64Forth opens it via EDIT / VIEW).
 15. You are done. The two apps talk over ~/Library/Application Support/64Forth/edit.sock automatically — no extra pairing step.
+    
 ## License
 
 Public domain. Do what you want.
