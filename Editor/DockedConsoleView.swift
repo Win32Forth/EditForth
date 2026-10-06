@@ -85,7 +85,8 @@ struct DockedConsoleView: NSViewRepresentable {
                 // Remount after Hide/Show (or view recreation): restore session text.
                 tv.string = forth.consoleTranscript
             } else {
-                forth.seedConsoleBannerIfEmpty()
+                // Local paint only — do not mutate ForthConnectionManager here
+                // (makeNSView runs inside a view update; @Published writes warn).
                 tv.string = EditForthConsoleBanner.text
             }
             protectedUTF16 = (tv.string as NSString).length

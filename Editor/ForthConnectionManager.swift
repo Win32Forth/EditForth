@@ -50,10 +50,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
     /// User preference: console under the status strip (true) vs floating window (false).
+    /// `isForthDocked` is updated by dock/undock/hide/connect — not here — so
+    /// init and preference writes do not nest a second `@Published` set.
     @Published var preferDocked: Bool {
         didSet {
             UserDefaults.standard.set(preferDocked, forKey: Self.preferDockedKey)
-            isForthDocked = preferDocked && !consoleHidden
         }
     }
     /// True while the console is embedded under the status strip.
@@ -63,7 +64,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
     @Published private(set) var consoleEmitSeq: UInt = 0
     /// Durable full transcript for remount / Show Forth Console (not cleared by takeConsoleEmit).
-    @Published private(set) var consoleTranscript: String = ""
+    /// Not `@Published`: only `DockedConsoleView`’s coordinator reads it. Seeding from
+    /// `makeNSView` must not publish or SwiftUI warns about view-update mutations.
+    private(set) var consoleTranscript: String = ""
     /// Enabled BREAK names (pale-red wash).
     var breakpointNames: [String] {
         breakpointEntries.filter(\.enabled).map(\.name)
@@ -92,13 +95,17 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var companionProcess: Process?
 
     override init() {
-        if UserDefaults.standard.object(forKey: Self.preferDockedKey) == nil {
-            preferDocked = true
-        } else {
-            preferDocked = UserDefaults.standard.bool(forKey: Self.preferDockedKey)
-        }
+        let docked: Bool = {
+            if UserDefaults.standard.object(forKey: Self.preferDockedKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Self.preferDockedKey)
+        }()
+        // Published(initialValue:) avoids @Published writes during @StateObject setup
+        // ("Publishing changes from within view updates is not allowed").
+        _preferDocked = Published(initialValue: docked)
+        _isForthDocked = Published(initialValue: docked)
         super.init()
-        isForthDocked = preferDocked && !consoleHidden
         ForthConsoleWindowController.shared.onRequestHide = { [weak self] in
             self?.hideForthConsole()
         }
@@ -221,9 +228,12 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         fd = cfd
         isConnected = true
         companionLaunchInFlight = false
-        isForthDocked = preferDocked
+        isForthDocked = preferDocked && !consoleHidden
         lastError = nil
-        syncUndockedWindow()
+        // Defer: sock connect often lands during a SwiftUI update from ping().
+        DispatchQueue.main.async { [weak self] in
+            self?.syncUndockedWindow()
+        }
 
         let src = DispatchSource.makeReadSource(fileDescriptor: cfd, queue: ioQueue)
         src.setEventHandler { [weak self] in
@@ -573,14 +583,19 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         companionLaunchInFlight = true
         lastError = nil
         consoleHidden = false
-        appendConsole("Starting EditForth…\n")        // Undocked: show the floating console immediately so the banner is visible
-        // while Autoload runs (edit.sock is not up yet).
-        syncUndockedWindow()
+        appendConsole("Starting EditForth…\n")
+        // Defer hosting the undocked window so we are not creating SwiftUI
+        // views in the same turn as the appendConsole @Published bump.
+        DispatchQueue.main.async { [weak self] in
+            self?.syncUndockedWindow()
+        }
         guard launchSixtyFourForth() else {
             companionLaunchInFlight = false
             lastError = "failed to launch 64Forth"
             appendConsole("Start Forth: failed to launch 64Forth\n")
-            syncUndockedWindow()
+            DispatchQueue.main.async { [weak self] in
+                self?.syncUndockedWindow()
+            }
             return
         }
         scheduleLaunchConnectRetries()
@@ -735,22 +750,27 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             consoleTranscript.append(text)
         }
         consoleEmitBuffer.append(text)
-        consoleEmitSeq &+= 1
-        var lines = consoleLines
-        if lines.isEmpty {
-            lines.append("")
-        }
-        for ch in text {
-            if ch == "\u{8}" {
-                if !lines[lines.count - 1].isEmpty {
-                    lines[lines.count - 1].removeLast()
-                }
-            } else if ch == "\n" || ch == "\r" {
+        // Defer @Published bumps so SwiftUI is not mid-update (e.g. ping from
+        // onAppear nesting DockedConsoleView makeNSView).
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.consoleEmitSeq &+= 1
+            var lines = self.consoleLines
+            if lines.isEmpty {
                 lines.append("")
-            } else {
-                lines[lines.count - 1].append(ch)
             }
+            for ch in text {
+                if ch == "\u{8}" {
+                    if !lines[lines.count - 1].isEmpty {
+                        lines[lines.count - 1].removeLast()
+                    }
+                } else if ch == "\n" || ch == "\r" {
+                    lines.append("")
+                } else {
+                    lines[lines.count - 1].append(ch)
+                }
+            }
+            self.consoleLines = lines
         }
-        consoleLines = lines
     }
 }

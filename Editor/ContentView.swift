@@ -118,8 +118,9 @@ struct ContentView: View {
                 if consoleHeight < Self.consoleMinHeight {
                     consoleHeight = max(storedConsoleHeight, Self.consoleMinHeight)
                 }
-                // Console became visible — connect or launch companion.
-                forth.ping()
+                // Console became visible — connect or launch companion (next turn so
+                // ping’s @Published writes are not inside this view update).
+                DispatchQueue.main.async { forth.ping() }
             }
         }
         .background(WindowChrome(url: workspace.selectedTab?.fileURL))
@@ -129,10 +130,15 @@ struct ContentView: View {
             // Visible console (docked or undocked) → auto-start companion.
             // Hidden (Show Forth Console off) → connect only if already listening;
             // do not launch; user can Start Forth after showing the console.
-            if showForthChrome {
-                forth.ping()
-            } else {
-                forth.start()
+            // Defer off the appear/update pass — ping/start publish ObservableObject
+            // state and would warn if run inline.
+            let chrome = showForthChrome
+            DispatchQueue.main.async {
+                if chrome {
+                    forth.ping()
+                } else {
+                    forth.start()
+                }
             }
             debugKeys.attach(forth: forth, workspace: workspace)
             // File opens / pending-goto / initial untitled are owned by AppDelegate.attach
@@ -288,8 +294,9 @@ struct ContentView: View {
             }
 
             if forth.preferDocked, !forth.consoleHidden {
+                // Bottom edge of the Ping/status strip — darker/thicker than a hairline.
                 Rectangle()
-                    .fill(Color(nsColor: .separatorColor).opacity(0.55))
+                    .fill(Color(nsColor: .labelColor).opacity(0.70))
                     .frame(height: 1)
                     .frame(maxWidth: .infinity)
 
@@ -631,7 +638,7 @@ private struct ConsoleSplitter: View {
         ZStack {
             // Soft fill across the whole grab strip.
             Rectangle()
-                .fill(Color(nsColor: .separatorColor).opacity(0.28))
+                .fill(Color(nsColor: .separatorColor).opacity(0.60))
             // Bold center rule (~3× the old 1pt hairline).
             Rectangle()
                 .fill(Color(nsColor: .separatorColor))
