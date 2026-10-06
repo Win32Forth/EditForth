@@ -28,7 +28,12 @@ EditForth/                 # repo root
   Releases/                # versioned dual-app DMG + Gatekeeper aids
   README.md
   DESIGN.md
+  ROADMAP.md               # planned release automation + editor/emit UX
 ```
+
+## Companion GRAPHICS (post-2.0.0)
+
+`(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. See `ROADMAP.md` for FLOAD-current / Run / Emit / quiet Emitter plans.
 
 Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
 

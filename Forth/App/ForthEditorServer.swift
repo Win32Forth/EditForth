@@ -268,8 +268,14 @@ final class ForthEditorServer {
             writeResponse(.dockState(docked: false), to: fd)
             return
         case .pushKey(let code):
+            // GRAPHICS KEY/KEY? read AppOutputHost's queue. Only while App Output
+            // is open — idle console typing must not fill that queue or KEY?
+            // returns true immediately and demos freeze after one frame.
+            if AppOutputHost.shared.isOpened {
+                AppOutputHost.shared.enqueueKey(Int64(code))
+            }
             if !kernel.pushKey(code) {
-                // Not waiting for KEY — ignore quietly (typing into idle console).
+                // Not waiting for console KEY — ignore quietly when idle.
             }
             return
         case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:

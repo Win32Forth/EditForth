@@ -29,6 +29,7 @@ EditForth/
   Releases/             # EditForth-*-macOS.dmg + install aids
   README.md
   DESIGN.md
+  ROADMAP.md            # release automation + EditForth editor/emit plans
 ```
 
 Two **separate processes**; one project window in Xcode.
@@ -38,6 +39,8 @@ Two **separate processes**; one project window in Xcode.
 - Editor workspace with a status strip and **Start Forth**.
 - The Forth REPL lives **inside** the editor when docked (embedded console).
 - **64Forth** runs as a headless **companion** (`--companion`): kernel + `edit.sock`, no console window of its own.
+- Companion **GRAPHICS** / App Output works from the docked console (open, blit, KEY); bare `FLOAD` / `EDIT` use EditForth panels.
+- Longer-term plans (release automation, status-bar FLOAD/Run/Emit, quiet Emitter logs): see **[ROADMAP.md](ROADMAP.md)**.
 - **Undock** moves the REPL to a floating window; the red close button **hides** it (**Unhide Forth** brings it back); **Dock** embeds it under the strip again.
 - 64Forth and 64Edit remain the shipped companion pair; EditForth is the place to try the combined direction without interfering with them.
 

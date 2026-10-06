@@ -2743,6 +2743,9 @@ final class KernelBridge {
                 // loop is inside nextEvent, so a long FLOAD shows nothing until
                 // KEY blocks and the queue gets a turn.
                 self.drainEmitBufferToSink()
+                // Companion GRAPHICS: (APP-OPEN) waits on a pending-open semaphore;
+                // service it here so WINDOW does not deadlock with nextEvent.
+                AppOutputHost.shared.servicePendingUIOnMain()
                 if !self.isPumpingEvents {
                     var more = true
                     var steps = 0

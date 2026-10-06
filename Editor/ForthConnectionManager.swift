@@ -44,6 +44,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var viewMissWord: String = ""
     /// Bumps when companion bare EDIT asks EditForth to show its Open panel.
     @Published private(set) var editOpenRequestSeq: UInt = 0
+    /// Bumps when companion bare FLOAD/INCLUDE asks EditForth for the Load panel.
+    @Published private(set) var floadOpenRequestSeq: UInt = 0
     /// Bumps on successful VIEW so the console transcript can refresh even when
     /// `consoleLines` are unchanged (editor open/layout left the clip view blank).
     @Published private(set) var consoleRefreshSeq: UInt = 0
@@ -730,6 +732,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             isForthDocked = preferDocked
         case .requestEditOpen:
             editOpenRequestSeq &+= 1
+        case .requestFloadOpen:
+            floadOpenRequestSeq &+= 1
         case .requestQuit:
             // BYE from companion: same path as Cmd-Q (dirty Save sheets, then
             // terminateLaunchedCompanion via AppDelegate).

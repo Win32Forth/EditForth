@@ -1277,6 +1277,22 @@ final class FileHost {
         preserveSessionCwdAfterFileOp = false
         return -1
         #else
+        // EditForth on edit.sock: ask the editor for the panel; blocking here
+        // hangs evaluate (same as bare EDIT behind the docked console).
+        // Return an empty successful include so (INCLUDE) does not print
+        // "can't open" / abandon — the editor then sends S" path" INCLUDED.
+        if ForthEditorServer.shared.hasConnectedClients {
+            clearFromLibrary()
+            preserveSessionCwdAfterFileOp = false
+            ForthEditorServer.shared.broadcast(.requestFloadOpen)
+            msg("FLOAD: choose a file in EditForth…\n")
+            let p = UnsafeMutablePointer<CChar>.allocate(capacity: 1)
+            p[0] = 0
+            includeAllocs.append(p)
+            outPtr?.pointee = UnsafePointer(p)
+            outLen?.pointee = 0
+            return 0
+        }
         // Capture start dir / preserve flag on the kernel thread; create the
         // panel only on main (AppKit main-thread rule).
         let startDir: URL

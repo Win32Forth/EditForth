@@ -228,7 +228,15 @@ struct DockedConsoleView: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                // While GRAPHICS KEY waits, Return must reach the companion as a
+                // key — a second executeCommand only gets "(busy …)".
+                pushTypedCharacter(13)
                 submitLine()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                // Esc → APP-KEY / console KEY abort path
+                pushTypedCharacter(27)
                 return true
             }
             if commandSelector == #selector(NSResponder.moveUp(_:)) {

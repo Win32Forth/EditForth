@@ -40,6 +40,22 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     private var pendingCols = 80
     private var pendingRows = 25
     private var sizeDirty = false
+
+    /// Off-main `(APP-OPEN)` / blits while companion evaluate pumps main: do not
+    /// `main.sync` / `main.async+wait` (deadlocks with `nextEvent`). The
+    /// evaluate pump calls `servicePendingUIOnMain()` instead.
+    private let pendingOpenLock = NSLock()
+    private var pendingOpenCols = 0
+    private var pendingOpenRows = 0
+    private var pendingOpenSem: DispatchSemaphore?
+
+    private let pendingBlitLock = NSLock()
+    private var pendingPix: [UInt8]?
+    private var pendingPixW = 0
+    private var pendingPixH = 0
+    private var pendingPixDepth = 1
+    private var pendingPixStride = 0
+    private var pendingCells: [UInt8]?
     
     fileprivate var forthPixW: Int { max(1, cols * 8) }
     fileprivate var forthPixH: Int { max(1, rows * 16) }
@@ -54,6 +70,9 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     private var mouseX: Int64 = 0
     private var mouseY: Int64 = 0
     private var mouseButtons: Int64 = 0
+
+    /// True when the graphics window has been opened (may be behind EditForth).
+    var isOpened: Bool { opened }
 
     /// True when the graphics window is open and key (owns typing for KEY/KEY?).
     var isKeyWindowActive: Bool {
@@ -94,30 +113,68 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         if AgentChannel.isRequested { return -1 }
         let cols = max(1, min(c, 256))
         let rows = max(1, min(r, 128))
-        let work = { [weak self] in
-            guard let self else { return }
-            let gridChanged = (self.cols != cols) || (self.rows != rows)
-            self.cols = cols
-            self.rows = rows
-            self.cells = [UInt8](repeating: 32, count: cols * rows)
-            if self.window == nil {
-                self.buildWindow()
-            } else if gridChanged && !liveResizing {
-                // Forth asked for a new cell grid — then snap. User drag does not.
-                self.resizeWindow()
-            }
-            self.window?.makeKeyAndOrderFront(nil)
-            self.window?.makeFirstResponder(self.gridView)
-            NSApp.activate(ignoringOtherApps: true)
-            self.opened = true
-            self.gridView?.needsDisplay = true
-        }
         if Thread.isMainThread {
-            work()
-        } else {
-            DispatchQueue.main.sync(execute: work)
+            performOpenOnMain(cols: cols, rows: rows)
+            return opened ? 0 : -1
         }
-        return 0
+        let sem = DispatchSemaphore(value: 0)
+        pendingOpenLock.lock()
+        // Coalesce: keep latest size; one waiter (Forth is single-threaded here).
+        pendingOpenCols = cols
+        pendingOpenRows = rows
+        pendingOpenSem = sem
+        pendingOpenLock.unlock()
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+        // Evaluate's main pump must call servicePendingOpenOnMain(); bound the wait.
+        _ = sem.wait(timeout: .now() + 5.0)
+        return opened ? 0 : -1
+    }
+
+    /// Run on the main thread from KernelBridge's evaluate pump.
+    func servicePendingUIOnMain() {
+        precondition(Thread.isMainThread)
+        pendingOpenLock.lock()
+        let cols = pendingOpenCols
+        let rows = pendingOpenRows
+        let sem = pendingOpenSem
+        if sem != nil, cols > 0, rows > 0 {
+            pendingOpenCols = 0
+            pendingOpenRows = 0
+            pendingOpenSem = nil
+            pendingOpenLock.unlock()
+            performOpenOnMain(cols: cols, rows: rows)
+            sem?.signal()
+        } else {
+            pendingOpenLock.unlock()
+        }
+        applyPendingBlitOnMain()
+    }
+
+    /// Compatibility name for call sites.
+    func servicePendingOpenOnMain() {
+        servicePendingUIOnMain()
+    }
+
+    private func performOpenOnMain(cols: Int, rows: Int) {
+        precondition(Thread.isMainThread)
+        let gridChanged = (self.cols != cols) || (self.rows != rows)
+        self.cols = cols
+        self.rows = rows
+        self.cells = [UInt8](repeating: 32, count: cols * rows)
+        if self.window == nil {
+            self.buildWindow()
+        } else if gridChanged && !liveResizing {
+            self.resizeWindow()
+        }
+        self.keyLock.lock()
+        self.keyQueue.removeAll()
+        self.keyLock.unlock()
+        self.window?.orderFrontRegardless()
+        self.window?.makeKeyAndOrderFront(nil)
+        self.window?.makeFirstResponder(self.gridView)
+        NSApp.activate(ignoringOtherApps: true)
+        self.opened = true
+        self.gridView?.needsDisplay = true
     }
 
     func close() {
@@ -220,14 +277,24 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             memcpy(base, addr, n)
         }
 
-        let apply = { [weak self] in
-            guard let self else { return }
-            self.cellsLock.lock()
-            self.cells = copy
-            self.cellsLock.unlock()
-            self.gridView?.needsDisplay = true
+        if Thread.isMainThread {
+            cellsLock.lock()
+            cells = copy
+            cellsLock.unlock()
+            gridView?.needsDisplay = true
+            return
         }
-        DispatchQueue.main.async(execute: apply)
+        pendingBlitLock.lock()
+        pendingCells = copy
+        pendingBlitLock.unlock()
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+        if CompanionChannel.isRequested {
+            // Standalone GUI still uses async; companion relies on evaluate pump.
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.applyPendingBlitOnMain()
+        }
     }
 
     /// Packed 1-bit, LSB = leftmost pixel in the byte, row-major, top row first.
@@ -271,19 +338,64 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             memcpy(base, addr, n)
         }
 
-        let apply = { [weak self] in
-            guard let self else { return }
-            self.pixLock.lock()
-            self.pixW = w
-            self.pixH = h
-            self.pixDepth = d
-            self.pixStride = stride
-            self.pix = copy
-            self.hasPixels = true
-            self.pixLock.unlock()
-            self.gridView?.needsDisplay = true
+        if Thread.isMainThread {
+            pixLock.lock()
+            pixW = w
+            pixH = h
+            pixDepth = d
+            pixStride = stride
+            pix = copy
+            hasPixels = true
+            pixLock.unlock()
+            gridView?.needsDisplay = true
+            return
         }
-        DispatchQueue.main.async(execute: apply)
+        pendingBlitLock.lock()
+        pendingPix = copy
+        pendingPixW = w
+        pendingPixH = h
+        pendingPixDepth = d
+        pendingPixStride = stride
+        pendingBlitLock.unlock()
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+        if CompanionChannel.isRequested {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.applyPendingBlitOnMain()
+        }
+    }
+
+    private func applyPendingBlitOnMain() {
+        precondition(Thread.isMainThread)
+        pendingBlitLock.lock()
+        let pixCopy = pendingPix
+        let w = pendingPixW
+        let h = pendingPixH
+        let d = pendingPixDepth
+        let stride = pendingPixStride
+        let cellCopy = pendingCells
+        pendingPix = nil
+        pendingCells = nil
+        pendingBlitLock.unlock()
+        if let pixCopy {
+            pixLock.lock()
+            pixW = w
+            pixH = h
+            pixDepth = d
+            pixStride = stride
+            pix = pixCopy
+            hasPixels = true
+            pixLock.unlock()
+        }
+        if let cellCopy {
+            cellsLock.lock()
+            cells = cellCopy
+            cellsLock.unlock()
+        }
+        if pixCopy != nil || cellCopy != nil {
+            gridView?.needsDisplay = true
+        }
     }
      
     fileprivate var pixelW: Int { pixW }
@@ -537,12 +649,17 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         return -1
     }
 
-    fileprivate func pushKey(_ c: Int64) {
+    /// Enqueue a KEY for GRAPHICS KEY / KEY? (App Output or EditForth sock).
+    func enqueueKey(_ c: Int64) {
         keyLock.lock()
         if keyQueue.count < 64 {
             keyQueue.append(c)
         }
         keyLock.unlock()
+    }
+
+    fileprivate func pushKey(_ c: Int64) {
+        enqueueKey(c)
     }
 
     private func buildWindow() {

@@ -28,6 +28,7 @@
 		EFEDD0CC0000000100000012 /* CompanionChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000011 /* CompanionChannel.swift */; };
 		EFEDD0CC0000000100000022 /* CompanionMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000021 /* CompanionMenus.swift */; };
 		FA6AA0DF301916D30007C369 /* 64Forth.jpg in Resources */ = {isa = PBXBuildFile; fileRef = FA6AA0DE301916D30007C369 /* 64Forth.jpg */; };
+		FA90443230754DD000E7E1AF /* ROADMAP.md in Resources */ = {isa = PBXBuildFile; fileRef = FA90443130754DD000E7E1AF /* ROADMAP.md */; };
 		FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85D7306D82790035B509 /* IPCProtocol.swift */; };
 		FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85DB306D832B0035B509 /* ForthEngine.swift */; };
 		FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */; };
@@ -79,6 +80,7 @@
 		FA38151E304B00A900EB8DE3 /* boot_words_end.inc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.pascal; path = boot_words_end.inc; sourceTree = "<group>"; };
 		FA38151F304B00A900EB8DE3 /* kernel_api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kernel_api.h; sourceTree = "<group>"; };
 		FA6AA0DE301916D30007C369 /* 64Forth.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = 64Forth.jpg; sourceTree = "<group>"; };
+		FA90443130754DD000E7E1AF /* ROADMAP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ROADMAP.md; sourceTree = "<group>"; };
 		FADE85D7306D82790035B509 /* IPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCProtocol.swift; sourceTree = "<group>"; };
 		FADE85DB306D832B0035B509 /* ForthEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEngine.swift; sourceTree = "<group>"; };
 		FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEditorServer.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 		EFED17010000000100000005 = {
 			isa = PBXGroup;
 			children = (
+				FA90443130754DD000E7E1AF /* ROADMAP.md */,
 				EFED17010000000100000003 /* Editor */,
 				B1000301 /* Forth */,
 				EFED17010000000100000006 /* Products */,
@@ -315,6 +318,7 @@
 		EFED17010000000100000012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				FA90443230754DD000E7E1AF /* ROADMAP.md in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
@@ -626,6 +630,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -661,7 +666,6 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				ARCHS = arm64;
 				EXCLUDED_ARCHS = "x86_64 i386";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -693,6 +697,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -728,7 +733,6 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				ARCHS = arm64;
 				EXCLUDED_ARCHS = "x86_64 i386";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;

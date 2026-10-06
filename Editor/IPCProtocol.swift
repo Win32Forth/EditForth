@@ -67,6 +67,9 @@ enum ForthResponse: Codable, Equatable {
     /// Bare EDIT while EditForth is on edit.sock — show the editor Open panel
     /// (companion must not block on its own NSOpenPanel).
     case requestEditOpen
+    /// Bare FLOAD/INCLUDE while EditForth is on edit.sock — show the editor
+    /// FLOAD Open panel, then send `S" path" INCLUDED` (do not block companion).
+    case requestFloadOpen
     /// BYE from the companion — EditForth should quit (dirty Save sheets first),
     /// then terminate the companion. Companion must not exit on its own.
     case requestQuit

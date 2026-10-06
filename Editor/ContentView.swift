@@ -204,6 +204,11 @@ struct ContentView: View {
             NSApp.activate(ignoringOtherApps: true)
             workspace.openPanel()
         }
+        .onChange(of: forth.floadOpenRequestSeq) { _, _ in
+            // Bare FLOAD/INCLUDE — Load panel in EditForth, then INCLUDED.
+            NSApp.activate(ignoringOtherApps: true)
+            ForthMenuSupport.presentFload(forth: forth)
+        }
     }
 
     /// Persistently show Forth chrome when companion activity arrives while hidden.
