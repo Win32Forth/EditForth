@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.0.0** / build **1** for both targets (EditForth + companion 64Forth). First ship: `Releases/EditForth-2.0.0-macOS.dmg` and GitHub tag **v2.0.0** (dual-app: `EditForth.app` + companion `64Forth.app`).
+Marketing **2.0.1** / build **2** for both targets (EditForth + companion 64Forth). Ship: `Releases/EditForth-2.0.1-macOS.dmg` and GitHub tag **v2.0.1** (dual-app). First public release was **v2.0.0**.
 
 ## Why a new project
 

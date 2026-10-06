@@ -1,19 +1,33 @@
 # 64Forth development status
 
-**Current:** **2.0.0** (build **1**) — EditForth baseline; GitHub/DMG release not cut yet  
-**Last updated:** 2026-10-05
+**Current:** **2.0.1** (build **2**) — companion GRAPHICS/FLOAD fixes; DMG/GitHub **v2.0.1**  
+**Last updated:** 2026-10-06
 
 ---
 
-## v2.0.0 — EditForth baseline (pre-release)
+## v2.0.1 — Companion GRAPHICS + bare FLOAD
 
-**Version strings:** marketing **2.0.0**, build **1** for both **EditForth** and the in-tree companion **64Forth** (lockstep). Starting major for the EditForth product line; no DMG/GitHub tag until asked.
+**Version strings:** marketing **2.0.1**, build **2** (EditForth + companion 64Forth lockstep).
 
-**Console header stamp** (`ConsoleView.swift` `banner`):
+**Console header stamp:**
 
 ```text
-=== 64Forth 2.0.0 === Oct 5, 2026 5:28 PM ===
+=== 64Forth 2.0.1 === Oct 6, 2026 3:36 PM ===
 ```
+
+### Highlights
+
+- Companion App Output: pending-open / pending-blit on evaluate pump; KEY only while window open.
+- Bare `FLOAD`/`EDIT` → EditForth panels; `BYE` → editor quit with dirty sheets.
+- `ROADMAP.md` for release automation and editor FLOAD/Run/Emit plans.
+
+---
+
+## v2.0.0 — EditForth baseline (first public)
+
+**Version strings:** marketing **2.0.0**, build **1**. Dual-app DMG + GitHub **v2.0.0**.
+
+**Console header stamp:** `=== 64Forth 2.0.0 === Oct 5, 2026 5:28 PM ===`
 
 ### Highlights (vs in-tree 1.5.4 copy)
 
