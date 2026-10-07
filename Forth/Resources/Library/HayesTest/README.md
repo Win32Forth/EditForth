@@ -30,6 +30,8 @@ That:
    (app bundle `Resources/Library/…` is **read-only**; Hayes `UPDATE`/`FLUSH` need write access).
 2. FLOADs suite sources under `src/`. Floating-point tests go through `src/Harness/runfptests.fth`, which does `ONLY FORTH ALSO FLOATING` and then loads `src/fp/`. The vocabulary name is `FLOATING`. After the core `ACCEPT` line, every counter is 0, including `FPERRORS`.
 
+**ACCEPT auto-feed (host):** stock `core.fr` still prints `PLEASE TYPE UP TO 80 CHARACTERS:` and calls `ACCEPT`. The host (`KernelBridge`) watches emit for that prompt and queues `hayes-accept` + Return into the KEY queue (same path as debugger `pushKey`). Suite sources are not modified. Obsolescent `EXPECT` is not run by this suite.
+
 **Writable scratch files:** File-Access tests create `fatest*.txt` relative to the load
 cwd. When that cwd is inside the app bundle, TZForth automatically maps those names to
 `Application Support/TZForth/` so `CREATE-FILE`/`OPEN-FILE`/`RENAME-FILE` succeed.

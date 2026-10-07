@@ -12,7 +12,7 @@ Goal: one repeatable path so version bumps, validation, samples, DMG, docs, comm
 1. **Bump version** — marketing + build for the relevant apps (EditForth lockstep companion when shipping EditForth; standalone 64Forth when shipping 64Forth). Mirror stamps in Info.plist / pbxproj / console banner / STATUS / README / DESIGN as today.
 2. **Update docs** — README, DESIGN, STATUS, release notes draft; Gatekeeper / “Getting … to run” collage if UI changed.
 3. **ANS-VALIDATE** — run and require a clean result (no errors).
-4. **Hayes suite** — run and require a clean result (no errors). **"Hayes suite needs to accept automated key input so the ACCEPT test can succeed, but not by modifying the test itself, but by modifying the system to feed it keys automatically. If this is not possible, then we need to skip the ACCEPT test so that the tests run without user input."**
+4. **Hayes suite** — run and require a clean result (no errors). **"Hayes suite needs to accept automated key input so the ACCEPT test can succeed, but not by modifying the test itself, but by modifying the system to feed it keys automatically. If this is not possible, then we need to skip the ACCEPT test so that the tests run without user input."** **Done (host):** `KernelBridge` auto-feeds `hayes-accept` + Return when emit shows the stock `PLEASE TYPE UP TO 80 CHARACTERS:` prompt (EditForth companion); suite sources unchanged.
 5. **App-window smoke** — built-in GRAPHICS smokes (`GRAPHICS-SMOKE`, `GRAPHICS-PSMOKE`, `GRAPHICS-CSMOKE` as appropriate) under a real window (not `--agent` for KEY loops).
 6. **Sample programs** — build and run several Sample / Emitter stand-alones (e.g. lines-demo / RUN-LINES, IMAGEVIEW64, EDIT64 or current Sample set); confirm they launch and basic interaction works. **"This may be a challenge, since these programs normally require user input, so we may just see if they run and then shut them down."**
 7. **Release DMG** — create the new dual-app (or single-app) DMG; include updated install aids.
@@ -22,7 +22,7 @@ Goal: one repeatable path so version bumps, validation, samples, DMG, docs, comm
 11. **GitHub release** — tag, notes, attach DMG + collage (+ PDF if applicable).
 
 ### Automation shape (later)
-- Prefer a single script or documented checklist under the repo (e.g. `scripts/release.sh` or `.grok` workflow) that fails fast on ANS/Hayes/smoke. **"As noted earlier, we eihtr need to figure out how to feed the Hayes tests keys, so ACCEPT can be tested, or we need to remove that test so Hayes runs without user input."**
+- Prefer a single script or documented checklist under the repo (e.g. `scripts/release.sh` or `.grok` workflow) that fails fast on ANS/Hayes/smoke. Hayes ACCEPT auto-feed is in the host (see §1 step 4); no suite edit required.
 - Keep human confirmation before `gh release create` / force-push / deleting old DMGs until trusted.
 - EditForth and standalone 64Forth may share steps but different version lines and DMG layouts.
 

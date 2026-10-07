@@ -1804,6 +1804,14 @@ final class KernelBridge {
     /// Wakes a background KEY wait when a key is enqueued (main-thread monitor).
     private let keyAvailable = DispatchSemaphore(value: 0)
 
+    /// Rolling emit tail used to spot the stock Hayes `ACCEPT` prompt without
+    /// modifying `core.fr`. See `noteEmitForHayesAccept(_:)`.
+    private var hayesAcceptEmitTail = ""
+    /// Stock Hayes core.fr ACCEPT-TEST prompt (leave the suite file alone).
+    private static let hayesAcceptPrompt = "PLEASE TYPE UP TO 80 CHARACTERS:"
+    /// Line fed to ACCEPT when that prompt appears (stack effect only is checked).
+    private static let hayesAcceptReply = "hayes-accept"
+
     /// Serial queue for `kernel_eval` so the main thread stays free to run AppKit
     /// (KEY/KEY? input). Main waits by pumping `NSApp.nextEvent`.
     private let forthQueue = DispatchQueue(label: "64Forth.kernel")
@@ -2074,6 +2082,39 @@ final class KernelBridge {
         return true
     }
 
+    /// Watch console emit for the Hayes `ACCEPT-TEST` prompt and queue a reply
+    /// line + Return into the KEY queue (same path as debugger `pushKey`).
+    /// Does not change stock Hayes sources. EXPECT is not exercised by the suite.
+    private func noteEmitForHayesAccept(_ s: String) {
+        lock.lock()
+        hayesAcceptEmitTail.append(s)
+        if hayesAcceptEmitTail.count > 240 {
+            hayesAcceptEmitTail = String(hayesAcceptEmitTail.suffix(240))
+        }
+        guard let range = hayesAcceptEmitTail.range(of: Self.hayesAcceptPrompt) else {
+            lock.unlock()
+            return
+        }
+        // Consume the prompt so a repeated TYPE does not double-feed.
+        hayesAcceptEmitTail = String(hayesAcceptEmitTail[range.upperBound...])
+        lock.unlock()
+        feedHayesAcceptKeys()
+    }
+
+    /// Push `hayes-accept` + CR for ACCEPT. Async so we never nest `pushKey`
+    /// under the emit lock; a short delay covers TYPE finishing before ACCEPT waits.
+    private func feedHayesAcceptKeys() {
+        let reply = Self.hayesAcceptReply
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            Thread.sleep(forTimeInterval: 0.03)
+            guard let self else { return }
+            for byte in Array(reply.utf8) {
+                _ = self.pushKey(Int32(byte))
+            }
+            _ = self.pushKey(13) // Return — ends ACCEPT / _read_line
+        }
+    }
+
     /// True while ITC DEBUG / DBG-ON or TDBG is waiting for a stepper key.
     var isAnyDebugArmed: Bool {
         kernel_any_debug_armed() != 0
@@ -2298,6 +2339,7 @@ final class KernelBridge {
     /// Drop any pending KEY bytes (call at start/end of evaluate).
     func clearKeyQueue() {
         lock.lock()
+        hayesAcceptEmitTail = ""
         keyQueue.removeAll(keepingCapacity: true)
         lock.unlock()
         // Drain stale semaphore permits so KEY does not wake spuriously.
@@ -3280,6 +3322,8 @@ final class KernelBridge {
             }
             return
         }
+        // Hayes ACCEPT-TEST: auto-feed keys without editing stock core.fr.
+        noteEmitForHayesAccept(s)
         lock.lock()
         if quietEmitActive {
             quietEmitCapture.append(s)

@@ -10062,7 +10062,7 @@ XTHROW:
     cbz x1, _throw_uncaught
     mov x23, x1
     ldr x19, [x23], #8             // IP
-    add x23, x23, #8               // skip saved_source_sp
+    ldr x6, [x23], #8              // saved_source_sp
     ldr x22, [x23], #8             // DSP
     ldr x20, [x23], #8             // TOS
     ldr x0, [x23], #8              // prev_handler
@@ -10071,6 +10071,24 @@ XTHROW:
     adrp x3, eval_resume_sp@page
     add  x3, x3, eval_resume_sp@pageoff
     str  x0, [x3]
+    // Pop SOURCE nests entered during the xt (e.g. EVALUATE) back to
+    // CATCH's saved_source_sp. Leaving an exhausted EVALUATE frame makes
+    // _interpret_empty _eval_resume_pop the outer (LINE-SOURCE) early —
+    // END-LOAD-CWD runs mid-file and later relative FLOAD (ANS-VALIDATE
+    // memory.fth) resolves against the session cwd (Documents/EditForth).
+    stp  x5, x20, [sp, #-16]!      // k, TOS
+    stp  x19, x22, [sp, #-16]!     // IP, DSP
+    mov  x0, x6                    // target source_sp
+    bl   _throw_unwind_to_sp
+    ldp  x19, x22, [sp], #16
+    ldp  x5, x20, [sp], #16
+    // Leave interpret state. Undefined during `:` (e.g. `: BADSELF BADSELF ;`
+    // via EVALUATE under CATCH) must not keep STATE=compile or the rest of
+    // the outer file is compiled into the broken definition (host.fth then
+    // reports undefined: H-CRV and an uncaught -13).
+    adrp x0, state_var@page
+    add  x0, x0, state_var@pageoff
+    str  xzr, [x0]
     str x20, [x22, #-8]!
     mov x20, x5                    // throw code
     NEXT
@@ -10086,6 +10104,45 @@ _throw_uncaught:
     mov  x16, #1                   // SYS_exit
     svc  #0x80
 XTHROW_END:
+
+// x0 = CATCH saved_source_sp. Pop SOURCE until source_sp <= target.
+// File INCLUDE (id>0): end_include_hook + view pop. (LINE-SOURCE) id==-2:
+// view pop only (high-level INCLUDED owns END-LOAD-CWD). EVALUATE id==-1:
+// pop SOURCE only — do not touch eval_resume (THROW already restored it).
+_throw_unwind_to_sp:
+    stp  x29, x30, [sp, #-16]!
+    stp  x19, x20, [sp, #-16]!
+    mov  x19, x0                   // target source_sp
+1:
+    adrp x0, source_sp@page
+    add  x0, x0, source_sp@pageoff
+    ldr  x1, [x0]
+    cmp  x1, x19
+    b.ls 2f
+    adrp x0, source_id_var@page
+    add  x0, x0, source_id_var@pageoff
+    ldr  x20, [x0]                 // ending SOURCE-ID
+    cmp  x20, #0
+    b.le 3f
+    adrp x0, end_include_hook@page
+    add  x0, x0, end_include_hook@pageoff
+    ldr  x9, [x0]
+    cbz  x9, 3f
+    blr  x9
+3:
+    cmp  x20, #0
+    b.gt 4f
+    cmn  x20, #2                   // id == -2?
+    b.ne 5f
+4:
+    bl   _view_pop_src_id
+5:
+    bl   _pop_source
+    b    1b
+2:
+    ldp  x19, x20, [sp], #16
+    ldp  x29, x30, [sp], #16
+    ret
 
 _throw_soft_abandon:
     // Interactive / embed only (outside THROW CODE-BOUNDS): print code,

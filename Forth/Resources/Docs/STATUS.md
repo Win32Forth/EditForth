@@ -23,6 +23,9 @@
 - `ANEW` uses `FORGET` (prunes all wordlists) so GRAPHICS apps re-EMIT cleanly; busy evaluate rejects queued EMITs; quiet emit progress + ABORT false-positive fix.
 - Kernel `FORGET` wordlist_reg prune; high-level `INCLUDED` notes host last-load path.
 - Sample emit polish: `IMAGEVIEW64`, `MIDNIGHT` (`HANOI-MOVE`, `ARRAY` ALIGN, GRAPHICS `AT`/`CLS`), doodle/edit/ved directives; `HELLO.fth` + `BRESENHAM.fth` in Sample.
+- **Hayes ACCEPT auto-feed:** host watches for `PLEASE TYPE UP TO 80 CHARACTERS:` and `pushKey`s `hayes-accept` + Return (stock suite unchanged; EXPECT not run).
+- **THROW + EVALUATE under CATCH:** restore SOURCE to CATCH’s `saved_source_sp` so an exhausted EVALUATE frame does not make `_interpret_empty` resume the outer `(LINE-SOURCE)` early. That bug popped load-cwd mid-`exception.fth` and made ANS-VALIDATE’s later `FLOAD memory.fth` resolve against `Documents/EditForth` (`can't open: …/memory.fth`).
+- **THROW clears STATE:** undefined during `:` (host.fth `BADSELF` via EVALUATE) left `STATE=compile` after CATCH, so the rest of the file was compiled and `H-CRV` looked “undefined”. Caught THROW now forces interpret. ANS-VALIDATE: **394 passed, 0 failed**.
 
 ---
 
