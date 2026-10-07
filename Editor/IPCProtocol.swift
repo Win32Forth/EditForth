@@ -44,6 +44,11 @@ enum EditorRequest: Codable, Equatable {
     case undock
     /// Push one KEY code while the companion kernel waits (ASCII or tagged).
     case pushKey(code: Int32)
+    /// Copy missing shipped Library/AutoLoad/Docs into Documents/EditForth.
+    case updateUserTree
+    /// Wipe/replace Documents/EditForth Library/AutoLoad/Docs from the companion
+    /// bundle. When `renameFirst` is true, rename EditForth → EditForth.User* first.
+    case restoreUserTree(renameFirst: Bool)
 }
 
 // MARK: - Messages from 64Forth to 64Edit

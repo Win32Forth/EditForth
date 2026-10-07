@@ -281,6 +281,16 @@ final class ForthEditorServer {
         case .queryLastName:
             writeResponse(.lastName(name: kernel.lastDefinedName() ?? ""), to: fd)
             return
+        case .updateUserTree:
+            // FileHost copies from this app's Resources into Documents/EditForth.
+            DispatchQueue.main.async {
+                FileHost.shared.installUserTree(replaceExisting: false)
+            }
+            return
+        case .restoreUserTree(let renameFirst):
+            // Confirm alerts run in EditForth; companion only performs the copy.
+            FileHost.shared.restoreUserTreeFromEditor(renameFirst: renameFirst)
+            return
         case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:
             break
         }

@@ -197,6 +197,16 @@ struct SixtyFourEditApp: App {
 
                 Divider()
 
+                Button("Update User Data in EditForth Folder") {
+                    ForthMenuSupport.updateUserData(forth: forth)
+                }
+                .disabled(!forth.isConnected)
+
+                Button("Restore Shipped Files to EditForth Folder") {
+                    ForthMenuSupport.restoreShippedFiles(forth: forth)
+                }
+                .disabled(!forth.isConnected)
+
                 Button("Show Library Folder") {
                     ForthMenuSupport.revealInFinder(
                         ForthMenuSupport.userTreeURL.appendingPathComponent("Library", isDirectory: true)

@@ -1864,6 +1864,16 @@ extension FileHost {
         }
     }
 
+    /// Sock / EditForth Forth menu: restore without UI (editor already confirmed).
+    func restoreUserTreeFromEditor(renameFirst: Bool) {
+        DispatchQueue.main.async {
+            if renameFirst {
+                guard self.renameUserTreeForBackup() else { return }
+            }
+            _ = self.installUserTree(replaceExisting: true)
+        }
+    }
+
     private func confirmRestoreShippedFilesOnMain() {
         let alert = NSAlert()
         alert.alertStyle = .critical          // caution icon

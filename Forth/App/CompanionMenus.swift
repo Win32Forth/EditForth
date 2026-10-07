@@ -90,10 +90,10 @@ enum CompanionMenus {
             NotificationCenter.default.post(name: .toolsEdit, object: nil)
         }
         fileMenu.addItem(NSMenuItem.separator())
-        add(fileMenu, title: "Update User Data in 64Forth Folder", key: "", mods: []) {
+        add(fileMenu, title: "Update User Data in EditForth Folder", key: "", mods: []) {
             FileHost.shared.installUserTree(replaceExisting: false)
         }
-        add(fileMenu, title: "Restore Shipped Files to 64Forth Folder", key: "", mods: []) {
+        add(fileMenu, title: "Restore Shipped Files to EditForth Folder", key: "", mods: []) {
             FileHost.shared.confirmRestoreShippedFiles()
         }
         add(fileMenu, title: "Show Library Folder", key: "", mods: []) {

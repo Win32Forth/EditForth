@@ -1,7 +1,24 @@
 # 64Forth development status
 
-**Current:** **2.0.2** (build **3**) — dual-app DMG + GitHub **v2.0.2** (INCLUDE/RUN/EMIT, Hayes ACCEPT, ANS THROW fixes)  
+**Current:** **2.0.3** (build **4**) — Forth menu Update/Restore Documents/EditForth (in-tree; last DMG **v2.0.2**)  
 **Last updated:** 2026-10-06
+
+---
+
+## v2.0.3 — Forth menu Update / Restore user data
+
+**Version strings:** marketing **2.0.3**, build **4** (EditForth + companion 64Forth lockstep). **Not** cut as a GitHub/DMG release yet; last shipped DMG remains **v2.0.2**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.0.3 === Oct 6, 2026 10:45 PM ===
+```
+
+### Highlights
+
+- EditForth **Forth** menu: **Update User Data in EditForth Folder** and **Restore Shipped Files to EditForth Folder** (confirm in EditForth; companion FileHost copies shipped Library/AutoLoad/Docs via sock `updateUserTree` / `restoreUserTree`).
+- Companion File menu titles say EditForth Folder (same Documents/EditForth tree).
 
 ---
 

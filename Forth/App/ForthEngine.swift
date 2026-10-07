@@ -70,6 +70,10 @@ final class ForthEngine: NSObject, ForthEngineXPC {
             return .dockState(docked: false)
         case .pushKey:
             return .consoleOutput(text: "")
+        case .updateUserTree:
+            return .consoleOutput(text: "update user tree")
+        case .restoreUserTree:
+            return .consoleOutput(text: "restore user tree")
         }
 
     }

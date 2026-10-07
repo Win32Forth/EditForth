@@ -164,4 +164,47 @@ enum ForthMenuSupport {
     static func presentEdit(workspace: WorkspaceModel) {
         workspace.openPanel()
     }
+
+    /// Forth → Update User Data: fill missing Library/AutoLoad/Docs from companion ship.
+    static func updateUserData(forth: ForthConnectionManager) {
+        guard forth.isConnected else {
+            forth.noteUserError("Start Forth before updating Documents/EditForth")
+            return
+        }
+        forth.send(.updateUserTree)
+    }
+
+    /// Forth → Restore Shipped Files: confirm in EditForth, then companion replace.
+    static func restoreShippedFiles(forth: ForthConnectionManager) {
+        guard forth.isConnected else {
+            forth.noteUserError("Start Forth before restoring Documents/EditForth")
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Restore shipped EditForth files?"
+        alert.informativeText =
+            "This replaces Library, AutoLoad, and Docs in Documents/EditForth. " +
+            "Any changes you made in that folder will be lost unless you rename it first."
+        alert.addButton(withTitle: "Rename EditForth")
+        alert.addButton(withTitle: "Replace EditForth")
+        alert.addButton(withTitle: "Cancel")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            forth.send(.restoreUserTree(renameFirst: true))
+        case .alertSecondButtonReturn:
+            let sure = NSAlert()
+            sure.alertStyle = .critical
+            sure.messageText = "Are you sure?"
+            sure.informativeText =
+                "Documents/EditForth will be overwritten. Your edits in that folder will be deleted."
+            sure.addButton(withTitle: "Yes")
+            sure.addButton(withTitle: "Cancel")
+            guard sure.runModal() == .alertFirstButtonReturn else { return }
+            forth.send(.restoreUserTree(renameFirst: false))
+        default:
+            break
+        }
+    }
 }

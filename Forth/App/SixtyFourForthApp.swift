@@ -61,10 +61,10 @@ struct SixtyFourForthApp: App {
 
                 Divider()
 
-                Button("Update User Data in 64Forth Folder") {
+                Button("Update User Data in EditForth Folder") {
                     FileHost.shared.installUserTree(replaceExisting: false)
                 }
-                Button("Restore Shipped Files to 64Forth Folder") {
+                Button("Restore Shipped Files to EditForth Folder") {
                     FileHost.shared.confirmRestoreShippedFiles()
                 }
                 Button("Show Library Folder") {
