@@ -4,27 +4,29 @@ Captured 2026-10-06 from product discussion. Working notes — not a shipped des
 
 ---
 
-## 1. Automated release pipeline (64Forth + dual-app DMGs)
+## 1. Automated release pipeline (64Forth + dual-app DMGs) — **done (v1 script)**
 
 Goal: one repeatable path so version bumps, validation, samples, DMG, docs, commit/push, and GitHub release stay in sync and avoid manual mistakes.
 
-### Intended sequence
-1. **Bump version** — marketing + build for the relevant apps (EditForth lockstep companion when shipping EditForth; standalone 64Forth when shipping 64Forth). Mirror stamps in Info.plist / pbxproj / console banner / STATUS / README / DESIGN as today.
-2. **Update docs** — README, DESIGN, STATUS, release notes draft; Gatekeeper / “Getting … to run” collage if UI changed.
-3. **ANS-VALIDATE** — run and require a clean result (no errors).
-4. **Hayes suite** — run and require a clean result (no errors). **"Hayes suite needs to accept automated key input so the ACCEPT test can succeed, but not by modifying the test itself, but by modifying the system to feed it keys automatically. If this is not possible, then we need to skip the ACCEPT test so that the tests run without user input."** **Done (host):** `KernelBridge` auto-feeds `hayes-accept` + Return when emit shows the stock `PLEASE TYPE UP TO 80 CHARACTERS:` prompt (EditForth companion); suite sources unchanged.
-5. **App-window smoke** — built-in GRAPHICS smokes (`GRAPHICS-SMOKE`, `GRAPHICS-PSMOKE`, `GRAPHICS-CSMOKE` as appropriate) under a real window (not `--agent` for KEY loops).
-6. **Sample programs** — build and run several Sample / Emitter stand-alones (e.g. lines-demo / RUN-LINES, IMAGEVIEW64, EDIT64 or current Sample set); confirm they launch and basic interaction works. **"This may be a challenge, since these programs normally require user input, so we may just see if they run and then shut them down."**
-7. **Release DMG** — create the new dual-app (or single-app) DMG; include updated install aids.
-8. **Retire old DMG** — remove previous `Releases/*-macOS.dmg` from the tree when replacing. **"Move the old dmg to the trash."**
-9. **DMG contents** — refresh docs and “Getting … to run.jpg” (and README.pdf if used) **inside** the DMG volume as well as `Releases/`.
-10. **Commit + push** — stage release assets + docs; leave `HYPER.NDX` / local noise unstaged.
-11. **GitHub release** — tag, notes, attach DMG + collage (+ PDF if applicable).
+**v1 script:** `scripts/release.sh` (helpers in `scripts/lib/release-common.sh`). EditForth dual-app only. Subcommands: `bump`, `validate`, `emit-smoke`, `archive`, `dmg`, `prep`. Does **not** trash old DMGs, commit, push, or `gh release create`. Smoked: `validate` (ANS + Hayes), `emit-smoke` (VED64), `archive` → stage both apps, `dmg --out /tmp/…`.
 
-### Automation shape (later)
-- Prefer a single script or documented checklist under the repo (e.g. `scripts/release.sh` or `.grok` workflow) that fails fast on ANS/Hayes/smoke. Hayes ACCEPT auto-feed is in the host (see §1 step 4); no suite edit required.
-- Keep human confirmation before `gh release create` / force-push / deleting old DMGs until trusted.
-- EditForth and standalone 64Forth may share steps but different version lines and DMG layouts.
+### Intended sequence
+1. **Bump version** — **scripted (`bump` / `prep`):** marketing + build lockstep; pbxproj, Info.plist, banners, STATUS/README/DESIGN stubs. Review STATUS prose before ship.
+2. **Update docs** — bump touches version lines; release notes / collage refresh still human as needed.
+3. **ANS-VALIDATE** — **scripted (`validate`):** `--agent` + `FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth`; require `ALL PASS` / `0 failed`.
+4. **Hayes suite** — **scripted (`validate`):** require `HAYES: ALL COUNTS ZERO — PASS`. **Done (host):** ACCEPT auto-feed (`hayes-accept` + Return) on stock prompt; suite unchanged.
+5. **App-window smoke** — **deferred** (GUI KEY loops).
+6. **Sample programs** — **v1 emit-smoke:** `Sample/VED64.fth` via `EMIT-AUTO-FILE`; require `VED64.app` + clean quiet log. Full interactive Sample runs deferred.
+7. **Release DMG** — **scripted (`archive` + `dmg`):** Archive → stage apps + collage JPG + README.pdf → `diskutil image create` UDZO under `Releases/EditForth-<ver>-macOS.dmg`.
+8. **Retire old DMG** — **human:** trash previous `Releases/*-macOS.dmg` after the new one is ready.
+9. **DMG contents** — collage + PDF copied into the volume by `dmg`.
+10. **Commit + push** — **human ask** after trash; leave `HYPER.NDX` unstaged.
+11. **GitHub release** — **human ask** (tag, notes, attach DMG + collage).
+
+### Automation shape
+- `./scripts/release.sh prep <ver> <build> [--stamp "…"] [--force]` runs bump → archive → validate → emit-smoke → dmg, then prints the handoff checklist.
+- Keep human confirmation before `gh release create` / deleting old DMGs.
+- Standalone 64Forth / 64Edit automation later.
 
 ---
 
@@ -94,7 +96,7 @@ Emitter works well but is noisy on the console.
 2. EditForth FLOAD-current button + function key (pick key).
 3. Auto-ANEW + Run-default button.
 4. `APP-WINDOW` / `STAND-ALONE` directives + Emit button.
-5. Release automation script wrapping ANS → Hayes → smokes → samples → DMG → git → `gh release`.
+5. Release automation script wrapping ANS → Hayes → smokes → samples → DMG → git → `gh release`. **Done (v1):** `scripts/release.sh`; human still trashes old DMG and asks for commit/push/`gh`.
 
 ---
 
