@@ -139,7 +139,7 @@ cmd_bump() {
       "$ROOT/Forth/Resources/Docs/STATUS.md" || true
   fi
   if [[ -f "$ROOT/README.md" ]]; then
-    perl -i -pe "s/\\*\\*Version:\\*\\* \\*\\*[0-9.]+\\*\\* \\(build \\*\\*[0-9]+\\*\\*)/**Version:** **$ver** (build **$build**)/" \
+    perl -i -pe "s/\\*\\*Version:\\*\\* \\*\\*[0-9.]+\\*\\* \\(build \\*\\*[0-9]+\\*\\*\\)/**Version:** **$ver** (build **$build**)/" \
       "$ROOT/README.md" || true
   fi
   if [[ -f "$ROOT/DESIGN.md" ]]; then

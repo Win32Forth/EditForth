@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.0.2** (build **3**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG remains `Releases/EditForth-2.0.1-macOS.dmg` (tag **v2.0.1**); **2.0.2** is in-tree (INCLUDE/RUN/EMIT) without a new DMG yet. First public release was **v2.0.0**.
+**Version:** **2.0.2** (build **3**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG is `Releases/EditForth-2.0.2-macOS.dmg` (tag **v2.0.2**). First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 

@@ -1,13 +1,13 @@
 # 64Forth development status
 
-**Current:** **2.0.2** (build **3**) — editor INCLUDE/RUN/EMIT + Sample emit fixes (no DMG tonight)  
+**Current:** **2.0.2** (build **3**) — dual-app DMG + GitHub **v2.0.2** (INCLUDE/RUN/EMIT, Hayes ACCEPT, ANS THROW fixes)  
 **Last updated:** 2026-10-06
 
 ---
 
 ## v2.0.2 — Editor INCLUDE / RUN / EMIT + Sample emit
 
-**Version strings:** marketing **2.0.2**, build **3** (EditForth + companion 64Forth lockstep). **Not** cut as a GitHub/DMG release yet; last shipped DMG remains **v2.0.1**.
+**Version strings:** marketing **2.0.2**, build **3** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.0.2** (`Releases/EditForth-2.0.2-macOS.dmg`).
 
 **Console header stamp:**
 
