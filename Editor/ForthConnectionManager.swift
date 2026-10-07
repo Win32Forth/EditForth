@@ -49,8 +49,45 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// Bumps on successful VIEW so the console transcript can refresh even when
     /// `consoleLines` are unchanged (editor open/layout left the clip view blank).
     @Published private(set) var consoleRefreshSeq: UInt = 0
+    /// Bumps when RUN / F5 family wants the console input line replaced (see `consoleFillText`).
+    @Published private(set) var consoleFillSeq: UInt = 0
+    /// Text for the editable console tail (no trailing newline — user presses Return).
+    @Published private(set) var consoleFillText: String = ""
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
+
+    /// How F5 / ⌘F5 / ⌘⇧F5 / RUN should fill the console from LAST.
+    enum RunLineKind {
+        /// `NAME` — user may prepend stack args, then Return.
+        case execute
+        /// `DEBUG NAME`
+        case debug
+        /// `BPGO NAME`
+        case bpgo
+    }
+
+    private var pendingRunKind: RunLineKind?
+
+    /// F5 keyCode 96 → run-line kind from chords. Nil if not F5 or Option/Control held.
+    /// Unions `NSEvent.modifierFlags` because some F-key deliveries omit ⌘/⇧ on the event.
+    static func runLineKind(from event: NSEvent) -> RunLineKind? {
+        guard event.keyCode == 96 else { return nil }
+        var flags = event.modifierFlags
+        flags.formUnion(NSEvent.modifierFlags)
+        let mods = flags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.option) || mods.contains(.control) { return nil }
+        if mods.contains(.command), mods.contains(.shift) { return .bpgo }
+        if mods.contains(.command) { return .debug }
+        return .execute
+    }
+
+    /// RUN button click — read chords at click time (⌘ → DEBUG, ⌘⇧ → BPGO).
+    static func runLineKindFromCurrentModifiers() -> RunLineKind {
+        let mods = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if mods.contains(.command), mods.contains(.shift) { return .bpgo }
+        if mods.contains(.command) { return .debug }
+        return .execute
+    }
     /// User preference: console under the status strip (true) vs floating window (false).
     /// `isForthDocked` is updated by dock/undock/hide/connect — not here — so
     /// init and preference writes do not nest a second `@Published` set.
@@ -176,6 +213,32 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleEmitBuffer = "\u{0c}"
         consoleEmitSeq &+= 1
         consoleRefreshSeq &+= 1
+    }
+
+    /// Editor-side refusal (no open tab, debugger armed, …) — sticky strip + console.
+    func noteUserError(_ message: String) {
+        lastError = message
+        appendConsole("Error: \(message)\n")
+    }
+
+    /// Non-error console note (e.g. Emitting…) — no red status strip.
+    func noteInfo(_ message: String) {
+        appendConsole("\(message)\n")
+    }
+
+    /// Query LAST and put `NAME` / `DEBUG NAME` / `BPGO NAME` on the console input line.
+    /// Does not submit — user edits (e.g. stack args) and presses Return.
+    func prepareRunLine(_ kind: RunLineKind) {
+        guard isConnected else {
+            noteUserError("Forth is not connected")
+            return
+        }
+        guard !isDebugSessionArmed else {
+            noteUserError("debugger paused — use Step/Continue")
+            return
+        }
+        pendingRunKind = kind
+        send(.queryLastName)
     }
 
     /// First paint of the empty console — keep banner in durable transcript too.
@@ -671,6 +734,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private func apply(_ response: ForthResponse) {
         switch response {
         case .consoleOutput(let text):
+            // Empty payload is the executeCommand success/BYE ack from the
+            // companion — clear a sticky red strip after a clean Return.
+            if text.isEmpty {
+                lastError = nil
+            }
             appendConsole(text)
         case .breakpointHit(let line, let stackTrace):
             appendConsole("BREAK line \(line)")
@@ -683,6 +751,13 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             // Late duplicate step/resume after disarm is a race, not a connection
             // failure — keep it out of the sticky red status line.
             if message == "debugger not armed" {
+                return
+            }
+            // Forth evaluate faults (status=-1, etc.) already print the real
+            // message in the console ("memory access error"). Do not pin the
+            // opaque status=N string under "Engine connected".
+            if message.hasPrefix("status=") || message.hasPrefix("load status=") {
+                appendConsole("Error: \(message)")
                 return
             }
             lastError = message
@@ -727,6 +802,26 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             }
         case .breakpoints(let entries):
             breakpointEntries = entries
+        case .lastName(let name):
+            guard let kind = pendingRunKind else { return }
+            pendingRunKind = nil
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                noteUserError("LAST has no name")
+                return
+            }
+            let line: String
+            switch kind {
+            case .execute: line = trimmed
+            case .debug: line = "DEBUG \(trimmed)"
+            case .bpgo: line = "BPGO \(trimmed)"
+            }
+            // Ensure a console can receive the fill (hidden floating → show).
+            if consoleHidden {
+                unhideForthConsole()
+            }
+            consoleFillText = line
+            consoleFillSeq &+= 1
         case .dockState:
             // Legacy window-dock ack — editor owns dock/undock via preferDocked.
             isForthDocked = preferDocked

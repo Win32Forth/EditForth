@@ -35,47 +35,48 @@ Editor-driven load / run / emit for the **current tab**, with less boilerplate i
 ### Buttons / keys (function key TBD — user does not remember which)
 | Action | Intent |
 |--------|--------|
-| **FLOAD current** | Status-panel button + function key: `FLOAD` / `INCLUDED` the file of the active editor tab. **Button can be INCLUDE (F4?), and it INCLUDEs the current editor tab file. The system automatic ANEW can use the base filename\_MODULE as the filename"**|
-| **Run default** | Button: run the “default” entry (conventionally `MAIN` or last agreed runner) for the current project after load. **Button can just be named RUN (F5) with a floating text of "Run LAST FLOADed", and the button uses LAST to decide what to run."**|
-| **Emit stand-alone** | Button: emit current program to a `.app` after ensuring it has been built; place artifacts beside the source or in a known output dir. **Button name can be EMIT (no F key)with a floating text of "Emit Window App"**|
+| **FLOAD current** | **Done:** status-panel **INCLUDE** + **F4** (also Forth → INCLUDE Current). Saves the tab if dirty/Untitled, `ANEW <STEM>_MODULE`, then `S" path" INCLUDED`. Menu **FLOAD…** (⇧⌘L) stays the open-panel path without auto-ANEW. |
+| **Run default** | **Done (fill, not auto-exec):** status **RUN** + **F5** put `LAST`’s name on the console input; user may add stack args, then Return. **⌘F5** → `DEBUG <name>`; **⌘⇧F5** → `BPGO <name>`. Later: highlighted token in the editor overrides LAST. |
+| **Emit stand-alone** | **Done:** status **EMIT** / Forth → EMIT Current. Re-INCLUDEs the tab, then **`EMIT-AUTO-FILE`** (stem = main path). Output under **Documents/EditForth** (`./<STEM>.app`). Default = window wrap of **LAST** + “Press a key to exit” + **KEY DROP**. See `Docs/EMIT-AUTO.md`. |
 
 ### Auto-ANEW on editor load/run
-- When loading/running from the editor buttons (not necessarily every bare console `FLOAD`), wrap or prepend an automatic **ANEW** (or equivalent forget/marker) so the same file can be reloaded repeatedly **without** the user putting `ANEW` at the top of the file. **The automatic ANEW can be the base "filename\_MODULE" so it is unique to every file we FLOAD**.
-- Scope carefully: only the words defined by that session/file, or a named marker tied to the buffer — exact semantics TBD.
+- **Done:** editor INCLUDE/EMIT use `ANEW <STEM>_MODULE` plus `EMIT-FLAGS-RESET` before `INCLUDED`.
 
-### Source directives (file head)
+### Source directives (Forth no-ops near top of main file)
 | Directive | Intent |
 |-----------|--------|
-| **`APP-WINDOW`** | Declare that this program targets the App Output / GRAPHICS window (not console-only). Drives search order, I/O remap, and run/emit defaults. |
-| **`STAND-ALONE`** | Declare intent to emit a stand-alone app; implies / pairs with `APP-WINDOW` and sets up emit via `EMIT-WINDOW-APP` (or successor) for the designated runner word. |
+| *(none)* | Window `.app`: wrap **LAST** with `WINDOW`, print **Press a key to exit**, `KEY DROP`, `WINDOW-OFF`. Basename = main file stem (`LAST-INCLUDED`), not a sub-INCLUDE. |
+| **`EMIT-NO-PAUSE`** | Window wrap **without** the pause (program keeps running until the user exits). |
+| **`EMIT-NO-WINDOW`** | **Terminal/stdout** stand-alone (`EMIT-APP` style). Implies no auto pause — run from Terminal, not as a double-click GUI. |
+| **`EMIT-NO-WRAPPER`** | **Power user only:** emit **LAST** with stock `EMIT-WINDOW-APP` / `EMIT-APP` wraps (no auto pause message). You own `WINDOW` / `KEY` / color modes yourself. |
 
-Exact Forth spelling (`APP-WINDOW`, comment form, or `REQUIRE`-style) TBD; should be obvious at the top of the file.
+`APP-WINDOW` / `STAND-ALONE` were dropped in favor of the above.
 
 ### Run / emit conventions
-- User supplies a default entry (e.g. `MAIN` or `RUN-…`) at the end of the source (or named by directive).
-- **Run** button: load (with auto-ANEW) → run that entry. **"Not a bad idea, could be linked to the LAST definition compiled."**
-- **Emit** button: ensure loaded/built → `EMIT-WINDOW-APP` (window) using `STAND-ALONE` / `APP-WINDOW` settings → write `.app` (+ image) next to project or under a Releases/build folder. **"No, for now we are going to always EMIT to the Documents/EditForth folder. This will simplify where the user needs to look to find their emmitted program."**
+- **Run:** F5 family fills console from **LAST** (done).
+- **Emit:** always to **Documents/EditForth**; see directives above.
 
 ### Open decisions
-- Which function key for FLOAD-current (and whether Run/Emit get keys too). **" INCLUDE-F4, RUN-F5"**
-- Marker name / ANEW strategy for multi-file projects.
-- Whether directives are parsed by the editor host, by a small prelude, or by Forth words in Autoload.
+- INCLUDE = F4, RUN = F5 family (done). EMIT has no function key (button/menu).
+- Marker / ANEW: `<STEM>_MODULE` (done).
+- Directives: Forth words in Emitter/`EMIT-OPT` (done).
 
 ---
 
-## 3. Quiet Emitter (log beside the app)
+## 3. Quiet Emitter (log beside the app) — done (host, 2.0.1+)
 
 Emitter works well but is noisy on the console.
 
-### Wanted behavior
-- On successful (and failed) emit, **redirect Emitter console chatter to a log file** beside the built app (e.g. `MyApp.app` + `MyApp.emit.log` or `Contents/…` sibling in the output directory).
-- Console stays quiet when emit succeeds; user opens the log only for debugging. **"Console can receive a brief error message if EMIT fails, and a brief success message when it succeeds, along with the full path of where the app was diposited."**
-- Preserve full transcript (reach, reloc, sizes, warnings).
+### Behavior (`KernelBridge`)
+- During `EMIT-APP` / `EMIT-WINDOW-APP` (and XT/TO forms), TYPE/EMIT is captured off-console.
+- Full transcript → **`<stem>.emit.log`** beside the built `.app`.
+- Success console: `Emitted /full/path/NAME.app` + `log: /full/path/NAME.emit.log`.
+- Failure console: `Emit failed — see /full/path/….emit.log` + last ~12 log lines.
+- Escape hatch: **`EMIT_VERBOSE=1`** keeps the full transcript on the console.
 
-### Implementation sketch (later)
-- Host or Emitter hook: capture `TYPE`/`EMIT` during `EMIT-WINDOW-APP` / `TGT-BUILD`, or tee Forth output to a file for that span.
-- Always write the log; optionally print a one-line console summary: `Emitted MyApp.app (see MyApp.emit.log)`.
-- **Are there really other options for EMIT, can EMIT without WINDOW actually emit a program that runs in a terminal?**
+### EMIT-APP vs EMIT-WINDOW-APP
+- **`EMIT-WINDOW-APP`**: GRAPHICS / App Output stand-alone (window I/O remap).
+- **`EMIT-APP`**: console / terminal stand-alone (`SA-PRINT` → stdout); no App Output window.
 
 ---
 

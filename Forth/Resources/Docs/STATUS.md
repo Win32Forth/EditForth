@@ -1,7 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.0.1** (build **2**) — companion GRAPHICS/FLOAD fixes; DMG/GitHub **v2.0.1**  
+**Current:** **2.0.2** (build **3**) — editor INCLUDE/RUN/EMIT + Sample emit fixes (no DMG tonight)  
 **Last updated:** 2026-10-06
+
+---
+
+## v2.0.2 — Editor INCLUDE / RUN / EMIT + Sample emit
+
+**Version strings:** marketing **2.0.2**, build **3** (EditForth + companion 64Forth lockstep). **Not** cut as a GitHub/DMG release yet; last shipped DMG remains **v2.0.1**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.0.2 === Oct 6, 2026 9:29 PM ===
+```
+
+### Highlights
+
+- Status **INCLUDE** / **F4**: save if needed, `EMIT-FLAGS-RESET`, `ANEW <STEM>_MODULE`, `INCLUDED`.
+- Status **RUN** / **F5**: fill console with `LAST` (⌘F5 `DEBUG`, ⌘⇧F5 `BPGO`); NSTextView F5 Complete stolen for RUN.
+- Status **EMIT** / EMIT Current: reload tab then `EMIT-AUTO-FILE` (stem from main path). Default window wrap + “Press a key to exit”; directives `EMIT-NO-PAUSE` / `EMIT-NO-WINDOW` / `EMIT-NO-WRAPPER`. Docs: `Docs/EMIT-AUTO.md`.
+- `ANEW` uses `FORGET` (prunes all wordlists) so GRAPHICS apps re-EMIT cleanly; busy evaluate rejects queued EMITs; quiet emit progress + ABORT false-positive fix.
+- Kernel `FORGET` wordlist_reg prune; high-level `INCLUDED` notes host last-load path.
+- Sample emit polish: `IMAGEVIEW64`, `MIDNIGHT` (`HANOI-MOVE`, `ARRAY` ALIGN, GRAPHICS `AT`/`CLS`), doodle/edit/ved directives; `HELLO.fth` + `BRESENHAM.fth` in Sample.
 
 ---
 

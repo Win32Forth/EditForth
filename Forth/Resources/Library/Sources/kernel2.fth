@@ -321,6 +321,10 @@ DOC" REQUIRE ( 'name' -- ) load file once (PARSE-NAME REQUIRED)"
 : REQUIRE PARSE-NAME REQUIRED ;
 
 DOC" MARKER ( 'name' -- ) restore point: HERE + all FORTH hash heads"
+\ NOTE: executing a MARKER only restores FORTH (LATEST) heads. Vocabularies
+\ defined after the marker (e.g. GRAPHICS words in IMAGEVIEW64) keep stale
+\ thread heads into reclaimed dictionary — FIND can spin forever. Prefer ANEW,
+\ which FORGETs (prunes every registered wordlist) before recreating the marker.
 : MARKER
   HERE DICT-THREADS 0 DO LATEST I CELLS + @ LOOP
   CREATE
@@ -336,19 +340,24 @@ DEFER ANEW-HOOK
 ' ANEW-HOOK-NOP IS ANEW-HOOK
 
 DOC" ANEW ( 'name' -- ) FORGET name if present, then CREATE reload marker"
+\ Must FORGET (not EXECUTE the old MARKER): FORGET prunes GRAPHICS and every
+\ registered wid. MARKER DOES> only rewinds FORTH heads and leaves other wids
+\ pointing into cut dictionary (IMAGEVIEW64 re-EMIT hang in FIND/fw_loop).
 : ANEW
   >IN @ >R
   BL WORD DUP COUNT TYPE            \ display the module name
-  FIND                              \ is the module defined
-  IF EXECUTE                        \ if it is execute it to get rid of it
-    S"  :Reloading module " TYPE    \ then display reloading message
+  FIND IF
+    DROP                            \ discard xt; do not EXECUTE MARKER
+    R@ >IN !                        \ re-parse name for FORGET
+    FORGET                          \ prune ALL wordlist heads at cut
+    S"  :Reloading module " TYPE
   ELSE
-    DROP                            \ not defined, discard FIND address
-    S"  :Loading module " TYPE      \ dislay loading message
-  THEN CR                           \ add a new line
+    DROP
+    S"  :Loading module " TYPE
+  THEN CR
   R> >IN !                          \ restore input pointer for MARKER
-  MARKER                            \ define the new marker
-  ANEW-HOOK ;                       \ discard stale debug maps, etc.
+  MARKER
+  ANEW-HOOK ;
 
 \ --- 7. Double-Number ---
 DOC" 2CONSTANT ( x1 x2 'name' -- ) create double constant"

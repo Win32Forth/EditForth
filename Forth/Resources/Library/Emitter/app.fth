@@ -30,6 +30,10 @@
 \
 \ Forces /EMIT-STANDALONE + /EMIT-UNBOUND, TGT-BUILDs, SAVE-IMAGEs, then
 \ runs Library/Emitter/app-build.sh via SYSTEM (found via LIBRARY-PATH).
+\
+\ Quiet log (host): EMIT-APP / EMIT-WINDOW-APP console chatter is captured to
+\ <stem>.emit.log beside the .app; the Forth console gets a one-line summary.
+\ Set environment EMIT_VERBOSE=1 to keep the full transcript on the console.
 
 ONLY FORTH ALSO SYSVOC ALSO EMITTER DEFINITIONS
 DECIMAL
@@ -290,6 +294,7 @@ S" WINDOW"     (EMIT-GFX-XT) CONSTANT (EMIT-GFX-WINDOW)
 S" WINDOW-OFF" (EMIT-GFX-XT) CONSTANT (EMIT-GFX-WINDOW-OFF)
 S" APP-NAME"   (EMIT-GFX-XT) CONSTANT (EMIT-GFX-APP-NAME)
 S" TYPE"       (EMIT-GFX-XT) CONSTANT (EMIT-GFX-TYPE)
+S" CR"         (EMIT-GFX-XT) CONSTANT (EMIT-GFX-CR)
 
 \ Error path only — success-path KEY belongs in the app source (e.g. PIMAIN),
 \ same as tetra: ONLY FORTH ALSO GRAPHICS … KEY … Host (APP-KEY) waits;
@@ -308,7 +313,7 @@ S" TYPE"       (EMIT-GFX-XT) CONSTANT (EMIT-GFX-TYPE)
 \ :NONAME  title APP-NAME WINDOW
 \   <xt> CATCH ?DUP IF win-handler THEN
 \   WINDOW-OFF ;
-\ No automatic KEY here — the entry word decides (KEY DROP under GRAPHICS).
+\ No automatic KEY here — EMIT-NO-PAUSE / EMIT-NO-WRAPPER paths use this.
 : (EMIT-WIN-WRAP)  ( xt c-addr u -- wxt )
   {: xt a u -- :}
   :NONAME
@@ -320,6 +325,31 @@ S" TYPE"       (EMIT-GFX-XT) CONSTANT (EMIT-GFX-TYPE)
   POSTPONE ?DUP
   POSTPONE IF
     ['] (EMIT-ON-THROW-WIN) COMPILE,
+  POSTPONE THEN
+  (EMIT-GFX-WINDOW-OFF) POSTPONE LITERAL POSTPONE EXECUTE
+  POSTPONE ;
+  ;
+
+\ Default editor EMIT wrap: WINDOW, run xt, ." Press a key to exit" KEY DROP, WINDOW-OFF.
+\ Exception path still uses (EMIT-ON-THROW-WIN) (already waits for a key).
+: (EMIT-WIN-WRAP-PAUSE)  ( xt c-addr u -- wxt )
+  {: xt a u -- :}
+  :NONAME
+  a u POSTPONE SLITERAL
+  (EMIT-GFX-APP-NAME)   POSTPONE LITERAL POSTPONE EXECUTE
+  (EMIT-GFX-WINDOW)     POSTPONE LITERAL POSTPONE EXECUTE
+  xt POSTPONE LITERAL
+  POSTPONE CATCH
+  POSTPONE ?DUP
+  POSTPONE IF
+    ['] (EMIT-ON-THROW-WIN) COMPILE,
+  POSTPONE ELSE
+    \ Same text as ." Press a key to exit" then KEY DROP (GRAPHICS I/O).
+    S" Press a key to exit" POSTPONE SLITERAL
+    (EMIT-GFX-TYPE) POSTPONE LITERAL POSTPONE EXECUTE
+    (EMIT-GFX-CR)   POSTPONE LITERAL POSTPONE EXECUTE
+    (EMIT-GFX-KEY)  POSTPONE LITERAL POSTPONE EXECUTE
+    POSTPONE DROP
   POSTPONE THEN
   (EMIT-GFX-WINDOW-OFF) POSTPONE LITERAL POSTPONE EXECUTE
   POSTPONE ;
@@ -374,4 +404,101 @@ S" TYPE"       (EMIT-GFX-XT) CONSTANT (EMIT-GFX-TYPE)
 
 : EMIT-WINDOW-APP  ( -- )             \ EMIT-WINDOW-APP PIMAIN
   S" ." EMIT-WINDOW-APP-TO ;
+
+\ =============================================================================
+\ Editor EMIT directives (FORTH). Put near the top of the main source file.
+\ Flags are sticky until EMIT-FLAGS-RESET (editor INCLUDE resets them).
+\
+\   (none)            Window app: wrap LAST with WINDOW + "Press a key to exit"
+\                     + KEY DROP. .app basename = main file stem (LAST-INCLUDED).
+\   EMIT-NO-PAUSE     Window wrap without the pause (long-running / interactive).
+\   EMIT-NO-WINDOW    Terminal/stdout stand-alone (EMIT-APP style). Implies no
+\                     pause — run from Terminal, not double-click.
+\   EMIT-NO-WRAPPER   Power user: emit LAST as-is via EMIT-WINDOW-APP / EMIT-APP
+\                     (existing wraps only). Use only if you set up WINDOW/KEY
+\                     yourself (e.g. sample GRAPHICS programs).
+\ =============================================================================
+
+VARIABLE EMIT-OPT
+
+: EMIT-FLAGS-RESET  ( -- )  0 EMIT-OPT ! ;
+
+: EMIT-NO-PAUSE  ( -- )  EMIT-OPT @ 1 OR EMIT-OPT ! ;
+
+: EMIT-NO-WINDOW  ( -- )  EMIT-OPT @ 2 OR EMIT-OPT ! ;
+
+: EMIT-NO-WRAPPER  ( -- )  EMIT-OPT @ 4 OR EMIT-OPT ! ;
+
+: EMIT-NO-PAUSE?    ( -- flag )  EMIT-OPT @ 1 AND 0<> ;
+: EMIT-NO-WINDOW?   ( -- flag )  EMIT-OPT @ 2 AND 0<> ;
+: EMIT-NO-WRAPPER?  ( -- flag )  EMIT-OPT @ 4 AND 0<> ;
+
+\ Stem already in EMIT-NAMEBUF / EMIT-TITLE — pack LAST per EMIT-OPT into outdir.
+: (EMIT-AUTO-PACK)  ( oa ou -- )
+  {: oa ou | xt -- :}
+  LAST DUP 0= IF
+    DROP ." EMIT-AUTO: no LAST definition" CR ABORT
+  THEN
+  TO xt
+
+  EMIT-NO-WRAPPER? IF
+    EMIT-NO-WINDOW? IF
+      /EMIT-CONSOLE
+      xt (EMIT-CATCH-WRAP) TO xt
+      xt oa ou (EMIT-SAVE+PACK-NAMED)
+    ELSE
+      /EMIT-WINDOW
+      xt EMIT-TITLE COUNT (EMIT-WIN-WRAP) TO xt
+      xt oa ou (EMIT-SAVE+PACK-NAMED)
+    THEN
+    EXIT
+  THEN
+
+  EMIT-NO-WINDOW? IF
+    /EMIT-CONSOLE
+    xt (EMIT-CATCH-WRAP) TO xt
+    xt oa ou (EMIT-SAVE+PACK-NAMED)
+    EXIT
+  THEN
+
+  /EMIT-WINDOW
+  EMIT-NO-PAUSE? IF
+    xt EMIT-TITLE COUNT (EMIT-WIN-WRAP) TO xt
+  ELSE
+    xt EMIT-TITLE COUNT (EMIT-WIN-WRAP-PAUSE) TO xt
+  THEN
+  xt oa ou (EMIT-SAVE+PACK-NAMED)
+  ;
+
+\ Main-file path → NAMEBUF/TITLE stem (not a nested INCLUDE's path).
+: (EMIT-AUTO-STEM-FROM)  ( c-addr u -- )
+  DUP 0= IF
+    2DROP ." EMIT-AUTO: empty main-file path" CR ABORT
+  THEN
+  (EMIT-STEM-UPPER!)
+  EMIT-NAMEBUF COUNT EMIT-TITLE PLACE
+  ;
+
+\ Editor EMIT: S" /path/main.fth" EMIT-AUTO-FILE  (outdir = .)
+: EMIT-AUTO-FILE-TO  ( file-addr file-u out-addr out-u -- )
+  {: fa fu oa ou -- :}
+  fa fu (EMIT-AUTO-STEM-FROM)
+  oa ou (EMIT-AUTO-PACK)
+  ;
+
+: EMIT-AUTO-FILE  ( c-addr u -- )
+  S" ." EMIT-AUTO-FILE-TO ;
+
+\ Console helper: stem from LAST-INCLUDED (after high-level INCLUDED fix).
+: EMIT-AUTO-TO  ( c-addr u -- )
+  {: oa ou -- :}
+  LAST-INCLUDED DUP 0= IF
+    2DROP ." EMIT-AUTO: INCLUDE a main file first (LAST-INCLUDED empty)" CR ABORT
+  THEN
+  (EMIT-AUTO-STEM-FROM)
+  oa ou (EMIT-AUTO-PACK)
+  ;
+
+: EMIT-AUTO  ( -- )
+  S" ." EMIT-AUTO-TO ;
 

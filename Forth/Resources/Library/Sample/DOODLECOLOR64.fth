@@ -21,7 +21,9 @@
 \
 \ Public domain.
 
-ANEW DOODLECOLOR64_MODULE
+\ ANEW DOODLECOLOR64_MODULE
+
+EMIT-NO-WRAPPER	\ thisprogram handles the initialization
 
 \ Console credit must use FORTH CR/." — GRAPHICS CR reopens the window.
 ONLY FORTH DEFINITIONS
@@ -322,6 +324,9 @@ ONLY FORTH DEFINITIONS ALSO GRAPHICS
   DC-GRAPH-DRAW
   WINDOW-OFF
   ;
+
+\ The last definition in the source file is used by EMIT to start the program.
 : DOODLECOLOR64  ( -- )  DOODLECOLOR ;
+
 PREVIOUS
 CR .( DOODLECOLOR64 loaded — type DOODLECOLOR to run.) CR

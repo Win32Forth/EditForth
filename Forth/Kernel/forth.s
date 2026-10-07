@@ -532,6 +532,16 @@ _kernel_set_last_load_key:
     str  x0, [x1]
     ret
 
+// void kernel_set_note_last_load(void (*fn)(const char *path, size_t n))
+// High-level INCLUDED → REGISTER-INCLUDED-STR notifies the host so LAST-INCLUDED
+// matches (CODE load_file_hook already sets the key in pinFileContents).
+.globl _kernel_set_note_last_load
+_kernel_set_note_last_load:
+    adrp x1, note_last_load_hook@page
+    add  x1, x1, note_last_load_hook@pageoff
+    str  x0, [x1]
+    ret
+
 // void kernel_set_chdir(void (*fn)(const char *path, size_t n))
 // n==0 → bare CHDIR (host folder picker).
 .globl _kernel_set_chdir
@@ -4665,6 +4675,7 @@ XREG_INC_STR:
     bl   _copy_to_word_scratch     // x0=addr, x1=len → word_scratch; x25=len
     bl   _include_save_name
     bl   _included_register_pending
+    bl   _note_host_last_load      // LAST-INCLUDED / emit stem (high-level INCLUDED)
     NEXT
 
 // REQUIRED ( c-addr u -- )  load once
@@ -5092,6 +5103,25 @@ _copy_to_word_scratch:
     b    2b
 3:
     strb wzr, [x2, x3]
+    ret
+
+// _note_host_last_load: push include_name_pending to FileHost.lastLoadRegistryKey
+// so LAST-INCLUDED matches high-level INCLUDED (not only CODE load_file_hook).
+_note_host_last_load:
+    stp  x29, x30, [sp, #-16]!
+    adrp x0, note_last_load_hook@page
+    add  x0, x0, note_last_load_hook@pageoff
+    ldr  x9, [x0]
+    cbz  x9, 9f
+    adrp x0, include_name_len@page
+    add  x0, x0, include_name_len@pageoff
+    ldr  x1, [x0]
+    cbz  x1, 9f
+    adrp x0, include_name_pending@page
+    add  x0, x0, include_name_pending@pageoff
+    blr  x9
+9:
+    ldp  x29, x30, [sp], #16
     ret
 
 // _include_save_name: word_scratch[0..x25) → include_name_pending + len
@@ -5981,7 +6011,12 @@ _print_wid_name:
 //   CFA < words_user_base (HERE after bootstrap; same fence as WORDS).
 //   Fallback if fence unset: CFA < USER-DICT base.
 // Rewinds HERE to the forgotten CFA. Prunes latest_var, current, search_order,
-// and every VOCABULARY wordlist head found in the FORTH chain.
+// and every registered wordlist (WORDLISTS / (REGISTER-WID)).
+//
+// Do NOT discover vocabularies by scanning for DODOES: VALUE, DEFER, CONSTANT,
+// and other DOES> words also use DODOES, and their PFA is not a wid. Treating
+// those bodies as hash-head arrays makes _prune_wid follow garbage "CFAs" and
+// fault with "memory access error" (repro: : HELLO ; FORGET HELLO).
 //
 // Must SAVE_VM + forget_cut BSS: must not keep cut in x19 (IP for CODE words).
 
@@ -6052,51 +6087,28 @@ XFORGET:
     add  x4, x4, #1
     b    2b
 3:
-    // Scan all FORTH threads for DODOES vocabularies; prune their PFA (wid)
-    adrp x0, DODOES@page
-    add  x0, x0, DODOES@pageoff
-    mov  x20, x0                   // DODOES code (TOS saved by SAVE_VM)
-    mov  x25, #0                   // thread
-40:
-    cmp  x25, #DICT_THREADS
-    b.hs 6f
-    adrp x0, latest_var@page
-    add  x0, x0, latest_var@pageoff
-    add  x0, x0, x25, lsl #3
-    ldr  x21, [x0]                 // cfa walk
-4:
-    cbz  x21, 41f
-    // Guard: CFA must be in user dict range (avoid following garbage links)
-    adrp x0, user_dict_area@page
-    add  x0, x0, user_dict_area@pageoff
-    cmp  x21, x0
-    b.lo 41f
-    // Use dict end (base+logical size) as upper bound for a valid CFA pointer
-    adrp x1, user_dict_area@page
-    add  x1, x1, user_dict_area@pageoff
-    adrp x2, user_dict_size_cell@page
-    add  x2, x2, user_dict_size_cell@pageoff
+    // Prune every registered wid (FORTH + WORDLIST/VOCABULARY).
+    adrp x2, wordlist_reg_n@page
+    add  x2, x2, wordlist_reg_n@pageoff
     ldr  x2, [x2]
-    add  x1, x1, x2
-    cmp  x21, x1
-    b.hs 41f
-    ldr  x0, [x21]
-    cmp  x0, x20
-    b.ne 5f
-    add  x0, x21, #16              // wid = PFA
+    adrp x3, wordlist_reg@page
+    add  x3, x3, wordlist_reg@pageoff
+    mov  x4, #0
+40:
+    cmp  x4, x2
+    b.hs 6f
+    ldr  x0, [x3, x4, lsl #3]
+    cbz  x0, 41f
     adrp x1, forget_cut@page
     add  x1, x1, forget_cut@pageoff
     ldr  x1, [x1]
-    stp  x20, x21, [sp, #-16]!
-    stp  x25, xzr, [sp, #-16]!
+    stp  x2, x3, [sp, #-16]!
+    stp  x4, xzr, [sp, #-16]!
     bl   _prune_wid
-    ldp  x25, xzr, [sp], #16
-    ldp  x20, x21, [sp], #16
-5:
-    ldr  x21, [x21, #-16]
-    b    4b
+    ldp  x4, xzr, [sp], #16
+    ldp  x2, x3, [sp], #16
 41:
-    add  x25, x25, #1
+    add  x4, x4, #1
     b    40b
 6:
     RESTORE_VM
@@ -17859,6 +17871,75 @@ _kbn_done:
     ldp x19, x20, [sp], #16
     ret
 
+// int kernel_last_name(char *buf, int buf_max)
+// Copy NUL-terminated name of LAST (last_cfa). Returns length, or 0 if
+// unnamed (:NONAME), missing, or invalid. Used by EditForth RUN / F5 fill.
+.globl _kernel_last_name
+_kernel_last_name:
+    stp x19, x20, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    mov x20, x0                    // buf
+    mov w21, w1                    // buf_max
+    cbz x20, _kln_empty
+    cmp w21, #2
+    b.lt _kln_empty
+    adrp x0, last_cfa@page
+    add  x0, x0, last_cfa@pageoff
+    ldr  x0, [x0]                  // cfa
+    cbz  x0, _kln_empty
+    tst  x0, #7
+    b.ne _kln_empty
+    ldr  x1, [x0, #-8]
+    and  x1, x1, #0xFFFF           // NFA_OFF
+    cbz  x1, _kln_empty
+    cmp  x1, #4096
+    b.hs _kln_empty
+    sub  x22, x0, x1               // NFA
+    ldrb w0, [x22], #1
+    and  w0, w0, #NFA_LEN_MASK
+    cbz  w0, _kln_empty            // empty name (:NONAME)
+    cmp  w0, #64
+    b.hs _kln_empty
+    mov  x1, #0
+1:
+    cmp  x1, x0
+    b.hs 2f
+    ldrb w2, [x22, x1]
+    cmp  w2, #32
+    b.lo _kln_empty
+    cmp  w2, #126
+    b.hi _kln_empty
+    add  x1, x1, #1
+    b    1b
+2:
+    sub  w21, w21, #1
+    cmp  w0, w21
+    b.ls 3f
+    mov  w0, w21
+3:
+    mov  x1, #0
+4:
+    cmp  x1, x0
+    b.hs 5f
+    ldrb w2, [x22, x1]
+    strb w2, [x20, x1]
+    add  x1, x1, #1
+    b    4b
+5:
+    strb wzr, [x20, x1]
+    b    _kln_done
+_kln_empty:
+    cbz  x20, _kln_zero
+    cmp  w21, #1
+    b.lt _kln_zero
+    strb wzr, [x20]
+_kln_zero:
+    mov  x0, #0
+_kln_done:
+    ldp  x21, x22, [sp], #16
+    ldp  x19, x20, [sp], #16
+    ret
+
 // int kernel_break_enabled(int index)
 // Returns 1 if slot has an xt and a nonzero enable flag, else 0.
 .globl _kernel_break_enabled
@@ -18286,6 +18367,7 @@ begin_load_cwd_hook: .quad 0       // void (*)(path, path_len) — BEGIN-LOAD-CW
 load_file_hook: .quad 0            // int (*)(path, path_len, out_ptr*, out_len*); path_len 0 = bare
 resolve_key_hook: .quad 0          // resolve path → absolute key
 last_load_key_hook: .quad 0        // absolute key of last successful load
+note_last_load_hook: .quad 0       // void (*)(path, path_len) — high-level INCLUDED
 chdir_hook:     .quad 0            // void (*)(path, path_len); path_len 0 = bare picker
 pwd_hook:       .quad 0            // void (*)(void)
 dir_hook:       .quad 0            // void (*)(path, path_len); path_len 0 = list cwd

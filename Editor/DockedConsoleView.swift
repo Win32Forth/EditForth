@@ -51,6 +51,7 @@ struct DockedConsoleView: NSViewRepresentable {
         context.coordinator.forth = forth
         context.coordinator.drainEmit()
         context.coordinator.setConnected(forth.isConnected, debugArmed: forth.isDebugSessionArmed)
+        context.coordinator.applyConsoleFillIfNeeded()
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -61,6 +62,7 @@ struct DockedConsoleView: NSViewRepresentable {
         private var history: [String] = []
         private var historyIndex = -1
         private var lastEmitSeq: UInt = 0
+        private var lastFillSeq: UInt = 0
         private var didBootstrap = false
         private var isProgrammatic = false
 
@@ -209,6 +211,22 @@ struct DockedConsoleView: NSViewRepresentable {
             isProgrammatic = false
         }
 
+        /// RUN / F5 family: put a ready-to-edit line on the input tail and focus the console.
+        func applyConsoleFillIfNeeded() {
+            let seq = forth.consoleFillSeq
+            guard seq != lastFillSeq else { return }
+            lastFillSeq = seq
+            let text = forth.consoleFillText
+            guard !text.isEmpty else { return }
+            replaceUserPortion(text)
+            guard let tv = textView else { return }
+            tv.window?.makeKeyAndOrderFront(nil)
+            tv.window?.makeFirstResponder(tv)
+            let end = (tv.string as NSString).length
+            tv.setSelectedRange(NSRange(location: end, length: 0))
+            tv.scrollRangeToVisible(NSRange(location: end, length: 0))
+        }
+
         func pushTypedCharacter(_ c: Int32) {
             guard forth.isConnected else { return }
             forth.send(.pushKey(code: c))
@@ -274,6 +292,15 @@ final class DockedConsoleTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // F5 family while idle — fill from LAST; block NSTextView Complete (F5).
+        if let forth = coordinator?.forth, !forth.isDebugSessionArmed,
+           let kind = ForthConnectionManager.runLineKind(from: event) {
+            forth.prepareRunLine(kind)
+            return
+        }
+        if event.keyCode == 96, coordinator?.forth.isDebugSessionArmed != true {
+            return
+        }
         // Forward printable keys to companion for KEY waits; still insert locally via super.
         if let chars = event.charactersIgnoringModifiers, chars.count == 1,
            let ch = chars.utf16.first, ch >= 32, ch != 127 {

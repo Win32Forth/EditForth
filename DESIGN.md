@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.0.1** / build **2** for both targets (EditForth + companion 64Forth). Ship: `Releases/EditForth-2.0.1-macOS.dmg` and GitHub tag **v2.0.1** (dual-app). First public release was **v2.0.0**.
+Marketing **2.0.2** / build **3** for both targets (EditForth + companion 64Forth). Last shipped DMG/tag remains **v2.0.1** (`Releases/EditForth-2.0.1-macOS.dmg`); **2.0.2** is committed without a new GitHub release. First public release was **v2.0.0**.
 
 ## Why a new project
 
@@ -33,7 +33,7 @@ EditForth/                 # repo root
 
 ## Companion GRAPHICS (post-2.0.0)
 
-`(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. See `ROADMAP.md` for FLOAD-current / Run / Emit / quiet Emitter plans.
+`(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. Editor status **INCLUDE** / **RUN** / **EMIT** and `EMIT-NO-*` directives: see `ROADMAP.md` and `Forth/Resources/Docs/EMIT-AUTO.md`. Live Autoload uses `~/Documents/EditForth/Library`; copy Sample/Emitter edits back into `Forth/Resources/Library/` before shipping.
 
 Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
 

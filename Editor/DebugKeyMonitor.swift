@@ -2,9 +2,11 @@
 //  DebugKeyMonitor.swift
 //  64Edit
 //
-//  Window-level DEBUG key routing so F5–F8 work even when the Forth command
-//  field previously stole first responder. Letter keys map only while the
-//  selected tab is in browse (view) mode, so edit-mode typing stays normal.
+//  Window-level key routing so F4 (INCLUDE) and F5–F8 (DEBUG) work even when
+//  the Forth console or editor holds first responder. SwiftUI menu
+//  `.keyboardShortcut` for bare function keys is unreliable; hardware keyCodes
+//  here are the source of truth. Letter keys map only while the selected tab
+//  is in browse (view) mode, so edit-mode typing stays normal.
 //
 
 import AppKit
@@ -66,11 +68,30 @@ final class DebugKeyMonitor {
         if NSApp.modalWindow != nil { return event }
 
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let noChord = !mods.contains(.command) && !mods.contains(.option) && !mods.contains(.control)
+
+        // F4 — INCLUDE current editor tab (editor or console focus).
+        // keyCode 118 = F4 on Apple keyboards (same table as F5=96 … F9=101).
+        if noChord, event.keyCode == 118 {
+            if let forth, let workspace {
+                ForthMenuSupport.includeCurrentTab(workspace: workspace, forth: forth)
+            }
+            return nil
+        }
+
+        // F5 family while idle — fill console from LAST; user presses Return.
+        // When DEBUG is armed, F5 remains Continue (handled below).
+        // Always consume bare/⌘ F5 so NSTextView's default Complete (F5) does not fire.
+        if let forth, !forth.isDebugSessionArmed,
+           let kind = ForthConnectionManager.runLineKind(from: event) {
+            forth.prepareRunLine(kind)
+            return nil
+        }
 
         // F9 / ⌘\ — toggle BREAK under the editor caret (works idle or armed).
         // When the editor is first responder, EditorTextView handles these keys.
         if !EditorFocus.editorIsKeyFirstResponder() {
-            if !mods.contains(.command), event.keyCode == 101 { // F9
+            if noChord, event.keyCode == 101 { // F9
                 NotificationCenter.default.post(name: .sixtyFourEditToggleBreakpoint, object: nil)
                 return nil
             }

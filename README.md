@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.0.1** (build **2**) for both `EditForth.app` and companion `64Forth.app`. Latest DMG: `Releases/EditForth-2.0.1-macOS.dmg` (tag **v2.0.1**). First public release was **v2.0.0**.
+**Version:** **2.0.2** (build **3**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG remains `Releases/EditForth-2.0.1-macOS.dmg` (tag **v2.0.1**); **2.0.2** is in-tree (INCLUDE/RUN/EMIT) without a new DMG yet. First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -40,7 +40,7 @@ Two **separate processes**; one project window in Xcode.
 - The Forth REPL lives **inside** the editor when docked (embedded console).
 - **64Forth** runs as a headless **companion** (`--companion`): kernel + `edit.sock`, no console window of its own.
 - Companion **GRAPHICS** / App Output works from the docked console (open, blit, KEY); bare `FLOAD` / `EDIT` use EditForth panels.
-- Longer-term plans (release automation, status-bar FLOAD/Run/Emit, quiet Emitter logs): see **[ROADMAP.md](ROADMAP.md)**.
+- Status strip **INCLUDE** (F4), **RUN** (F5), **EMIT**; emit directives and Sample notes: **[ROADMAP.md](ROADMAP.md)**, `Forth/Resources/Docs/EMIT-AUTO.md`.
 - **Undock** moves the REPL to a floating window; the red close button **hides** it (**Unhide Forth** brings it back); **Dock** embeds it under the strip again.
 - 64Forth and 64Edit remain the shipped companion pair; EditForth is the place to try the combined direction without interfering with them.
 
@@ -76,7 +76,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 1. Open and view the .jpg image called 'Getting EditForth to run.jpg'.
 2. This image shows a collage of the dialogs you have to traverse to get the MacOS to allow you to open the app. 
 3. Don't despair, it's not that hard, just follow along;
-4. Mount the .dmg file and you will see 64Forth.app and EditForth.app (versions match; current **2.0.1**).
+4. Mount the .dmg file and you will see 64Forth.app and EditForth.app (versions match; last shipped DMG **2.0.1**).
 5. Drag both apps into Applications (recommended) or onto the desktop — keep them in the same folder so EDIT / VIEW can find EditForth beside 64Forth.
 6. Hold down the Control key and click 64Forth.app, then select Open. (Loop back here to do the same thing with EditForth.app)
 7. You will get an error dialog that tells you that the app cannot be verified and will not be opened.

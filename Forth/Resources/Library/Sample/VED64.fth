@@ -27,7 +27,9 @@
 \
 \ Public domain, same as VED.
 
-ANEW VED64_MODULE
+\ ANEW VED64_MODULE
+
+EMIT-NO-WRAPPER		\ This program handles all the window initialization
 
 ONLY FORTH DEFINITIONS
 DECIMAL
@@ -692,13 +694,15 @@ CREATE VED-FIND   VED-FIND-MAX 1+ ALLOT
 
 ONLY FORTH DEFINITIONS ALSO GRAPHICS
 
-: VED64  ( -- )
-  VED-GRAPH
-  WINDOW-OFF
-;
 
 : VED-LOAD  ( c-addr u -- ior )
   ALSO GRAPHICS VED-(LOAD) PREVIOUS
+;
+
+\ This definition has to be last so it can be used by the EMITTER to start the program
+: VED64  ( -- )
+  VED-GRAPH
+  WINDOW-OFF
 ;
 
 PREVIOUS

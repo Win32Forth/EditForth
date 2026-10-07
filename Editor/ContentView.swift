@@ -53,6 +53,7 @@ struct ContentView: View {
                         onDebugStepOut: { forth.stepOut() },
                         onDebugContinue: { forth.resumeDebug() },
                         onDebugStop: { forth.stopDebug() },
+                        onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
                         onCommandClickWord: { word in forth.viewWord(word) },
                         onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
                     )
@@ -187,6 +188,9 @@ struct ContentView: View {
         .onChange(of: forth.consoleLines.count) { _, _ in
             revealForthChromeIfNeeded()
         }
+        .onChange(of: forth.consoleFillSeq) { _, _ in
+            revealForthChromeIfNeeded()
+        }
         .onChange(of: forth.lastError) { _, err in
             if err != nil {
                 revealForthChromeIfNeeded()
@@ -266,12 +270,30 @@ struct ContentView: View {
     /// Status strip + (when docked) companion console. Undocked/hidden: strip only.
     private var consolePane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text(forth.isConnected ? "Engine connected" : "Engine down")
                 if forth.isDebugSessionArmed {
                     Text("· debugging")
                         .foregroundStyle(.orange)
                 }
+                Button("INCLUDE") {
+                    ForthMenuSupport.includeCurrentTab(workspace: workspace, forth: forth)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed || workspace.selectedTab == nil)
+                .help("INCLUDE current tab (F4) — save if needed, ANEW <file>_MODULE, then INCLUDED")
+                .controlSize(.small)
+                Button("RUN") {
+                    forth.prepareRunLine(ForthConnectionManager.runLineKindFromCurrentModifiers())
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+                .help("RUN (F5) — LAST name on the console; Return to run. ⌘F5 / ⌘-click = DEBUG; ⌘⇧F5 / ⌘⇧-click = BPGO")
+                .controlSize(.small)
+                Button("EMIT") {
+                    ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed || workspace.selectedTab == nil)
+                .help("Emit Window App — INCLUDE then EMIT-AUTO (LAST). Default: WINDOW + Press a key to exit. See EMIT-NO-PAUSE / EMIT-NO-WINDOW / EMIT-NO-WRAPPER")
+                .controlSize(.small)
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
                 if forth.isConnected {
@@ -379,6 +401,7 @@ private struct TabEditorPane: View {
     var onDebugStepOut: () -> Void
     var onDebugContinue: () -> Void
     var onDebugStop: () -> Void
+    var onPrepareRunLine: (ForthConnectionManager.RunLineKind) -> Void
     var onCommandClickWord: (String) -> Void
     var onToggleBreakpoint: (String) -> Void
 
@@ -440,6 +463,7 @@ private struct TabEditorPane: View {
                 onDebugStepOut: onDebugStepOut,
                 onDebugContinue: onDebugContinue,
                 onDebugStop: onDebugStop,
+                onPrepareRunLine: onPrepareRunLine,
                 onCommandClickWord: onCommandClickWord,
                 onToggleBreakpoint: onToggleBreakpoint
             )
@@ -447,25 +471,31 @@ private struct TabEditorPane: View {
     }
 }
 
-/// Popover button: BREAK list with enable/disable/delete + paused Arm.
+/// Popover button: click toggles BREAK under the editor caret (same as F9 / ⌘\)
+/// and opens the list to enable/disable/delete / Arm.
 private struct BreakpointsPanelButton: View {
     @ObservedObject var forth: ForthConnectionManager
     @State private var isPresented = false
 
     var body: some View {
         Button {
-            isPresented.toggle()
+            // Same path as F9 / ⌘\ / Debug → Toggle Breakpoint.
+            NotificationCenter.default.post(
+                name: .sixtyFourEditToggleBreakpoint,
+                object: nil
+            )
+            isPresented = true
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "breakpoint")
                 Text(buttonTitle)
             }
         }
-        .help("Breakpoints — enable, disable, delete; Arm while paused")
+        .help("Toggle BREAK on the word under the editor caret (F9 / ⌘\\), then show the list")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             BreakpointsPanel(forth: forth)
-                .frame(minWidth: 280, idealWidth: 320, maxHeight: 360)
-                .padding(10)
+                .frame(minWidth: 300, idealWidth: 340, minHeight: 240, idealHeight: 300, maxHeight: 480)
+                .padding(12)
         }
     }
 
@@ -485,6 +515,15 @@ private struct BreakpointsPanel: View {
                 Text("Breakpoints")
                     .font(.headline)
                 Spacer()
+                Button("Toggle caret") {
+                    NotificationCenter.default.post(
+                        name: .sixtyFourEditToggleBreakpoint,
+                        object: nil
+                    )
+                }
+                .disabled(!forth.isConnected)
+                .help("Toggle BREAK on the word under the editor caret (F9 / ⌘\\)")
+                .controlSize(.small)
                 Button("Arm") {
                     forth.armBreakGo()
                     EditorFocus.request()
@@ -493,16 +532,17 @@ private struct BreakpointsPanel: View {
                 .help(
                     forth.isDebugSessionArmed
                         ? "Continue until an enabled BREAK hits"
-                        : "While idle, type BPGO <word> in the console"
+                        : "While idle, use ⌘⇧F5 / BPGO LAST, or type BPGO <word>"
                 )
                 .controlSize(.small)
             }
 
             if forth.breakpointEntries.isEmpty {
-                Text("None — F9 / ⌘\\ toggles BREAK under the caret")
+                Text("None yet — click Breakpoints / F9 / ⌘\\ on a word in the editor.")
                     .foregroundStyle(.secondary)
                     .font(.system(size: 11))
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
@@ -510,17 +550,26 @@ private struct BreakpointsPanel: View {
                             BreakpointRow(forth: forth, entry: entry)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(minHeight: 88, maxHeight: 280)
             }
 
-            if !forth.isDebugSessionArmed {
-                Text("Arm needs a DEBUG pause. Idle: BPGO <word> runs until a break.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("F9 / ⌘\\ / this button toggles BREAK under the editor caret.")
+                Text(
+                    forth.isDebugSessionArmed
+                        ? "Arm continues until an enabled BREAK hits."
+                        : "Idle: ⌘⇧F5 or BPGO <word> runs until a break."
+                )
             }
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(size: 12, design: .monospaced))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

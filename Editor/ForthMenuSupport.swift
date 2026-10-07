@@ -50,10 +50,100 @@ enum ForthMenuSupport {
         panel.prompt = "Load"
         panel.message = "FLOAD / INCLUDE a Forth source file (Documents/EditForth)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let path = url.path
-        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
+        includeFile(at: url, forth: forth, autoAnew: false)
+    }
+
+    /// Status-panel / F4: save the current tab if needed, `ANEW <stem>_MODULE`, then `INCLUDED`.
+    /// Auto-ANEW lets the same file reload without an `ANEW` line in the source.
+    static func includeCurrentTab(workspace: WorkspaceModel, forth: ForthConnectionManager) {
+        guard forth.isConnected else { return }
+        guard !forth.isDebugSessionArmed else {
+            forth.noteUserError("debugger paused — use Step/Continue")
+            return
+        }
+        guard let tab = workspace.selectedTab else {
+            forth.noteUserError("INCLUDE needs an open editor tab")
+            return
+        }
+        if tab.isDirty || tab.fileURL == nil {
+            guard workspace.saveSelected() else { return }
+        }
+        guard let url = tab.fileURL else {
+            forth.noteUserError("INCLUDE needs a saved file")
+            return
+        }
+        includeFile(at: url, forth: forth, autoAnew: true)
+    }
+
+    /// Status-panel EMIT: re-INCLUDE current tab (flags from source), then `EMIT-AUTO`.
+    /// Artifacts land in Documents/EditForth (companion cwd). Quiet log → `<STEM>.emit.log`.
+    static func emitCurrentTab(workspace: WorkspaceModel, forth: ForthConnectionManager) {
+        guard forth.isConnected else { return }
+        guard !forth.isDebugSessionArmed else {
+            forth.noteUserError("debugger paused — use Step/Continue")
+            return
+        }
+        guard let tab = workspace.selectedTab else {
+            forth.noteUserError("EMIT needs an open editor tab")
+            return
+        }
+        if tab.isDirty || tab.fileURL == nil {
+            guard workspace.saveSelected() else { return }
+        }
+        guard let url = tab.fileURL else {
+            forth.noteUserError("EMIT needs a saved file")
+            return
+        }
+        let path = url.standardizedFileURL.path
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        forth.send(.executeCommand(command: "S\" \(escaped)\" INCLUDED"))
+        let marker = moduleMarkerName(for: url)
+        let stem = url.deletingPathExtension().lastPathComponent.uppercased()
+        // Immediate editor-side feedback: quiet emit hides INCLUDE/emit chatter.
+        forth.noteInfo("Emitting \(stem).app …")
+        // Reset directives, reload main file, emit using *this* path as .app stem
+        // (not LAST-INCLUDED, which can be a nested INCLUDE).
+        forth.send(.executeCommand(command:
+            "EMIT-FLAGS-RESET ANEW \(marker) S\" \(escaped)\" INCLUDED S\" \(escaped)\" EMIT-AUTO-FILE"
+        ))
+    }
+
+    /// `ANEW` marker for editor-driven INCLUDE: `hello.fth` → `HELLO_MODULE`.
+    static func moduleMarkerName(for url: URL) -> String {
+        let stem = url.deletingPathExtension().lastPathComponent
+        var out = ""
+        out.reserveCapacity(stem.count + 8)
+        var lastWasUnderscore = false
+        for ch in stem.uppercased() {
+            let ok = ch.isLetter || ch.isNumber
+            if ok {
+                out.append(ch)
+                lastWasUnderscore = false
+            } else if !lastWasUnderscore {
+                out.append("_")
+                lastWasUnderscore = true
+            }
+        }
+        while out.hasPrefix("_") { out.removeFirst() }
+        while out.hasSuffix("_") { out.removeLast() }
+        if out.isEmpty { out = "UNTITLED" }
+        return out + "_MODULE"
+    }
+
+    private static func includeFile(at url: URL, forth: ForthConnectionManager, autoAnew: Bool) {
+        let path = url.standardizedFileURL.path
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let included = "S\" \(escaped)\" INCLUDED"
+        if autoAnew {
+            let marker = moduleMarkerName(for: url)
+            // Clear EMIT-NO-* so a prior file's directives do not stick.
+            forth.send(.executeCommand(command: "EMIT-FLAGS-RESET ANEW \(marker) \(included)"))
+        } else {
+            forth.send(.executeCommand(command: included))
+        }
     }
 
     static func presentChdir(forth: ForthConnectionManager) {

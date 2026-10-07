@@ -20,6 +20,8 @@
 \
 \ Public domain.
 
+EMIT-NO-WRAPPER		\ don't need a wrapper, this app handles initialization
+
 \ Console credit must use FORTH CR/." — GRAPHICS CR reopens the window.
 ONLY FORTH DEFINITIONS
 DECIMAL
@@ -260,6 +262,9 @@ ONLY FORTH DEFINITIONS ALSO GRAPHICS
   GRAPH-DRAW
   WINDOW-OFF          \ console return; EMIT-WINDOW-APP also WINDOW-OFFs
   ;
+
+\ Need to be the last definition in the dictionary so EMITTER can run it.
 : DOODLE64  ( -- )  DOODLE ;
+
 PREVIOUS
 CR .( DOODLE64 loaded — type DOODLE to run.) CR

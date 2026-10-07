@@ -30,6 +30,8 @@ enum EditorRequest: Codable, Equatable {
     case breakGo(name: String)
     /// Paused: set `debug_bp_go` and Continue (run until enabled BREAK).
     case armBreakGo
+    /// Name of LAST (most recently defined word), for RUN / F5 console fill.
+    case queryLastName
     case stepInto
     case stepOver
     case stepOut
@@ -62,6 +64,8 @@ enum ForthResponse: Codable, Equatable {
     case viewResult(word: String, opened: Bool)
     /// Current BREAK table (after toggle/remove/enable, or on connect).
     case breakpoints(entries: [BreakpointEntry])
+    /// Reply to `queryLastName` (empty string if LAST is unnamed / unset).
+    case lastName(name: String)
     /// Forth window docked under the editor Ping slot (or undocked).
     case dockState(docked: Bool)
     /// Bare EDIT while EditForth is on edit.sock — show the editor Open panel

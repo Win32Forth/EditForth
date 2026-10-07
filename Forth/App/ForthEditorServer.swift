@@ -278,8 +278,21 @@ final class ForthEditorServer {
                 // Not waiting for console KEY — ignore quietly when idle.
             }
             return
+        case .queryLastName:
+            writeResponse(.lastName(name: kernel.lastDefinedName() ?? ""), to: fd)
+            return
         case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:
             break
+        }
+
+        // Do not queue another evaluate behind a long-running one on the main
+        // queue (e.g. IMAGEVIEW / KEY loop). main.async is FIFO, so a second
+        // executeCommand would sit silently until the first returns — EMIT and
+        // console lines look dead. Reject now from the I/O thread.
+        if kernel.isEvaluating {
+            let msg = "busy — finish current command first (Esc/Q in the graphics window, or Stop Forth)"
+            writeResponse(.error(message: msg), to: fd)
+            return
         }
 
         // evaluate / loadFile need the main-thread AppKit pump while KEY waits.
@@ -290,6 +303,8 @@ final class ForthEditorServer {
                 // Kernel holds evalLock while DEBUG waits for KEY; reject with a clear message.
                 if kernel.isAnyDebugArmed {
                     response = .error(message: "debugger paused — use Step/Continue")
+                } else if kernel.isEvaluating {
+                    response = .error(message: "busy — finish current command first")
                 } else {
                     // Editor submitLine always appends \n after the input line before
                     // results stream. If Forth emits nothing, that client newline already

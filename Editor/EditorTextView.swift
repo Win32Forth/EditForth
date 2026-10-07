@@ -37,6 +37,8 @@ struct EditorTextView: NSViewRepresentable {
     var onDebugStepOut: (() -> Void)?
     var onDebugContinue: (() -> Void)?
     var onDebugStop: (() -> Void)?
+    /// Idle F5 / ⌘F5 / ⌘⇧F5 — fill console from LAST (not NSTextView Complete).
+    var onPrepareRunLine: ((ForthConnectionManager.RunLineKind) -> Void)?
     /// ⌘-click on a Forth token → Hyper VIEW via IPC (`VIEW <word>`).
     var onCommandClickWord: ((String) -> Void)?
     /// F9 / ⌘\ / Debug menu: toggle BREAK on the Forth token under the caret.
@@ -697,6 +699,11 @@ struct EditorTextView: NSViewRepresentable {
                 return nil
             }
 
+            // Idle F5 family — steal from NSTextView Complete (default F5 binding).
+            if !parent.isDebugArmed, tryHandleRunKey(event) {
+                return nil
+            }
+
             // DEBUG armed: F-keys / ⌘⇧Y always; Forth letter keys only in view mode
             // so edit-mode typing and the console field stay unaffected.
             if parent.isDebugArmed, tryHandleDebugKey(event) {
@@ -749,6 +756,13 @@ struct EditorTextView: NSViewRepresentable {
                 return true
             }
             return false
+        }
+
+        /// F5 / ⌘F5 / ⌘⇧F5 while idle → console fill from LAST.
+        private func tryHandleRunKey(_ event: NSEvent) -> Bool {
+            guard let kind = ForthConnectionManager.runLineKind(from: event) else { return false }
+            parent.onPrepareRunLine?(kind)
+            return true
         }
 
         /// Consume Forth DEBUG keys while the session is armed. Returns true if handled.
@@ -859,6 +873,11 @@ final class EditorNSTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // Belt-and-suspenders: default F5 binding is Complete — never let it through
+        // if the local monitor somehow misses an idle RUN chord.
+        if event.keyCode == 96 {
+            return
+        }
         if handleHomeEndKeys(event) { return }
         super.keyDown(with: event)
     }

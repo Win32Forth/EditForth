@@ -20,7 +20,10 @@ improvement.  This is my first machine readable publication of this program.
 I may never need another.   Peter Midnight
 
 {
-ANEW MIDNIGHT_MODULE
+\ ANEW MIDNIGHT_MODULE
+
+EMIT-NO-WRAPPER
+
 ONLY FORTH ALSO DEFINITIONS ALSO GRAPHICS    DECIMAL
 
 \ ALIGN after ALLOT — else later CFAs are misaligned and Emitter LIT-PAYLOAD-MARK
@@ -32,9 +35,8 @@ ONLY FORTH ALSO DEFINITIONS ALSO GRAPHICS    DECIMAL
 
 \ TONE — F-PC / TCOM: freq in Hz, dur in tenths of a second (host plays sine).
 : TONE  ( freq dur -- )             \ freq=Hz, dur=tenths of a second
-\  ?REFRESH
-  (APP-TONE)
-  ;
+\       ?REFRESH
+        (APP-TONE) ;
 
 PREVIOUS
 
@@ -48,7 +50,6 @@ ALSO GRAPHICS
 : CLEARSCREEN   ( -- )
         CLS ;
 PREVIOUS
-
 
 COLS 3 - 6 / VALUE NMAX         \ maximum rings for display size
 
@@ -167,8 +168,8 @@ CHAR + VALUE COLOR             \ character used to represent a ring
 ALSO GRAPHICS
 
 : MAIN          ( -- )
-        WINDOW
-        7 TOWERS
-        KEY DROP ;
+         WINDOW
+         7 TOWERS
+         KEY DROP ;
 
 FORTH

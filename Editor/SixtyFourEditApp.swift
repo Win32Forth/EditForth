@@ -144,6 +144,33 @@ struct SixtyFourEditApp: App {
             // Forth actions must live here: the console window is EditForth-owned, so the
             // companion process menu bar never becomes active while you use the REPL.
             CommandMenu("Forth") {
+                // F4 / F5 family are handled in DebugKeyMonitor (bare function-key
+                // menu shortcuts are unreliable in SwiftUI). Titles show the keys.
+                Button("INCLUDE Current (F4)") {
+                    ForthMenuSupport.includeCurrentTab(workspace: workspace, forth: forth)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+
+                Button("RUN LAST (F5)") {
+                    forth.prepareRunLine(.execute)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+
+                Button("DEBUG LAST (⌘F5)") {
+                    forth.prepareRunLine(.debug)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+
+                Button("BPGO LAST (⌘⇧F5)") {
+                    forth.prepareRunLine(.bpgo)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+
+                Button("EMIT Current") {
+                    ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+
                 Button("FLOAD…") {
                     ForthMenuSupport.presentFload(forth: forth)
                 }

@@ -46,6 +46,14 @@ final class FileHost {
     /// Absolute standardized path of the last successful load (REQUIRE registry key).
     private(set) var lastLoadRegistryKey: String?
 
+    /// High-level `INCLUDED` / `REGISTER-INCLUDED-STR` — keep LAST-INCLUDED in sync
+    /// (CODE `load_file_hook` already sets this in `pinFileContents`).
+    func noteLastLoadRegistryKey(_ path: String) {
+        let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !p.isEmpty else { return }
+        lastLoadRegistryKey = (p as NSString).standardizingPath
+    }
+
     /// Last path opened for DEBUG reveal; open -a only when this changes.
     private var lastDebugRevealPath: String?
 

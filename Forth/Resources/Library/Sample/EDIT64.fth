@@ -32,7 +32,9 @@
 \
 \ Public domain.
 
-ANEW EDIT64_MODULE
+\ ANEW EDIT64_MODULE
+
+EMIT-NO-PAUSE		\ don't need the automatic KEY DROP added by teh wrapper.
 
 ONLY FORTH DEFINITIONS
 DECIMAL
@@ -573,11 +575,12 @@ ONLY FORTH DEFINITIONS ALSO GRAPHICS
   WINDOW-OFF
   ;
   
-: EDMAIN  ( -- )  EDIT64 ;
-
 \ Single FORTH names — call GRAPHICS helpers (not same-name wrappers).
 : ED-LOAD  ( c-addr u -- ior )  ALSO GRAPHICS ED-(LOAD) PREVIOUS ;
 : ED-SAVE-AS  ( c-addr u -- ior )  ALSO GRAPHICS ED-(SAVE-AS) PREVIOUS ;
+
+\ EMIT entry word must be the last definition in the source file.
+: EDMAIN  ( -- )  EDIT64 ;
 
 PREVIOUS
 CR .( EDIT64 loaded — EDIT64 to run; S" file" ED-LOAD first optional.) CR

@@ -68,6 +68,12 @@ private func kernel_break_name(
     _ bufMax: Int32
 ) -> Int32
 
+@_silgen_name("kernel_last_name")
+private func kernel_last_name(
+    _ buf: UnsafeMutablePointer<CChar>?,
+    _ bufMax: Int32
+) -> Int32
+
 @_silgen_name("kernel_break_enabled")
 private func kernel_break_enabled(_ index: Int32) -> Int32
 
@@ -184,6 +190,11 @@ private func kernel_set_last_load_key(
         Int,
         UnsafeMutablePointer<Int>?
     ) -> Int32)?
+)
+
+@_silgen_name("kernel_set_note_last_load")
+private func kernel_set_note_last_load(
+    _ fn: (@convention(c) (UnsafePointer<CChar>?, Int) -> Void)?
 )
 
 @_silgen_name("kernel_set_chdir")
@@ -494,6 +505,13 @@ private let kernelLastLoadKeyTrampoline: @convention(c) (
     for i in 0..<n { out[i] = CChar(bitPattern: bytes[i]) }
     outLen?.pointee = n
     return 0
+}
+
+private let kernelNoteLastLoadTrampoline: @convention(c) (UnsafePointer<CChar>?, Int) -> Void = { path, pathLen in
+    guard let path, pathLen > 0 else { return }
+    var bytes = [UInt8](repeating: 0, count: pathLen)
+    for i in 0..<pathLen { bytes[i] = UInt8(bitPattern: path[i]) }
+    FileHost.shared.noteLastLoadRegistryKey(String(decoding: bytes, as: UTF8.self))
 }
 
 private let kernelChdirTrampoline: @convention(c) (UnsafePointer<CChar>?, Int) -> Void = { path, pathLen in
@@ -1774,6 +1792,13 @@ final class KernelBridge {
     private var pendingEmitBytes: [UInt8] = []
     /// True while a main-queue flush of `pendingEmit` is scheduled or running.
     private var emitFlushScheduled = false
+
+    /// Emitter quiet log: capture TYPE/EMIT during EMIT-APP / EMIT-WINDOW-APP
+    /// (and *-XT / *-TO forms), write `Stem.emit.log` beside the `.app`, print
+    /// one console summary. Set `EMIT_VERBOSE=1` in the environment to disable.
+    private var quietEmitActive = false
+    private var quietEmitCapture = ""
+    private var quietEmitHadError = false
     private var keyQueue: [Int32] = []
     private let lock = NSLock()
     /// Wakes a background KEY wait when a key is enqueued (main-thread monitor).
@@ -1839,6 +1864,7 @@ final class KernelBridge {
         kernel_set_load_file(kernelLoadFileTrampoline)
         kernel_set_resolve_key(kernelResolveKeyTrampoline)
         kernel_set_last_load_key(kernelLastLoadKeyTrampoline)
+        kernel_set_note_last_load(kernelNoteLastLoadTrampoline)
         kernel_set_chdir(kernelChdirTrampoline)
         kernel_set_pwd(kernelPwdTrampoline)
         kernel_set_dir(kernelDirTrampoline)
@@ -2107,6 +2133,16 @@ final class KernelBridge {
             entries.append(BreakpointEntry(name: name, enabled: enabled))
         }
         return entries
+    }
+
+    /// Dictionary name of LAST, or nil when unset / :NONAME.
+    func lastDefinedName() -> String? {
+        var buf = [CChar](repeating: 0, count: 64)
+        let n = buf.withUnsafeMutableBufferPointer { bp in
+            kernel_last_name(bp.baseAddress, Int32(bp.count))
+        }
+        guard n > 0 else { return nil }
+        return String(cString: buf)
     }
 
     /// Slot index (0..7) for a BREAK name, or nil.
@@ -2725,6 +2761,14 @@ final class KernelBridge {
             return -3
         }
 
+        let quiet = Self.shouldQuietEmit(for: t)
+        if quiet {
+            // Visible before capture starts — combined INCLUDE+EMIT-AUTO would
+            // otherwise look idle until the .app is finished (or hung).
+            handleEmitString("Emitting…\n")
+            beginQuietEmitLog()
+        }
+
         // Main thread: run kernel off-main so AppKit can deliver keyDown.
         if Thread.isMainThread {
             var status: Int32 = 0
@@ -2759,14 +2803,135 @@ final class KernelBridge {
             }
             // Final emit drain (anything still buffered after last TYPE).
             self.drainEmitBufferToSink()
+            if quiet {
+                finishQuietEmitLog(evalStatus: status)
+            }
             evalLock.unlock()
             return status
         }
 
         let status = runKernelEval(t)
+        if quiet {
+            forceFlushEmitSync()
+            finishQuietEmitLog(evalStatus: status)
+        }
         evalLock.unlock()
         // Off-main callers: still surface open request (ConsoleView handles on main).
         return status
+    }
+
+    /// True for EMIT-APP / EMIT-WINDOW-APP (and XT/TO variants) unless EMIT_VERBOSE=1.
+    private static func shouldQuietEmit(for command: String) -> Bool {
+        if ProcessInfo.processInfo.environment["EMIT_VERBOSE"] == "1" {
+            return false
+        }
+        let u = command.uppercased()
+        // Match public emit entry points; avoid quieting unrelated "EMIT" chatter.
+        let keys = [
+            "EMIT-WINDOW-APP", "EMIT-APP-XT", "EMIT-APP-TO", "EMIT-APP ",
+            "EMIT-APP\t", "EMIT-WINDOW-APP-XT", "EMIT-WINDOW-APP-TO",
+            "EMIT-AUTO", "EMIT-AUTO-TO"
+        ]
+        if keys.contains(where: { u.contains($0) }) { return true }
+        // Bare trailing token: "EMIT-APP" alone
+        let trimmed = u.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "EMIT-APP" || trimmed.hasPrefix("EMIT-APP ")
+            || trimmed == "EMIT-WINDOW-APP" || trimmed.hasPrefix("EMIT-WINDOW-APP ")
+            || trimmed == "EMIT-AUTO" || trimmed.hasPrefix("EMIT-AUTO ")
+    }
+
+    private func beginQuietEmitLog() {
+        lock.lock()
+        quietEmitActive = true
+        quietEmitCapture = ""
+        quietEmitHadError = false
+        lock.unlock()
+    }
+
+    /// Write capture beside the built `.app` (or cwd) and print one console line.
+    private func finishQuietEmitLog(evalStatus: Int32) {
+        lock.lock()
+        quietEmitActive = false
+        var text = quietEmitCapture
+        quietEmitCapture = ""
+        let markedError = quietEmitHadError
+        lock.unlock()
+
+        // Pending buffer may still hold the last lines (quiet path skipped sink flush).
+        lock.lock()
+        absorbEmitBytesLocked()
+        if !pendingEmit.isEmpty {
+            text += pendingEmit
+            pendingEmit = ""
+        }
+        lock.unlock()
+
+        let failed = evalStatus != 0 || markedError || Self.looksLikeEmitFailure(text)
+
+        let appPath = Self.parseEmitAppPath(from: text)
+        let logURL: URL = {
+            if let appPath {
+                let base = (appPath as NSString).deletingPathExtension
+                return URL(fileURLWithPath: base + ".emit.log")
+            }
+            let cwd = FileManager.default.currentDirectoryPath
+            return URL(fileURLWithPath: cwd).appendingPathComponent("emit.emit.log")
+        }()
+
+        do {
+            try text.write(to: logURL, atomically: true, encoding: .utf8)
+        } catch {
+            // Fall through — still print a console note.
+            handleEmitString("EMIT: could not write \(logURL.path): \(error.localizedDescription)\n")
+        }
+
+        if let appPath, !failed {
+            handleEmitString("Emitted \(appPath)\n")
+            handleEmitString("  log: \(logURL.path)\n")
+        } else if failed {
+            handleEmitString("Emit failed — see \(logURL.path)\n")
+            // Short tail so the console still shows the fault without the full reach dump.
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            let tail = lines.suffix(12).joined(separator: "\n")
+            if !tail.isEmpty {
+                handleEmitString(tail)
+                if !tail.hasSuffix("\n") { handleEmitString("\n") }
+            }
+        } else {
+            handleEmitString("Emit finished — see \(logURL.path)\n")
+        }
+    }
+
+    private static func parseEmitAppPath(from text: String) -> String? {
+        // EMIT-APP: built /path/to/NAME.app
+        for line in text.split(separator: "\n") {
+            let s = String(line)
+            guard let r = s.range(of: "EMIT-APP: built ") else { continue }
+            let rest = s[r.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if rest.hasSuffix(".app") { return rest }
+        }
+        return nil
+    }
+
+    /// True only for real emit/build faults — not reach-list names like
+    /// `(EMIT-ON-THROW-WIN)` which contain the substring `THROW`.
+    private static func looksLikeEmitFailure(_ text: String) -> Bool {
+        if text.contains("uncaught THROW") { return true }
+        if text.contains("memory access error") { return true }
+        // Do not match reach-dump lines like "112  ABORT colon" (MIDNIGHT HANOI-MOVE).
+        if text.contains("emit: ABORT reachable") { return true }
+        if text.contains("LIT: unmapped host addr") { return true }
+        if text.contains("PATCH-BL-ABS:") { return true }
+        if text.range(of: #"EMIT-APP:.*failed"#, options: .regularExpression) != nil {
+            return true
+        }
+        if text.range(of: #"EMIT-WINDOW-APP:.*failed"#, options: .regularExpression) != nil {
+            return true
+        }
+        if text.range(of: #"SAVE-IMAGE:.*failed"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
     }
 
     /// Clear open-panel sticky after ConsoleView services it.
@@ -3037,6 +3202,19 @@ final class KernelBridge {
         // all newlines at the end → one long line + trailing blank lines.
         let u = UInt8(truncatingIfNeeded: c)
         lock.lock()
+        if quietEmitActive {
+            pendingEmitBytes.append(u)
+            absorbEmitBytesLocked()
+            if !pendingEmit.isEmpty {
+                quietEmitCapture.append(pendingEmit)
+                if Self.looksLikeEmitFailure(pendingEmit) {
+                    quietEmitHadError = true
+                }
+                pendingEmit = ""
+            }
+            lock.unlock()
+            return
+        }
         pendingEmitBytes.append(u)
         absorbEmitBytesLocked()
         let hasSink = (onEmit != nil)
@@ -3103,6 +3281,15 @@ final class KernelBridge {
             return
         }
         lock.lock()
+        if quietEmitActive {
+            quietEmitCapture.append(s)
+            // Do not treat reach names like (EMIT-ON-THROW-WIN) as failures.
+            if Self.looksLikeEmitFailure(s) {
+                quietEmitHadError = true
+            }
+            lock.unlock()
+            return
+        }
         // Drain any complete UTF-8 already in the byte buffer before this chunk
         // so CR/EMIT bytes stay in front of TYPE/emit_buf text.
         absorbEmitBytesLocked()
