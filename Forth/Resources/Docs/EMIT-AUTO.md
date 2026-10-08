@@ -4,7 +4,15 @@ Editor **EMIT** re-INCLUDEs the tab, then runs `S" <main-path>" EMIT-AUTO-FILE`.
 
 Console `EMIT-AUTO` uses `LAST-INCLUDED` (now updated by high-level `INCLUDED`, not only Autoload/`REQUIRE`). Prefer `EMIT-AUTO-FILE` when you care about the stem.
 
-Artifacts are written under **Documents/EditForth** (the companion cwd): `./HELLO.app`, `./HELLO.img`, `./HELLO.emit.log`.
+Artifacts are written **beside the main source file** in a stem folder:
+
+`<source-dir>/<STEM>/` → `HELLO.app`, `HELLO.img`, `HELLO.emit.log`
+
+Example: `…/Library/Sample/HELLO.fth` → `…/Library/Sample/HELLO/HELLO.app`.
+
+That works for any writable folder (including Downloads). Emitting a file that lives inside a read-only app bundle (`…/EditForth.app/Contents/Resources/…`) fails at `mkdir` with a clear message — copy or open the source under Documents (or elsewhere writable) first.
+
+Override the outdir with `EMIT-AUTO-FILE-TO` / `EMIT-AUTO-TO` when needed. Plain `EMIT-APP` / `EMIT-WINDOW-APP` still default to the companion cwd (`.`).
 
 ## Default (no directives)
 

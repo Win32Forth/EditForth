@@ -30,6 +30,10 @@ struct EditorTextView: NSViewRepresentable {
     var isDebugArmed: Bool = false
     /// View → Show Line Numbers (AppStorage); vertical ruler on/off.
     var showLineNumbers: Bool = true
+    /// View → Wrap at Column mode: `off` | `window` | `column`.
+    var wrapMode: String = "off"
+    /// Character columns when `wrapMode == "column"` (includes Other…).
+    var wrapColumn: Int = 100
     /// BREAK-table slots from the host (enabled = pale-red, disabled = gray wash).
     var breakpointEntries: [BreakpointEntry] = []
     var onDebugStepOver: (() -> Void)?
@@ -86,16 +90,15 @@ struct EditorTextView: NSViewRepresentable {
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                             height: CGFloat.greatestFiniteMagnitude)
         tv.isVerticallyResizable = true
-        // Always hard-wrap off (⌘\ is Toggle Breakpoint).
-        tv.isHorizontallyResizable = true
-        tv.textContainer?.containerSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        tv.textContainer?.widthTracksTextView = false
-        tv.autoresizingMask = []
 
         scroll.documentView = tv
+        Self.applyWrapPolicy(
+            to: tv,
+            scroll: scroll,
+            mode: wrapMode,
+            column: wrapColumn,
+            fontSize: fontSize
+        )
         let ruler = LineNumberRulerView(textView: tv)
         scroll.verticalRulerView = ruler
         scroll.hasVerticalRuler = showLineNumbers
@@ -107,6 +110,73 @@ struct EditorTextView: NSViewRepresentable {
         context.coordinator.installScrollObserver(on: scroll)
         context.coordinator.needsRestore = true
         return scroll
+    }
+
+    /// Soft-wrap policy from View → Wrap at Column.
+    /// - `off`: no soft wrap; horizontal scroll
+    /// - `window`: wrap to the editor pane width
+    /// - `column`: wrap at `column` monospaced cells (or pane width if narrower)
+    static func applyWrapPolicy(
+        to tv: NSTextView,
+        scroll: NSScrollView,
+        mode: String,
+        column: Int,
+        fontSize: CGFloat
+    ) {
+        let clipW = scroll.contentSize.width
+        let font = tv.font
+            ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let charW = max(
+            1,
+            ("M" as NSString).size(withAttributes: [.font: font]).width
+        )
+        let padding = (tv.textContainer?.lineFragmentPadding ?? 5) * 2
+        let insets = tv.textContainerInset.width * 2
+
+        switch mode {
+        case "window":
+            let width = max(clipW, 40)
+            scroll.hasHorizontalScroller = false
+            tv.isHorizontallyResizable = false
+            tv.autoresizingMask = [.width]
+            tv.textContainer?.widthTracksTextView = true
+            tv.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            var frame = tv.frame
+            frame.size.width = width
+            tv.frame = frame
+
+        case "column":
+            let col = max(40, min(300, column))
+            let columnWidth = CGFloat(col) * charW + padding + insets
+            let width = clipW > 40 ? min(columnWidth, clipW) : columnWidth
+            scroll.hasHorizontalScroller = false
+            tv.isHorizontallyResizable = false
+            tv.autoresizingMask = [.width]
+            tv.textContainer?.widthTracksTextView = true
+            tv.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            var frame = tv.frame
+            frame.size.width = max(width, clipW > 0 ? clipW : width)
+            tv.frame = frame
+
+        default: // "off"
+            scroll.hasHorizontalScroller = true
+            tv.isHorizontallyResizable = true
+            tv.autoresizingMask = []
+            tv.textContainer?.widthTracksTextView = false
+            tv.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+        if let container = tv.textContainer {
+            tv.layoutManager?.ensureLayout(for: container)
+        }
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
@@ -137,12 +207,12 @@ struct EditorTextView: NSViewRepresentable {
         tv.isEditable = !isViewMode
         context.coordinator.lineNumberRuler?.syncFont(from: tv)
 
-        tv.isHorizontallyResizable = true
-        tv.autoresizingMask = []
-        tv.textContainer?.widthTracksTextView = false
-        tv.textContainer?.containerSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
+        Self.applyWrapPolicy(
+            to: tv,
+            scroll: scroll,
+            mode: wrapMode,
+            column: wrapColumn,
+            fontSize: fontSize
         )
 
         // Session ended: drop the wash. Do **not** clear when highlightName is

@@ -128,8 +128,9 @@ check_hayes() {
 
 check_emit_ved64() {
   local log="$1"
-  local app="$DOCUMENTS_EDITFORTH/VED64.app"
-  local emitlog="$DOCUMENTS_EDITFORTH/VED64.emit.log"
+  local outdir="$DOCUMENTS_EDITFORTH/Library/Sample/VED64"
+  local app="$outdir/VED64.app"
+  local emitlog="$outdir/VED64.emit.log"
   [[ -d "$app" ]] || die "emit-smoke: missing $app (see $log)"
   if [[ -f "$emitlog" ]] && grep -qiE 'ABORT"|Emit failed|uncaught THROW|can.t open' "$emitlog"; then
     die "emit-smoke: failure markers in $emitlog"

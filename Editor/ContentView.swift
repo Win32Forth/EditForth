@@ -21,6 +21,10 @@ struct ContentView: View {
     @AppStorage("showForthChrome") private var showForthChrome = true
     /// View → Show Line Numbers.
     @AppStorage("showLineNumbers") private var showLineNumbers = true
+    /// View → Wrap at Column: `off` | `window` | `column`.
+    @AppStorage("editorWrapMode") private var wrapMode = "off"
+    /// Character columns when mode is `column` (preset or Other…).
+    @AppStorage("editorWrapColumn") private var wrapColumn = 100
     @State private var gotoObserver: NSObjectProtocol?
     @State private var dragStartHeight: CGFloat?
     @State private var debugKeys = DebugKeyMonitor()
@@ -46,6 +50,8 @@ struct ContentView: View {
                         tab: tab,
                         fontSize: fontSize,
                         showLineNumbers: showLineNumbers,
+                        wrapMode: wrapMode,
+                        wrapColumn: wrapColumn,
                         isDebugArmed: forth.isDebugSessionArmed,
                         breakpointEntries: forth.breakpointEntries,
                         onDebugStepOver: { forth.stepOver() },
@@ -394,6 +400,8 @@ private struct TabEditorPane: View {
     @ObservedObject var tab: EditorTab
     var fontSize: Double
     var showLineNumbers: Bool
+    var wrapMode: String
+    var wrapColumn: Int
     var isDebugArmed: Bool
     var breakpointEntries: [BreakpointEntry]
     var onDebugStepOver: () -> Void
@@ -457,6 +465,8 @@ private struct TabEditorPane: View {
                 ),
                 isDebugArmed: isDebugArmed,
                 showLineNumbers: showLineNumbers,
+                wrapMode: wrapMode,
+                wrapColumn: wrapColumn,
                 breakpointEntries: breakpointEntries,
                 onDebugStepOver: onDebugStepOver,
                 onDebugStepInto: onDebugStepInto,

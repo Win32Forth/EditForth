@@ -1794,11 +1794,14 @@ final class KernelBridge {
     private var emitFlushScheduled = false
 
     /// Emitter quiet log: capture TYPE/EMIT during EMIT-APP / EMIT-WINDOW-APP
-    /// (and *-XT / *-TO forms), write `Stem.emit.log` beside the `.app`, print
-    /// one console summary. Set `EMIT_VERBOSE=1` in the environment to disable.
+    /// (and *-XT / *-TO / EMIT-AUTO forms), write `STEM.emit.log` beside the
+    /// `.app` under `<source-dir>/<STEM>/`. Failed emits without a built path
+    /// use that STEM folder (from the command) or Documents/EditForth.
+    /// Set `EMIT_VERBOSE=1` in the environment to disable quiet capture.
     private var quietEmitActive = false
     private var quietEmitCapture = ""
     private var quietEmitHadError = false
+    private var quietEmitCommand = ""
     private var keyQueue: [Int32] = []
     private let lock = NSLock()
     /// Wakes a background KEY wait when a key is enqueued (main-thread monitor).
@@ -2808,7 +2811,7 @@ final class KernelBridge {
             // Visible before capture starts — combined INCLUDE+EMIT-AUTO would
             // otherwise look idle until the .app is finished (or hung).
             handleEmitString("Emitting…\n")
-            beginQuietEmitLog()
+            beginQuietEmitLog(command: t)
         }
 
         // Main thread: run kernel off-main so AppKit can deliver keyDown.
@@ -2882,21 +2885,25 @@ final class KernelBridge {
             || trimmed == "EMIT-AUTO" || trimmed.hasPrefix("EMIT-AUTO ")
     }
 
-    private func beginQuietEmitLog() {
+    private func beginQuietEmitLog(command: String) {
         lock.lock()
         quietEmitActive = true
         quietEmitCapture = ""
         quietEmitHadError = false
+        quietEmitCommand = command
         lock.unlock()
     }
 
-    /// Write capture beside the built `.app` (or cwd) and print one console line.
+    /// Write capture beside the built `.app` (or STEM folder / Documents/EditForth)
+    /// and print one console line. Never invents odd names from partial Hyper paths.
     private func finishQuietEmitLog(evalStatus: Int32) {
         lock.lock()
         quietEmitActive = false
         var text = quietEmitCapture
         quietEmitCapture = ""
         let markedError = quietEmitHadError
+        let command = quietEmitCommand
+        quietEmitCommand = ""
         lock.unlock()
 
         // Pending buffer may still hold the last lines (quiet path skipped sink flush).
@@ -2911,14 +2918,14 @@ final class KernelBridge {
         let failed = evalStatus != 0 || markedError || Self.looksLikeEmitFailure(text)
 
         let appPath = Self.parseEmitAppPath(from: text)
-        let logURL: URL = {
-            if let appPath {
-                let base = (appPath as NSString).deletingPathExtension
-                return URL(fileURLWithPath: base + ".emit.log")
-            }
-            let cwd = FileManager.default.currentDirectoryPath
-            return URL(fileURLWithPath: cwd).appendingPathComponent("emit.emit.log")
-        }()
+        let logURL = Self.resolveQuietEmitLogURL(
+            appPath: appPath,
+            imagePath: Self.parseEmitImagePath(from: text),
+            command: command
+        )
+
+        let parent = logURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
 
         do {
             try text.write(to: logURL, atomically: true, encoding: .utf8)
@@ -2953,6 +2960,72 @@ final class KernelBridge {
             if rest.hasSuffix(".app") { return rest }
         }
         return nil
+    }
+
+    private static func parseEmitImagePath(from text: String) -> String? {
+        //   image: /path/to/NAME.img
+        for line in text.split(separator: "\n") {
+            let s = String(line).trimmingCharacters(in: .whitespaces)
+            guard s.hasPrefix("image: ") else { continue }
+            let rest = String(s.dropFirst("image: ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if rest.hasSuffix(".img") { return rest }
+        }
+        return nil
+    }
+
+    /// `S" /path/file.fth" … EMIT-AUTO-FILE` → absolute path of the main source.
+    private static func parseEmitAutoFilePath(from command: String) -> String? {
+        let u = command
+        guard u.uppercased().contains("EMIT-AUTO-FILE") else { return nil }
+        // Prefer the last S" … " before EMIT-AUTO-FILE (editor sends path twice).
+        guard let autoRange = u.range(of: "EMIT-AUTO-FILE", options: .caseInsensitive) else {
+            return nil
+        }
+        let before = u[..<autoRange.lowerBound]
+        var last: String?
+        var search = before.startIndex
+        while let start = before[search...].range(of: "S\"") {
+            let afterS = start.upperBound
+            guard let end = before[afterS...].range(of: "\"") else { break }
+            let path = String(before[afterS..<end.lowerBound])
+            if path.hasPrefix("/") || path.hasPrefix("~") {
+                last = (path as NSString).expandingTildeInPath
+            }
+            search = end.upperBound
+        }
+        return last
+    }
+
+    private static func editForthDocumentsURL() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("EditForth", isDirectory: true)
+    }
+
+    /// Prefer beside `.app`, else beside `.img`, else `<source-dir>/<STEM>/STEM.emit.log`,
+    /// else `Documents/EditForth/emit-failed.emit.log`.
+    private static func resolveQuietEmitLogURL(
+        appPath: String?,
+        imagePath: String?,
+        command: String
+    ) -> URL {
+        if let appPath {
+            let base = (appPath as NSString).deletingPathExtension
+            return URL(fileURLWithPath: base + ".emit.log")
+        }
+        if let imagePath {
+            let base = (imagePath as NSString).deletingPathExtension
+            return URL(fileURLWithPath: base + ".emit.log")
+        }
+        if let filePath = parseEmitAutoFilePath(from: command) {
+            let src = URL(fileURLWithPath: filePath)
+            let stem = src.deletingPathExtension().lastPathComponent.uppercased()
+            if !stem.isEmpty {
+                let dir = src.deletingLastPathComponent().appendingPathComponent(stem, isDirectory: true)
+                return dir.appendingPathComponent("\(stem).emit.log")
+            }
+        }
+        return editForthDocumentsURL().appendingPathComponent("emit-failed.emit.log")
     }
 
     /// True only for real emit/build faults — not reach-list names like

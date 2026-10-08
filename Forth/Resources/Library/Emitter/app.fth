@@ -45,6 +45,7 @@ CREATE EMIT-IMGBUF     /EMIT-PB ALLOT   \ counted path to .img
 CREATE EMIT-APPBUF     /EMIT-PB ALLOT   \ counted path to .app (message)
 CREATE EMIT-CMDBUF     1024 ALLOT       \ counted SYSTEM command
 CREATE EMIT-TMP        /EMIT-PB ALLOT
+CREATE EMIT-OUTDIR     /EMIT-PB ALLOT   \ counted <source-dir>/<STEM> for EMIT-AUTO
 CREATE EMIT-TITLE      64 ALLOT         \ counted title for SLITERAL into wrapper
 
 : (EMIT-S0)  ( dest -- )  0 SWAP C! ;
@@ -183,12 +184,15 @@ CREATE EMIT-TITLE      64 ALLOT         \ counted title for SLITERAL into wrappe
   [CHAR] ' dest (EMIT-CH+) ;
 
 : (EMIT-MKDIR)  ( c-addr u -- )
-  DUP 1 = IF  OVER C@ [CHAR] . = IF  2DROP EXIT  THEN THEN
+  {: a u -- :}
+  u 1 = IF  a C@ [CHAR] . = IF  EXIT  THEN THEN
   EMIT-CMDBUF (EMIT-S0)
   S" mkdir -p " EMIT-CMDBUF (EMIT-S+)
-  EMIT-CMDBUF (EMIT-QUOTE+)
+  a u EMIT-CMDBUF (EMIT-QUOTE+)
   EMIT-CMDBUF COUNT SYSTEM IF
-    ." EMIT-APP: mkdir failed" CR ABORT
+    ." EMIT-APP: mkdir failed: " a u TYPE CR
+    ."   (need a writable folder beside the source; bundle Resources are read-only)" CR
+    ABORT
   THEN ;
 
 : (EMIT-PACK)  ( -- )  \ uses EMIT-NAMEBUF, EMIT-IMGBUF, outdir left in EMIT-TMP
@@ -479,17 +483,51 @@ VARIABLE EMIT-OPT
   EMIT-NAMEBUF COUNT EMIT-TITLE PLACE
   ;
 
-\ Editor EMIT: S" /path/main.fth" EMIT-AUTO-FILE  (outdir = .)
+\ Parent directory of a path (no trailing slash). No slash → S" ."
+: (EMIT-PARENT-DIR)  ( c-addr u -- c-addr u' )
+  {: a u | i -- :}
+  u TO i
+  BEGIN  i  WHILE
+    i 1- TO i
+    a i + C@ [CHAR] / = IF
+      i 0= IF  S" /" EXIT  THEN
+      a i EXIT
+    THEN
+  REPEAT
+  S" ."
+  ;
+
+\ After NAMEBUF stem is set: EMIT-OUTDIR = <parent-of-file>/<STEM>
+\ e.g. …/Sample/HELLO.fth → …/Sample/HELLO  (holds HELLO.app / .img / .emit.log)
+: (EMIT-AUTO-OUTDIR!)  ( file-addr file-u -- )
+  {: fa fu | da du -- :}
+  fa fu (EMIT-PARENT-DIR) TO du TO da
+  EMIT-OUTDIR (EMIT-S0)
+  da du EMIT-OUTDIR (EMIT-S+)
+  du IF
+    da du + 1- C@ [CHAR] / <> IF  [CHAR] / EMIT-OUTDIR (EMIT-CH+)  THEN
+  ELSE
+    [CHAR] / EMIT-OUTDIR (EMIT-CH+)
+  THEN
+  EMIT-NAMEBUF COUNT EMIT-OUTDIR (EMIT-S+)
+  ;
+
+\ Editor EMIT: S" /path/main.fth" EMIT-AUTO-FILE-TO <outdir>
 : EMIT-AUTO-FILE-TO  ( file-addr file-u out-addr out-u -- )
   {: fa fu oa ou -- :}
   fa fu (EMIT-AUTO-STEM-FROM)
   oa ou (EMIT-AUTO-PACK)
   ;
 
+\ Default: artifacts in <source-dir>/<STEM>/ beside the main .fth.
 : EMIT-AUTO-FILE  ( c-addr u -- )
-  S" ." EMIT-AUTO-FILE-TO ;
+  {: fa fu -- :}
+  fa fu (EMIT-AUTO-STEM-FROM)
+  fa fu (EMIT-AUTO-OUTDIR!)
+  EMIT-OUTDIR COUNT (EMIT-AUTO-PACK)
+  ;
 
-\ Console helper: stem from LAST-INCLUDED (after high-level INCLUDED fix).
+\ Console helper with explicit outdir; stem from LAST-INCLUDED.
 : EMIT-AUTO-TO  ( c-addr u -- )
   {: oa ou -- :}
   LAST-INCLUDED DUP 0= IF
@@ -499,6 +537,11 @@ VARIABLE EMIT-OPT
   oa ou (EMIT-AUTO-PACK)
   ;
 
+\ Default EMIT-AUTO: same beside-source folder as EMIT-AUTO-FILE.
 : EMIT-AUTO  ( -- )
-  S" ." EMIT-AUTO-TO ;
+  LAST-INCLUDED DUP 0= IF
+    2DROP ." EMIT-AUTO: INCLUDE a main file first (LAST-INCLUDED empty)" CR ABORT
+  THEN
+  EMIT-AUTO-FILE
+  ;
 

@@ -39,7 +39,7 @@ Editor-driven load / run / emit for the **current tab**, with less boilerplate i
 |--------|--------|
 | **FLOAD current** | **Done:** status-panel **INCLUDE** + **F4** (also Forth → INCLUDE Current). Saves the tab if dirty/Untitled, `ANEW <STEM>_MODULE`, then `S" path" INCLUDED`. Menu **FLOAD…** (⇧⌘L) stays the open-panel path without auto-ANEW. |
 | **Run default** | **Done (fill, not auto-exec):** status **RUN** + **F5** put `LAST`’s name on the console input; user may add stack args, then Return. **⌘F5** → `DEBUG <name>`; **⌘⇧F5** → `BPGO <name>`. Later: highlighted token in the editor overrides LAST. |
-| **Emit stand-alone** | **Done:** status **EMIT** / Forth → EMIT Current. Re-INCLUDEs the tab, then **`EMIT-AUTO-FILE`** (stem = main path). Output under **Documents/EditForth** (`./<STEM>.app`). Default = window wrap of **LAST** + “Press a key to exit” + **KEY DROP**. See `Docs/EMIT-AUTO.md`. |
+| **Emit stand-alone** | **Done:** status **EMIT** / Forth → EMIT Current. Re-INCLUDEs the tab, then **`EMIT-AUTO-FILE`** (stem = main path). Output under **`<source-dir>/<STEM>/`** (`STEM.app` / `.img` / `.emit.log`). Default = window wrap of **LAST** + “Press a key to exit” + **KEY DROP**. See `Docs/EMIT-AUTO.md`. |
 
 ### Auto-ANEW on editor load/run
 - **Done:** editor INCLUDE/EMIT use `ANEW <STEM>_MODULE` plus `EMIT-FLAGS-RESET` before `INCLUDED`.
@@ -56,7 +56,7 @@ Editor-driven load / run / emit for the **current tab**, with less boilerplate i
 
 ### Run / emit conventions
 - **Run:** F5 family fills console from **LAST** (done).
-- **Emit:** always to **Documents/EditForth**; see directives above.
+- **Emit:** to **`<source-dir>/<STEM>/`** beside the main `.fth`; see directives above.
 
 ### Open decisions
 - INCLUDE = F4, RUN = F5 family (done). EMIT has no function key (button/menu).
@@ -70,10 +70,10 @@ Editor-driven load / run / emit for the **current tab**, with less boilerplate i
 Emitter works well but is noisy on the console.
 
 ### Behavior (`KernelBridge`)
-- During `EMIT-APP` / `EMIT-WINDOW-APP` (and XT/TO forms), TYPE/EMIT is captured off-console.
-- Full transcript → **`<stem>.emit.log`** beside the built `.app`.
-- Success console: `Emitted /full/path/NAME.app` + `log: /full/path/NAME.emit.log`.
-- Failure console: `Emit failed — see /full/path/….emit.log` + last ~12 log lines.
+- During `EMIT-APP` / `EMIT-WINDOW-APP` / `EMIT-AUTO*` (and XT/TO forms), TYPE/EMIT is captured off-console.
+- Full transcript → **`<STEM>.emit.log`** beside the built `.app` (EMIT-AUTO: under `<source-dir>/<STEM>/`). Failed emits without a built path use that STEM folder when the command has `EMIT-AUTO-FILE`, else `Documents/EditForth/emit-failed.emit.log`.
+- Success console: `Emitted /full/path/…/STEM.app` + `log: …`.
+- Failure console: `Emit failed — see …` + last ~12 log lines.
 - Escape hatch: **`EMIT_VERBOSE=1`** keeps the full transcript on the console.
 
 ### EMIT-APP vs EMIT-WINDOW-APP

@@ -14,6 +14,29 @@ struct SixtyFourEditApp: App {
     @StateObject private var forth = ForthConnectionManager()
     @AppStorage("showForthChrome") private var showForthChrome = true
     @AppStorage("showLineNumbers") private var showLineNumbers = true
+    /// `off` | `window` | `column` — View → Wrap at Column.
+    @AppStorage("editorWrapMode") private var wrapMode = "off"
+    /// Preset / Other… value when `wrapMode == "column"`.
+    @AppStorage("editorWrapColumn") private var wrapColumn = 100
+
+    private static let wrapColumnPresets = [60, 80, 100]
+
+    /// Label shown beside **Wrap at Column** (Off / Window / 60 / custom Other).
+    private var wrapAtColumnLabel: String {
+        switch wrapMode {
+        case "window":
+            return "Window"
+        case "column":
+            return "\(wrapColumn)"
+        default:
+            return "Off"
+        }
+    }
+
+    /// True when the column is a custom Other… value (not 60/80/100).
+    private var isOtherWrapColumn: Bool {
+        wrapMode == "column" && !Self.wrapColumnPresets.contains(wrapColumn)
+    }
 
     init() {
         NotificationCenter.default.addObserver(
@@ -116,6 +139,27 @@ struct SixtyFourEditApp: App {
 
                 Toggle("Show Forth Console", isOn: $showForthChrome)
                 Toggle("Show Line Numbers", isOn: $showLineNumbers)
+
+                Divider()
+
+                Menu("Wrap at Column\t\(wrapAtColumnLabel)") {
+                    Button("\(wrapMode == "off" ? "✓ " : "   ")Off") {
+                        wrapMode = "off"
+                    }
+                    Button("\(wrapMode == "window" ? "✓ " : "   ")Window") {
+                        wrapMode = "window"
+                    }
+                    ForEach(Self.wrapColumnPresets, id: \.self) { col in
+                        let selected = wrapMode == "column" && wrapColumn == col
+                        Button("\(selected ? "✓ " : "   ")\(col)") {
+                            wrapColumn = col
+                            wrapMode = "column"
+                        }
+                    }
+                    Button("\(isOtherWrapColumn ? "✓ " : "   ")Other…") {
+                        promptWrapColumn()
+                    }
+                }
             }
             CommandMenu("Format") {
                 Button("Bigger") {
@@ -132,7 +176,7 @@ struct SixtyFourEditApp: App {
                     UserDefaults.standard.set(13.0, forKey: "editorFontSize")
                 }
             }
-            // ⌘\ freed from Wrap Lines — toggle BREAK on the word under the caret.
+            // ⌘\ stays Toggle Breakpoint (not Wrap Lines).
             CommandMenu("Debug") {
                 Button("Toggle Breakpoint") {
                     NotificationCenter.default.post(
@@ -236,5 +280,23 @@ struct SixtyFourEditApp: App {
         let current = UserDefaults.standard.object(forKey: key) as? Double ?? 13
         let next = min(32, max(9, current + delta))
         UserDefaults.standard.set(next, forKey: key)
+    }
+
+    /// View → Wrap at Column → Other… (40…300 character columns).
+    private func promptWrapColumn() {
+        let alert = NSAlert()
+        alert.messageText = "Wrap at Column"
+        alert.informativeText = "Soft-wrap at this many monospaced character columns (40–300)."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: "\(wrapColumn)")
+        field.frame = NSRect(x: 0, y: 0, width: 80, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let n = Int(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? wrapColumn
+        wrapColumn = min(300, max(40, n))
+        wrapMode = "column"
     }
 }

@@ -75,8 +75,8 @@ enum ForthMenuSupport {
         includeFile(at: url, forth: forth, autoAnew: true)
     }
 
-    /// Status-panel EMIT: re-INCLUDE current tab (flags from source), then `EMIT-AUTO`.
-    /// Artifacts land in Documents/EditForth (companion cwd). Quiet log → `<STEM>.emit.log`.
+    /// Status-panel EMIT: re-INCLUDE current tab (flags from source), then `EMIT-AUTO-FILE`.
+    /// Artifacts: `<source-dir>/<STEM>/{STEM.app,STEM.img,STEM.emit.log}`.
     static func emitCurrentTab(workspace: WorkspaceModel, forth: ForthConnectionManager) {
         guard forth.isConnected else { return }
         guard !forth.isDebugSessionArmed else {
@@ -101,9 +101,10 @@ enum ForthMenuSupport {
         let marker = moduleMarkerName(for: url)
         let stem = url.deletingPathExtension().lastPathComponent.uppercased()
         // Immediate editor-side feedback: quiet emit hides INCLUDE/emit chatter.
-        forth.noteInfo("Emitting \(stem).app …")
+        forth.noteInfo("Emitting \(stem)/\(stem).app …")
         // Reset directives, reload main file, emit using *this* path as .app stem
-        // (not LAST-INCLUDED, which can be a nested INCLUDE).
+        // (not LAST-INCLUDED, which can be a nested INCLUDE). Output folder is
+        // beside the source: <dir>/<STEM>/.
         forth.send(.executeCommand(command:
             "EMIT-FLAGS-RESET ANEW \(marker) S\" \(escaped)\" INCLUDED S\" \(escaped)\" EMIT-AUTO-FILE"
         ))

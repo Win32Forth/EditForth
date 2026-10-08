@@ -61,17 +61,18 @@ cmd_emit_smoke() {
   local app
   app=$(resolve_forth_app)
   note "Using $app"
-  mkdir -p "$DOCUMENTS_EDITFORTH"
-  rm -rf "$DOCUMENTS_EDITFORTH/VED64.app" \
-         "$DOCUMENTS_EDITFORTH/VED64.img" \
-         "$DOCUMENTS_EDITFORTH/VED64.emit.log"
-  # Bundle path inside the app under test (shipped Sample).
-  local sample="$app/Contents/Resources/Library/Sample/VED64.fth"
-  [[ -f "$sample" ]] || die "missing Sample in app: $sample"
+  mkdir -p "$DOCUMENTS_EDITFORTH/Library/Sample"
+  # Prefer the user Library Sample (writable). Fall back to copying from the app bundle.
+  local sample="$DOCUMENTS_EDITFORTH/Library/Sample/VED64.fth"
+  if [[ ! -f "$sample" ]]; then
+    local bundled="$app/Contents/Resources/Library/Sample/VED64.fth"
+    [[ -f "$bundled" ]] || die "missing Sample/VED64.fth in app and Documents"
+    cp "$bundled" "$sample"
+  fi
+  local outdir="$DOCUMENTS_EDITFORTH/Library/Sample/VED64"
+  rm -rf "$outdir"
   note "=== EMIT VED64 ==="
-  # INCLUDE then EMIT-AUTO-FILE (same idea as editor EMIT Current).
-  # cwd for emit artifacts is Documents/EditForth when companion boots there;
-  # agent may start in $HOME — chdir via --cwd.
+  # INCLUDE then EMIT-AUTO-FILE → <source-dir>/VED64/{VED64.app,.img,.emit.log}
   run_agent "$log" \
     --cwd "$DOCUMENTS_EDITFORTH" \
     -e "EMIT-FLAGS-RESET ANEW VED64_MODULE S\" $sample\" INCLUDED S\" $sample\" EMIT-AUTO-FILE"
