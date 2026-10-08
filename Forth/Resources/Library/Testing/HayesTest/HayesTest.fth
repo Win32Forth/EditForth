@@ -1,7 +1,7 @@
 \ HayesTest.fth — 64Forth in-app Hayes / forth2012 driver
 \
 \ Canonical run:
-\   FROMLIB FLOAD HayesTest/HayesTest.fth
+\   FROMLIB FLOAD Testing/HayesTest/HayesTest.fth
 \
 \ INCLUDED pushes load-cwd to this file's folder for the duration of the load,
 \ so nested FLOAD src/… and FLOAD prelimtest.fth inside src/ resolve correctly.

@@ -26,8 +26,10 @@ struct SixtyFourEditApp: App {
     }
 
     var body: some Scene {
-        // Single workspace window (not DocumentGroup / multi-window).
-        Window("64Edit", id: "workspace") {
+        // WindowGroup (not DocumentGroup): cold-launch from Finder / `open file.fth`
+        // must always create the workspace window. A lone `Window(id:)` can leave
+        // the process running with no UI when Launch Services opens a document.
+        WindowGroup("EditForth") {
             ContentView()
                 .environmentObject(workspace)
                 .environmentObject(forth)

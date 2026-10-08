@@ -4,7 +4,7 @@
 \ Not a formal ANS certificate. Hayes stock suites stay under HayesTest/.
 \
 \ Canonical run - same pattern as HayesTest (bundle Resources/Library):
-\   FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+\   FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
 \
 \ Named FLOAD/INCLUDE chdirs to this file's folder - ANSValidate/ - for the
 \ duration of its SOURCE, so nested FLOAD of sibling modules needs no absolute

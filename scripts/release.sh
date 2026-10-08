@@ -48,10 +48,10 @@ cmd_validate() {
   app=$(resolve_forth_app)
   note "Using $app"
   note "=== ANS-VALIDATE ==="
-  run_agent "$ans_log" -e 'FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth'
+  run_agent "$ans_log" -e 'FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth'
   check_ans_validate "$ans_log"
   note "=== Hayes ==="
-  run_agent "$hayes_log" -e 'FROMLIB FLOAD HayesTest/HayesTest.fth'
+  run_agent "$hayes_log" -e 'FROMLIB FLOAD Testing/HayesTest/HayesTest.fth'
   check_hayes "$hayes_log"
   ok "validate complete"
 }

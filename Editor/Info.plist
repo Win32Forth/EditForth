@@ -2,38 +2,45 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Tab workspace (not NSDocument / DocumentGroup). AppDelegate.application(_:open:) opens tabs. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Forth Source</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>com.win32forth.forth-source</string>
 				<string>public.plain-text</string>
+				<string>public.source-code</string>
 			</array>
-			<key>NSUbiquitousDocumentUserActivityType</key>
-			<string>$(PRODUCT_BUNDLE_IDENTIFIER).forthSource</string>
 		</dict>
 	</array>
-	<key>UTImportedTypeDeclarations</key>
+	<!-- Export our own UTI. Do not redefine public.plain-text. Extensions have no leading '.' -->
+	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.plain-text</string>
-			</array>
+			<key>UTTypeIdentifier</key>
+			<string>com.win32forth.forth-source</string>
 			<key>UTTypeDescription</key>
 			<string>Forth Source</string>
-			<key>UTTypeIdentifier</key>
-			<string>public.plain-text</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.source-code</string>
+				<string>public.plain-text</string>
+			</array>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>.fth</string>
-					<string>.f</string>
-					<string>.fs</string>
-					<string>.txt</string>
+					<string>fth</string>
+					<string>fs</string>
+					<string>4th</string>
+					<string>f</string>
 				</array>
 			</dict>
 		</dict>

@@ -9,8 +9,9 @@ absolute paths.
 
 Examples
 --------
-  FROMLIB FLOAD HayesTest/HayesTest.fth
-  FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+  FROMLIB FLOAD Testing/HayesTest/HayesTest.fth
+  FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
+  FROMLIB FLOAD Testing/DbgSpanSmoke/span-tests.fth
   FROMLIB FLOAD BigInteger/big-int.fth
   FROMLIB FLOAD PI/pi-test.fth
   FROMLIB FLOAD xchar-smoke.fth
@@ -71,5 +72,5 @@ User data (Documents/64Forth)
 After editing Library .fth files, rebuild/run so the bundle copy updates
 (or use Tools → Update / Restore for the Documents/64Forth tree).
 
-See ANSValidate/README.txt, Editor/SZ-EDITOR-README.txt,
+See Testing/ANSValidate/README.txt, Editor/SZ-EDITOR-README.txt,
 Pascal/README.txt, and Docs/README.txt.

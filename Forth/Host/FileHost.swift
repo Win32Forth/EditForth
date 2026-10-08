@@ -458,7 +458,7 @@ final class FileHost {
             ]
         }
         if excludes.isEmpty {
-            excludes = ["HayesTest", "ANSValidate", "Benchmarks", "HYPER.NDX"]
+            excludes = ["Testing", "HayesTest", "ANSValidate", "DbgSpanSmoke", "Benchmarks", "HYPER.NDX"]
         }
 
         var out: [String] = []
@@ -468,7 +468,7 @@ final class FileHost {
                 let ndx = ndxStylePath(path)
                 // Match excludes against NDX key *and* full filesystem path so
                 // bare last-component keys (symlink prefix mismatch) still drop
-                // HayesTest / ANSValidate / Benchmarks noise.
+                // Testing/HayesTest / ANSValidate / Benchmarks noise.
                 let full = path.resolvingSymlinksInPath().path
                 if excludes.contains(where: {
                     ndx.localizedCaseInsensitiveContains($0)

@@ -13,8 +13,8 @@ Goal: one repeatable path so version bumps, validation, samples, DMG, docs, comm
 ### Intended sequence
 1. **Bump version** — **scripted (`bump` / `prep`):** marketing + build lockstep; pbxproj, Info.plist, banners, STATUS/README/DESIGN stubs. Review STATUS prose before ship.
 2. **Update docs** — bump touches version lines; release notes / collage refresh still human as needed.
-3. **ANS-VALIDATE** — **scripted (`validate`):** `--agent` + `FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth`; require `ALL PASS` / `0 failed`.
-4. **Hayes suite** — **scripted (`validate`):** require `HAYES: ALL COUNTS ZERO — PASS`. **Done (host):** ACCEPT auto-feed (`hayes-accept` + Return) on stock prompt; suite unchanged.
+3. **ANS-VALIDATE** — **scripted (`validate`):** `--agent` + `FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth`; require `ALL PASS` / `0 failed`.
+4. **Hayes suite** — **scripted (`validate`):** `--agent` + `FROMLIB FLOAD Testing/HayesTest/HayesTest.fth`; require `HAYES: ALL COUNTS ZERO — PASS`. **Done (host):** ACCEPT auto-feed (`hayes-accept` + Return) on stock prompt; suite unchanged.
 5. **App-window smoke** — **deferred** (GUI KEY loops).
 6. **Sample programs** — **v1 emit-smoke:** `Sample/VED64.fth` via `EMIT-AUTO-FILE`; require `VED64.app` + clean quiet log. Full interactive Sample runs deferred.
 7. **Release DMG** — **scripted (`archive` + `dmg`):** Archive → stage apps + collage JPG + README.pdf → `diskutil image create` UDZO under `Releases/EditForth-<ver>-macOS.dmg`.

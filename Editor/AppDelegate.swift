@@ -15,6 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isReviewingTermination = false
     private let windowGuard = WorkspaceWindowGuard()
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
+        bringWorkspaceWindowsForward()
+    }
+
     func attach(workspace: WorkspaceModel, forth: ForthConnectionManager? = nil) {
         self.workspace = workspace
         if let forth {
@@ -35,12 +40,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.refreshDocumentEdited()
         DispatchQueue.main.async { [weak self] in
             self?.windowGuard.installOnOpenWindows()
+            self?.bringWorkspaceWindowsForward()
         }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        NSApp.activate(ignoringOtherApps: true)
         if let workspace {
             workspace.openExternalURLs(urls)
+            bringWorkspaceWindowsForward()
         } else {
             queuedURLs.append(contentsOf: urls)
         }
@@ -49,10 +57,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         windowGuard.installOnOpenWindows()
         workspace?.refreshDocumentEdited()
+        bringWorkspaceWindowsForward()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        true
+        if !flag {
+            // Dock click with no visible window — SwiftUI WindowGroup should recreate;
+            // still force activation so the user is not left with a headless process.
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        bringWorkspaceWindowsForward()
+        return true
+    }
+
+    private func bringWorkspaceWindowsForward() {
+        for window in NSApp.windows where window.canBecomeKey {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Single-window editor: closing the last window quits (dirty review runs first).

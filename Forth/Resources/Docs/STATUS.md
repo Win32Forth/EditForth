@@ -1,7 +1,7 @@
 # 64Forth development status
 
-**Current:** **2.0.3** (build **4**) — Forth menu Update/Restore Documents/EditForth (in-tree; last DMG **v2.0.2**)  
-**Last updated:** 2026-10-06
+**Current:** **2.0.3** (build **4**) — Finder `.fth` open + Library Testing/ layout (in-tree; last DMG **v2.0.2**)  
+**Last updated:** 2026-10-08
 
 ---
 
@@ -19,6 +19,8 @@
 
 - EditForth **Forth** menu: **Update User Data in EditForth Folder** and **Restore Shipped Files to EditForth Folder** (confirm in EditForth; companion FileHost copies shipped Library/AutoLoad/Docs via sock `updateUserTree` / `restoreUserTree`).
 - Companion File menu titles say EditForth Folder (same Documents/EditForth tree).
+- **Finder `.fth` open:** fixed UTI export (`com.win32forth.forth-source`), `WindowGroup` cold-launch, AppDelegate brings windows forward. Stale **64Editor** DerivedData was the default handler with zero windows.
+- **Library/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`. Sample adds `CLOCK.fth` / `GCLOCK.FTH` (GCLOCK still WIP).
 
 ---
 
@@ -184,7 +186,7 @@
 - **`FLOATING`:** the floating-point wordlist was renamed from `FP`. `filetest.fth`'s `CREATE FP` buffer is unchanged. Use `ALSO FLOATING`.
 - **`REPRESENT`:** digits are written to the `c-addr` the kernel passes. The Hayes number-output compares (`10000` / `33333` / `66667`) pass.
 - **Blocks and source:** block volumes may seek past EOF; a short `hayes-blocks.blk` is recreated; `EVALUATE` clears `BLK`. Line-at-a-time `INCLUDE` is `SOURCE-ID` −2, and `FILE-ECHO` / undefined reports treat that like a file. The console drains emit while `evaluate` waits, so long `FLOAD`s show output without a `KEY`.
-- **Hayes:** `FROMLIB FLOAD HayesTest/HayesTest.fth`. The core `ACCEPT` test still waits for a typed line. After that, every suite counter is 0, including `FPERRORS`.
+- **Hayes:** `FROMLIB FLOAD Testing/HayesTest/HayesTest.fth`. The core `ACCEPT` test still waits for a typed line (host auto-feed in EditForth). After that, every suite counter is 0, including `FPERRORS`.
 - **Emitter stand-alone:** each `VOCABULARY` registers its wid, so `DATA-END` sizes GRAPHICS data to the next header (tetra no longer overflows the data segment). `(CATCH-OK)` is recorded as a pointer reloc, so `EMIT-WINDOW-APP` stays open after the window appears. Emitted colon bodies start at CFA+8; the host `DOES>` slot is not copied, and `>BODY` on the host remains CFA+16. Pass the word that waits (`GAME` for tetra), not a wrapper that calls `WINDOW-OFF` as soon as it returns.
 - **Pascal:** an array bound may be a number, a named constant, or that constant plus or minus a number (`array [Limit+1]` → `(Limit+1)` cells). Generated `PASY.fth` / `PASX.fth` and `Pascal.zip` are not shipped; `*-SAMPLE.fth` stays.
 
