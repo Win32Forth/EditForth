@@ -63,12 +63,27 @@ final class EditorTab: Identifiable, ObservableObject {
 /// Owns the open-tab list and find-or-open for VIEW / EDIT / debugLocation.
 final class WorkspaceModel: ObservableObject {
     @Published private(set) var tabs: [EditorTab] = []
+    /// Folder-search result tabs (hit lists only — not file buffers).
+    @Published private(set) var searchTabs: [SearchSession] = []
     @Published var selectedTabID: UUID?
 
     private var tabCancellables: [UUID: AnyCancellable] = [:]
+    private var searchCancellables: [UUID: AnyCancellable] = [:]
 
+    /// Selected file editor tab (nil when a search tab is selected).
     var selectedTab: EditorTab? {
         tabs.first { $0.id == selectedTabID }
+    }
+
+    var selectedSearchTab: SearchSession? {
+        searchTabs.first { $0.id == selectedTabID }
+    }
+
+    /// Ordered strip: file tabs then search tabs (v1).
+    var tabStripItems: [(id: UUID, title: String, isSearch: Bool)] {
+        let files = tabs.map { (id: $0.id, title: $0.title, isSearch: false) }
+        let searches = searchTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
+        return files + searches
     }
 
     // MARK: - Open / focus
@@ -210,8 +225,12 @@ final class WorkspaceModel: ObservableObject {
         closeTab(id: id)
     }
 
-    /// Close a tab; if dirty, sheet Save / Don’t Save / Cancel first.
+    /// Close a file or search tab; dirty file tabs prompt Save / Don’t Save / Cancel.
     func closeTab(id: UUID) {
+        if searchTabs.contains(where: { $0.id == id }) {
+            removeSearchTab(id: id)
+            return
+        }
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
         if !tab.isDirty {
             removeTab(id: id)
@@ -231,6 +250,78 @@ final class WorkspaceModel: ObservableObject {
                 break
             }
         }
+    }
+
+    // MARK: - Folder search tabs
+
+    /// Open (or replace the selected search tab with) a new folder search and start it.
+    @discardableResult
+    func openSearch(
+        query: String,
+        roots: [URL],
+        extensions: [String],
+        caseSensitive: Bool = false,
+        wholeWord: Bool = false,
+        recursive: Bool = true,
+        replaceSelectedSearch: Bool = true
+    ) -> SearchSession {
+        if replaceSelectedSearch, let existing = selectedSearchTab {
+            existing.requestCancel()
+            let session = SearchSession(
+                query: query,
+                roots: roots,
+                extensions: extensions,
+                caseSensitive: caseSensitive,
+                wholeWord: wholeWord,
+                recursive: recursive
+            )
+            if let idx = searchTabs.firstIndex(where: { $0.id == existing.id }) {
+                searchCancellables[existing.id] = nil
+                searchTabs[idx] = session
+                bindSearch(session)
+            }
+            selectedTabID = session.id
+            objectWillChange.send()
+            session.start()
+            return session
+        }
+        let session = SearchSession(
+            query: query,
+            roots: roots,
+            extensions: extensions,
+            caseSensitive: caseSensitive,
+            wholeWord: wholeWord,
+            recursive: recursive
+        )
+        searchTabs.append(session)
+        bindSearch(session)
+        selectedTabID = session.id
+        objectWillChange.send()
+        session.start()
+        return session
+    }
+
+    private func bindSearch(_ session: SearchSession) {
+        searchCancellables[session.id] = session.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    private func removeSearchTab(id: UUID) {
+        guard let index = searchTabs.firstIndex(where: { $0.id == id }) else { return }
+        searchTabs[index].requestCancel()
+        searchCancellables[id] = nil
+        searchTabs.remove(at: index)
+        if selectedTabID == id {
+            // Prefer a neighboring search tab, else the last file tab.
+            if !searchTabs.isEmpty {
+                let next = min(index, searchTabs.count - 1)
+                selectedTabID = searchTabs[next].id
+            } else {
+                selectedTabID = tabs.last?.id
+            }
+        }
+        objectWillChange.send()
     }
 
     /// Walk dirty tabs with Save / Don’t Save / Cancel sheets; used before quit.
@@ -323,7 +414,7 @@ final class WorkspaceModel: ObservableObject {
     /// Cold-launch only: one Untitled when nothing was opened via `open -a` / pending-goto.
     /// Closing the last tab leaves the empty placeholder (New File / Open…).
     func newUntitledIfEmpty() {
-        guard tabs.isEmpty else { return }
+        guard tabs.isEmpty, searchTabs.isEmpty else { return }
         _ = newFile()
     }
 

@@ -45,29 +45,42 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 tabBar
 
-                if let tab = workspace.selectedTab {
-                    TabEditorPane(
-                        tab: tab,
-                        fontSize: fontSize,
-                        showLineNumbers: showLineNumbers,
-                        wrapMode: wrapMode,
-                        wrapColumn: wrapColumn,
-                        isDebugArmed: forth.isDebugSessionArmed,
-                        breakpointEntries: forth.breakpointEntries,
-                        onDebugStepOver: { forth.stepOver() },
-                        onDebugStepInto: { forth.stepInto() },
-                        onDebugStepOut: { forth.stepOut() },
-                        onDebugContinue: { forth.resumeDebug() },
-                        onDebugStop: { forth.stopDebug() },
-                        onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
-                        onCommandClickWord: { word in forth.viewWord(word) },
-                        onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
-                    )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .id(tab.id)
-                } else {
+                // Keep every editor pane mounted so tab switches do not rebuild
+                // NSTextView (text was already in memory; tear-down caused the lag).
+                if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty {
                     emptyEditorPlaceholder
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let search = workspace.selectedSearchTab {
+                    SearchResultsView(session: search, workspace: workspace)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ZStack {
+                        ForEach(workspace.tabs) { tab in
+                            let selected = tab.id == workspace.selectedTabID
+                            TabEditorPane(
+                                tab: tab,
+                                fontSize: fontSize,
+                                showLineNumbers: showLineNumbers,
+                                wrapMode: wrapMode,
+                                wrapColumn: wrapColumn,
+                                isDebugArmed: forth.isDebugSessionArmed,
+                                breakpointEntries: forth.breakpointEntries,
+                                onDebugStepOver: { forth.stepOver() },
+                                onDebugStepInto: { forth.stepInto() },
+                                onDebugStepOut: { forth.stepOut() },
+                                onDebugContinue: { forth.resumeDebug() },
+                                onDebugStop: { forth.stopDebug() },
+                                onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
+                                onCommandClickWord: { word in forth.viewWord(word) },
+                                onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
+                            )
+                            .opacity(selected ? 1 : 0)
+                            .allowsHitTesting(selected)
+                            // Keep layout size even when faded so the stack stays stable.
+                            .accessibilityHidden(!selected)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 // Keep the docked console mounted while chrome is "hidden" so Show
@@ -234,12 +247,12 @@ struct ContentView: View {
     private var tabBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
-                ForEach(workspace.tabs) { tab in
+                ForEach(workspace.tabStripItems, id: \.id) { item in
                     TabChip(
-                        title: tab.title,
-                        isSelected: tab.id == workspace.selectedTabID,
-                        onSelect: { workspace.selectedTabID = tab.id },
-                        onClose: { workspace.closeTab(id: tab.id) }
+                        title: item.title,
+                        isSelected: item.id == workspace.selectedTabID,
+                        onSelect: { workspace.selectedTabID = item.id },
+                        onClose: { workspace.closeTab(id: item.id) }
                     )
                 }
             }

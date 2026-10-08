@@ -126,6 +126,11 @@ struct SixtyFourEditApp: App {
                 Button("Replace All") {
                     FindSupport.perform(.replaceAll)
                 }
+                Divider()
+                Button("Search in Folders…") {
+                    SearchFoldersPanel.run(workspace: workspace)
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
             // Merge into the system View menu (CommandMenu("View") creates a second one).
             CommandGroup(after: .toolbar) {
@@ -133,7 +138,7 @@ struct SixtyFourEditApp: App {
                     workspace.toggleBrowseMode()
                 }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
-                .disabled(workspace.selectedTab == nil)
+                .disabled(workspace.selectedTab == nil) // search tabs are not browse/edit
 
                 Divider()
 

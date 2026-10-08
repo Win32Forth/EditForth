@@ -21,6 +21,8 @@
 - Companion File menu titles say EditForth Folder (same Documents/EditForth tree).
 - **Finder `.fth` open:** fixed UTI export (`com.win32forth.forth-source`), `WindowGroup` cold-launch, AppDelegate brings windows forward. Stale **64Editor** DerivedData was the default handler with zero windows.
 - **Library/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`. Sample adds `CLOCK.fth` / `GCLOCK.FTH` (GCLOCK still WIP).
+- **View → Wrap at Column** (Off / Window / 60 / 80 / 100 / Other…). **EMIT-AUTO** writes `<source-dir>/<STEM>/{.app,.img,.emit.log}`.
+- **Edit → Search in Folders…** (⌘⇧F): multi-root literal search → Search results tab; click opens file at line. Editor tabs keep text in memory; panes stay mounted so tab switches do not rebuild `NSTextView`.
 
 ---
 
