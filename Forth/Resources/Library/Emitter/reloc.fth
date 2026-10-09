@@ -59,10 +59,14 @@ $D61F0200 CONSTANT ARM-BR-X16
 \ 17–20 image viewer: choose load size render.
 \ 21–25 file choose/save-as/path/slurp/spew.
 \ 26 (APP-SIZE?)/host_app_size — pending cols/rows after live resize.
+\ 27 TIME&DATE (blr x9 hook → localtime_r veneer; same SA-FIX-BI-HOOK path).
+\ 28 CLIP!  29 CLIP@  30 CWD@  (bl _host_clip_* / _host_cwd_get).
+\ 31 SYSTEM (blr x9 system_hook → /bin/sh -c).
+\ 32 MS (bl _nanosleep).
 \ .quad = HOST-CALL-MAGIC|slot until HOST-BIND.
 
 $C0DE000000000000 CONSTANT HOST-CALL-MAGIC
-27 CONSTANT #HOST-APP
+33 CONSTANT #HOST-APP
 128 CONSTANT #HOST-RELOC
 
 CREATE HOST-APP-VA     #HOST-APP CELLS ALLOT
@@ -590,7 +594,15 @@ S" KEY?"  (GFX-IO-XT) CONSTANT GFX-KEY?
   S" (APP-FILE-SPEW)"    HOST-APP-XT 25 HOST-APP-SET
   \ (APP-SIZE?) is a FORTH boot word (forth.s), not GRAPHICS — use ['] like MS@.
   \ Without a slot, SA chrome never adopts after live resize.
-  ['] (APP-SIZE?) 26 HOST-APP-SET ;
+  ['] (APP-SIZE?) 26 HOST-APP-SET
+  \ Slot 27 TIME&DATE is SA-FIX-BI-HOOK (not HOST-APP-SET).
+  \ CLIP!/CLIP@/CWD@ bl host symbols — SA would NOP those BLs.
+  ['] CLIP! 28 HOST-APP-SET
+  ['] CLIP@ 29 HOST-APP-SET
+  ['] CWD@  30 HOST-APP-SET
+  \ Slot 31 SYSTEM is SA-FIX-BI-HOOK.
+  \ MS bls _nanosleep — without a slot, SA NOP'd delays (GCLOCK relied on PUMP).
+  ['] MS 32 HOST-APP-SET ;
 
 \ --- re-encode from new pc to same tgt --------------------------------
 
@@ -831,6 +843,19 @@ $D63F0120 CONSTANT ARM-BLR-X9
   ['] BI-ISQRT  14 SA-FIX-BI-HOOK
   ;
 
+\ TIME&DATE: ldr x9,[time_date_hook]; cbz x9,stub; mov x0,sp; blr x9
+\ SA zeroes the hook → CBZ always takes the 0 0 0 1 1 1970 stub.
+\ Same fix as BI-*: NOP CBZ; retarget BLR X9 to HOST-APP slot 27.
+: SA-FIX-TIME-DATE  ( -- )
+  ['] TIME&DATE 27 SA-FIX-BI-HOOK
+  ;
+
+\ SYSTEM: ldr x9,[system_hook]; cbz → -1; else blr x9 with cmd,len.
+\ SA zeroes the hook → every SYSTEM returns -1. Slot 31 veneer runs system(3).
+: SA-FIX-SYSTEM  ( -- )
+  ['] SYSTEM 31 SA-FIX-BI-HOOK
+  ;
+
 
 \ npc at ADRP; resolve full host abs from original prim bytes at code+off.
 : SA-BSS-TRY-PATCH  ( npc code off -- flag )
@@ -1020,6 +1045,8 @@ $D63F0120 CONSTANT ARM-BLR-X9
   SA-EXCEPT-FIX-CFA
   SA-DOCOL-IP8
   SA-FIX-BI-HOOKS
+  SA-FIX-TIME-DATE
+  SA-FIX-SYSTEM
   ." host-relocs " HOST-RELOC-N @ . CR ;
 
 ' (TGT-RELOC) IS TGT-RELOC  \ fill forward reference.

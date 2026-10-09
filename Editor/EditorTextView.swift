@@ -935,6 +935,8 @@ final class EditorNSTextView: NSTextView {
                 let caret = min(max(0, idx), ns.length)
                 setSelectedRange(NSRange(location: caret, length: 0))
                 window?.makeFirstResponder(self)
+                // So VIEW-miss in-file find targets this pane (not the left keep-alive stack).
+                FindSupport.noteCommandClickEditor(self)
                 onCommandClickWord?(word)
                 return
             }

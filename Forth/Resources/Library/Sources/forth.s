@@ -674,7 +674,8 @@ XAT_XY_Q_END:
     NEXT
 
 // CLIP! ( c-addr u -- )  push bytes to host/system clipboard
-    BOOT_WORD "CLIP!", "CLIP! ( c-addr u -- ) set host clipboard", 0, XCLIP_STORE
+// End labels required for Emitter CODE-BOUNDS / HOST-APP slots 28–29.
+    BOOT_WORD "CLIP!", "CLIP! ( c-addr u -- ) set host clipboard", 0, XCLIP_STORE, XCLIP_STORE_END
 XCLIP_STORE:
     mov  x1, x20                   // u
     ldr  x0, [x22], #8             // c-addr
@@ -683,9 +684,10 @@ XCLIP_STORE:
     bl   _host_clip_set
     RESTORE_VM
     NEXT
+XCLIP_STORE_END:
 
 // CLIP@ ( c-addr max -- u )  copy host clipboard into buffer
-    BOOT_WORD "CLIP@", "CLIP@ ( c-addr max -- u ) fetch host clipboard", 0, XCLIP_FETCH
+    BOOT_WORD "CLIP@", "CLIP@ ( c-addr max -- u ) fetch host clipboard", 0, XCLIP_FETCH, XCLIP_FETCH_END
 XCLIP_FETCH:
     mov  x1, x20                   // max
     ldr  x0, [x22], #8             // c-addr
@@ -694,6 +696,7 @@ XCLIP_FETCH:
     RESTORE_VM
     mov  x20, x0
     NEXT
+XCLIP_FETCH_END:
 
 // TERMINAL-REFRESH ( -- )
 
@@ -4448,7 +4451,8 @@ XPWD:
     NEXT
 
 // CWD@ ( c-addr max -- u )  copy logical working directory (same path PWD prints)
-    BOOT_WORD "CWD@", "CWD@ ( c-addr max -- u ) copy logical working directory", 0, XCWD_FETCH
+// End label required for Emitter CODE-BOUNDS / HOST-APP slot 30.
+    BOOT_WORD "CWD@", "CWD@ ( c-addr max -- u ) copy logical working directory", 0, XCWD_FETCH, XCWD_FETCH_END
 XCWD_FETCH:
     mov  x1, x20                   // max
     ldr  x0, [x22], #8             // c-addr
@@ -4457,6 +4461,7 @@ XCWD_FETCH:
     RESTORE_VM
     mov  x20, x0
     NEXT
+XCWD_FETCH_END:
 
 // DIR ( -- )  optional path/filespec; bare lists cwd (FROMLIB → Library)
 
@@ -4553,8 +4558,9 @@ XEDIT_AT:
 // Run command string via host /bin/sh -c in the logical cwd (CHDIR/PWD).
 // n = process exit status (0 = success). n = -1 if hook missing or launch failed.
 // Example:  S" cc -arch arm64 -O2 -o tcomarm64 tcomarm64.c" SYSTEM
+// End label required for Emitter CODE-BOUNDS / HOST-APP slot 31 (SA-FIX-SYSTEM).
 
-    BOOT_WORD "SYSTEM", "SYSTEM ( c-addr u -- n ) run shell command (/bin/sh -c); n=exit status (-1 fail)", 0, XSYSTEM
+    BOOT_WORD "SYSTEM", "SYSTEM ( c-addr u -- n ) run shell command (/bin/sh -c); n=exit status (-1 fail)", 0, XSYSTEM, XSYSTEM_END
 XSYSTEM:
     // TOS = u, under = c-addr  →  net depth -1 (pop 2, push n as TOS)
     // Same pattern as MPROTECT (3→1): pop unders, replace TOS with result.
@@ -4588,6 +4594,7 @@ XSYSTEM:
     add  x0, x0, host_tmp1@pageoff
     ldr  x20, [x0]                 // TOS = n
     NEXT
+XSYSTEM_END:
 
 // ============================================================================
 // File load: INCLUDE / FLOAD / INCLUDED / REQUIRED / REQUIRE / .INCLUDED

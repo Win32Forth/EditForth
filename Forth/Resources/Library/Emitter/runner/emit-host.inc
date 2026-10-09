@@ -4,7 +4,11 @@
  * BI-DIVMOD / BI-ISQRT), slot 15 (host_app_mouse), slot 16 (cblit),
  * slots 17–20 (APP-IMG-CHOOSE/LOAD/SIZE/RENDER),
  * slots 21–25 (APP-FILE-CHOOSE/SAVE-AS/PATH/SLURP/SPEW),
- * slot 26 (APP-SIZE?)/host_app_size — pending cols/rows after live resize.
+ * slot 26 (APP-SIZE?)/host_app_size — pending cols/rows after live resize,
+ * slot 27 TIME&DATE / host_time_date (localtime_r → out[6]),
+ * slot 28 CLIP! / 29 CLIP@ / 30 CWD@,
+ * slot 31 SYSTEM (/bin/sh -c),
+ * slot 32 MS / nanosleep.
  * Public domain.
  */
 #import <Cocoa/Cocoa.h>
@@ -15,7 +19,10 @@
 #include <unistd.h>
 #include <math.h>
 #include <sys/time.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <limits.h>
+#include <errno.h>
 
 enum { EMIT_COLS_MAX = 256, EMIT_ROWS_MAX = 128, EMIT_KEYCAP = 64 };
 
@@ -1135,8 +1142,101 @@ static int64_t host_app_size_slot(int64_t cols_ptr, int64_t rows_ptr) {
                        (int64_t *)(uintptr_t)rows_ptr);
 }
 
-/* Slot table — must match Emitter reloc.fth HOST-APP slots 0–26. */
-static emit_host_fn host_fn[27] = {
+/* Slot 27: TIME&DATE blr veneer — x0 = int64_t out[6]
+ * (sec, min, hour, day, month 1..12, year). Matches KernelBridge. */
+static int64_t host_time_date(int64_t out_ptr, int64_t unused) {
+  (void)unused;
+  int64_t *out = (int64_t *)(uintptr_t)out_ptr;
+  if (!out) return 0;
+  time_t now = time(NULL);
+  struct tm tm;
+  if (!localtime_r(&now, &tm)) {
+    out[0] = 0; out[1] = 0; out[2] = 0;
+    out[3] = 1; out[4] = 1; out[5] = 1970;
+    return 0;
+  }
+  out[0] = tm.tm_sec;
+  out[1] = tm.tm_min;
+  out[2] = tm.tm_hour;
+  out[3] = tm.tm_mday;
+  out[4] = tm.tm_mon + 1;
+  out[5] = tm.tm_year + 1900;
+  if (getenv("EMIT_DEBUG")) {
+    fprintf(stderr, "host_time_date: %lld-%02lld-%02lld %02lld:%02lld:%02lld\n",
+            (long long)out[5], (long long)out[4], (long long)out[3],
+            (long long)out[2], (long long)out[1], (long long)out[0]);
+  }
+  return 0;
+}
+
+/* Slot 28: CLIP! bl _host_clip_set — x0=ptr x1=len. */
+static int64_t host_clip_set(int64_t ptr, int64_t len) {
+  if (!ptr || len < 0) return 0;
+  @autoreleasepool {
+    NSData *data = [NSData dataWithBytes:(const void *)(uintptr_t)ptr
+                                  length:(NSUInteger)len];
+    NSString *s = [[NSString alloc] initWithData:data
+                                        encoding:NSUTF8StringEncoding];
+    if (!s) s = [[NSString alloc] initWithData:data
+                                      encoding:NSISOLatin1StringEncoding];
+    if (!s) return 0;
+    NSPasteboard *pb = [NSPasteboard generalPasteboard];
+    [pb clearContents];
+    [pb setString:s forType:NSPasteboardTypeString];
+  }
+  return 0;
+}
+
+/* Slot 29: CLIP@ bl _host_clip_get — x0=dest x1=max; ret length. */
+static int64_t host_clip_get(int64_t ptr, int64_t max) {
+  if (!ptr || max <= 0) return 0;
+  @autoreleasepool {
+    NSString *s = [[NSPasteboard generalPasteboard]
+                   stringForType:NSPasteboardTypeString];
+    if (!s) return 0;
+    NSData *data = [s dataUsingEncoding:NSUTF8StringEncoding];
+    if (!data) return 0;
+    NSUInteger n = data.length;
+    if (n > (NSUInteger)max) n = (NSUInteger)max;
+    memcpy((void *)(uintptr_t)ptr, data.bytes, n);
+    return (int64_t)n;
+  }
+}
+
+/* Slot 30: CWD@ bl _host_cwd_get — x0=dest x1=max; ret length. */
+static int64_t host_cwd_get(int64_t ptr, int64_t max) {
+  char tmp[PATH_MAX];
+  if (!ptr || max <= 0) return 0;
+  if (!getcwd(tmp, sizeof tmp)) return 0;
+  size_t n = strlen(tmp);
+  if (n > (size_t)max) n = (size_t)max;
+  memcpy((void *)(uintptr_t)ptr, tmp, n);
+  return (int64_t)n;
+}
+
+/* Slot 31: SYSTEM blr veneer — x0=cmd x1=len; ret exit status or -1.
+ * Matches KernelBridge system_hook (NUL-terminate, system(3)). */
+static int64_t host_system(int64_t cmd_ptr, int64_t len) {
+  if (!cmd_ptr || len <= 0 || len > 65535) return -1;
+  char *buf = (char *)malloc((size_t)len + 1);
+  if (!buf) return -1;
+  memcpy(buf, (const void *)(uintptr_t)cmd_ptr, (size_t)len);
+  buf[len] = '\0';
+  int st = system(buf);
+  free(buf);
+  if (st < 0) return -1;
+  if (WIFEXITED(st)) return (int64_t)WEXITSTATUS(st);
+  return -1;
+}
+
+/* Slot 32: MS bl _nanosleep — x0=req timespec* x1=rem timespec*. */
+static int64_t host_ms_nanosleep(int64_t req, int64_t rem) {
+  return (int64_t)nanosleep((const struct timespec *)(uintptr_t)req,
+                            (struct timespec *)(uintptr_t)rem);
+}
+
+/* Slot table — must match Emitter reloc.fth HOST-APP slots 0–32. */
+static emit_host_fn host_fn[33] = {
   host_app_open,
   host_app_close,
   host_app_blit,
@@ -1163,5 +1263,11 @@ static emit_host_fn host_fn[27] = {
   host_app_file_path,
   host_app_file_slurp_slot,
   host_app_file_spew,
-  host_app_size_slot
+  host_app_size_slot,
+  host_time_date,
+  host_clip_set,
+  host_clip_get,
+  host_cwd_get,
+  host_system,
+  host_ms_nanosleep
 };

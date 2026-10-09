@@ -16,8 +16,6 @@ Examples
   FROMLIB FLOAD PI/pi-test.fth
   FROMLIB FLOAD xchar-smoke.fth
   FROMLIB FLOAD Debugger/debugger.fth  \ DEBUG hub + loads Debugger/* (AutoLoad)
-  FROMLIB FLOAD Editor/SZ-EDITOR.fth
-  FROMLIB SZEDIT Editor/SZ-EDITOR-README.txt
   FROMLIB FLOAD Assembler/asmarm64.fth     \ AArch64 host toolkit (not used by TCOM)
   FROMLIB FLOAD Assembler/ASSEMBLER.fth    \ interactive CODE / END-CODE (64Forth only)
   FROMLIB FLOAD Assembler/ASMARMTESTS.fth \ then: ASM-TESTS

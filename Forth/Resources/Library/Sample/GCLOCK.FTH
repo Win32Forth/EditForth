@@ -1,39 +1,61 @@
-\\ GCLOCK.SEQ  A simple Graphic Clock program  by Tom Zimmer & Robert Smith
+\ GCLOCK.FTH — Graphic Clock for 64Forth GRAPHICS (COLOR8)
+\
+\ Port of Tom Zimmer & Robert Smith GCLOCK.SEQ (public domain).
+\ Original targeted TCOM / EGA 640x350x16; this version uses
+\ 64Forth WINDOW + COLOR8 (640x400) like DOODLECOLOR64 / BRESENHAM.
+\
+\ Load (not Autoload):
+\   FROMLIB FLOAD Sample/GCLOCK.FTH
+\   GCLOCK
+\
+\ Controls (graphics window must have key focus):
+\   Enter   more oblong / reshape border
+\   Space   clear and redraw with a new random oblong
+\   Esc     quit (returns to console; no BYE)
+\
+\ Public domain.
 
-  Simple graphic clock program, runs in 640x350 mode.
+ANEW GCLOCK_MODULE
 
-        .options /opt /noinit /tailopton
+\ Emitter Autoload defines this; tolerate a bare kernel for compile smoke.
+[DEFINED] EMIT-NO-WRAPPER [IF] EMIT-NO-WRAPPER [THEN]
 
- **********************************************************************
+ONLY FORTH DEFINITIONS
+DECIMAL
 
- The SINTBL below was defined by using the following program using F-PC
- and Robert Smiths FFLOAT floating point package to generate the values
- which were redirected to a disk file using the ">B" F-PC operator to
- create BROWSE.PRN from the displayed output of this program.
- BROWSE.PRN was then edited into the table you see here, giving an array
- of absolute screen offsets for coordinates to draw the clock hands.
+: GCLOCK-CREDIT  ( -- )
+  CR ." GCLOCK is a public domain example by Tom Zimmer and Robert Smith,"
+  CR ." adapted for 64Forth GRAPHICS COLOR8 (640x400)." CR
+  ;
 
- **********************************************************************
+\ Wall clock from TIME&DATE (local). Stand-alone emit relocates the
+\ time_date_hook BLR via HOST-APP slot 27 (localtime_r in emit-host).
+: HMS  ( -- hour min sec )
+  TIME&DATE                   \ sec min hour day month year
+  2DROP DROP                  \ sec min hour
+  SWAP ROT                    \ hour min sec
+  ;
 
-        require ffloat    \ load the floating point package
-        floats          \ allow automatic floating point number conversion
-        degrees         \ make FSIN word in degrees
+ONLY FORTH ALSO GRAPHICS DEFINITIONS
+DECIMAL
 
-        : makesin       ( -- )
-                        462 0
-                        do      cr i 0 float fsin 240.0 f* int d.
-                                100 ms
-                                ?keypause
-                     6 +loop    ;
+[UNDEFINED] 3DROP [IF]
+: 3DROP  ( n1 n2 n3 -- )  DROP 2DROP ;
+[THEN]
 
- **********************************************************************
+\ --- classic EGA-ish pens (COLOR8 indices) ---------------------------------
 
-{
+: PEN!     ( ix -- )  COLOR !  WHITE ;
+: PEN-BLACK   ( -- )  BLACK ;
+: PEN-WHITE   ( -- )  CWHITE   PEN! ;
+: PEN-LTGREEN ( -- )  CLTGREEN PEN! ;
+: PEN-LTBLUE  ( -- )  CLTBLUE  PEN! ;
+: PEN-LTCYAN  ( -- )  CLTCYAN  PEN! ;
+: PEN-YELLOW  ( -- )  CYELLOW  PEN! ;
 
-only forth also graphics
-\ require graph.fth
-
-create sintbl
+\ Precomputed 6° sine table (absolute screen offsets for hand tips).
+\ Built historically with F-PC + FFLOAT; kept as integer cells.
+CREATE SINTBL
           0 ,    25 ,    49 ,    74 ,    97 ,   120 ,   141 ,   160 ,
         178 ,   194 ,   207 ,   219 ,   228 ,   234 ,   238 ,   240 ,
         238 ,   234 ,   228 ,   219 ,   207 ,   194 ,   178 ,   160 ,
@@ -45,212 +67,281 @@ create sintbl
          97 ,   120 ,   141 ,   160 ,   178 ,   194 ,   207 ,   219 ,
         228 ,   234 ,   238 ,   240 ,   238 ,
 
-: graph_bye     ( -- )          \ cleanup stuff when we are all done
-cr ." GCLOCK.COM is a public domain example program by Tom Zimmer and Robert Smith."
-cr              bye ;
+\ VARIABLEs so Emitter reach can see them in colon bodies.
+\ Init lasts to 0 (not -1): negative 60 MOD can yield a bad SINTBL index.
+VARIABLE LAST-HOUR           0 LAST-HOUR !
+VARIABLE LAST-MINUTE         0 LAST-MINUTE !
+VARIABLE LAST-HOUR-MINUTE    0 LAST-HOUR-MINUTE !
+VARIABLE LAST-SECOND         0 LAST-SECOND !
+VARIABLE THIS-HOUR           0 THIS-HOUR !
+VARIABLE THIS-MINUTE         0 THIS-MINUTE !
+VARIABLE THIS-SECOND         0 THIS-SECOND !
 
--1 value last-hour
--1 value last-minute
--1 value last-hour-minute
--1 value last-second
+VARIABLE CENTER-X   320 CENTER-X !
+VARIABLE CENTER-Y   199 CENTER-Y !
+VARIABLE SCALE-Y    240 SCALE-Y !
 
- 0 value this-hour
- 0 value this-minute
- 0 value this-second
+VARIABLE OBLONG      0 OBLONG !
+VARIABLE OBLONG2     0 OBLONG2 !
 
-320 constant center-x
-175 value    center-y
-240 value    scale-y
+VARIABLE SEED1  0 SEED1 !
+VARIABLE SEED2  0 SEED2 !
+VARIABLE SEED3  0 SEED3 !
 
-0 value oblong
-0 value oblong2
+VARIABLE CCOLOR  0 CCOLOR !
+VARIABLE CDIAM  16 CDIAM !
 
-0 value SEED1
-0 value SEED2
-0 value SEED3
+\ Last adopted pixel size — GC-ADOPT-WINDOW redraws when the live
+\ resize finishes and G-PX/G-PY change (same pattern as IMAGEVIEW64).
+VARIABLE GC-LAST-PX  0 GC-LAST-PX !
+VARIABLE GC-LAST-PY  0 GC-LAST-PY !
 
-: (RANDOMIZE)   ( -- u )
-            	  MS@ ;
+: (RANDOMIZE)  ( -- u )  MS@ ;
 
-: RANDOMIZE     ( -- )
-                (RANDOMIZE)        TO SEED1
-                (RANDOMIZE) 2* 1-  TO SEED2
-                (RANDOMIZE) 2/ 1+  TO SEED3 ;
+: RANDOMIZE  ( -- )
+  (RANDOMIZE)        SEED1 !
+  (RANDOMIZE) 2* 1-  SEED2 !
+  (RANDOMIZE) 2/ 1+  SEED3 !
+  ;
 
-: RND           ( n1 -- n2 )
-                1 max
-                SEED1 177 /MOD  2*    SWAP  171 *  SWAP  - DUP  TO SEED1
-                SEED2 176 /MOD  35 *  SWAP  172 *  SWAP  - DUP  TO SEED2
-                SEED3 178 /MOD  63 *  SWAP  170 *  SWAP  - DUP  TO SEED3
-                +  + SWAP  MOD  ;
+: RND  ( n1 -- n2 )
+  1 MAX
+  SEED1 @ 177 /MOD  2*    SWAP  171 *  SWAP  - DUP  SEED1 !
+  SEED2 @ 176 /MOD  35 *  SWAP  172 *  SWAP  - DUP  SEED2 !
+  SEED3 @ 178 /MOD  63 *  SWAP  170 *  SWAP  - DUP  SEED3 !
+  +  +  SWAP  MOD
+  ;
 
-: xy-scale      ( 6deg scale -- x1 y1 )
-                >r
-                dup       2* sintbl + @ dup r@           240 */
-                swap dup 1 and oblong2 rot 2 and if negate then
-                ( negate ) * +        center-x +
-                swap 15 + 2* sintbl + @ dup r>       scale-y */
-                swap dup 1 and oblong2 rot 2 and if negate then
-                           * + negate center-y + ;
+\ 6deg index + radial scale → screen x y (bottom-left origin).
+\ TCOM used 2* for cell indexing (16-bit cells). Here CELL=8 → CELLS.
+\ TCOM negated Y for top-down EGA; 64Forth is y-up, so leave Y signed as-is
+\ (ang 0 = 12 o'clock at top, increasing = clockwise).
+: XY-SCALE  ( 6deg scale -- x1 y1 )
+  >R
+  DUP CELLS SINTBL + @  DUP R@  240 */
+  SWAP DUP 1 AND  OBLONG2 @  ROT 2 AND IF NEGATE THEN
+  * +  CENTER-X @ +
+  SWAP 15 + CELLS SINTBL + @  DUP R>  SCALE-Y @ */
+  SWAP DUP 1 AND  OBLONG2 @  ROT 2 AND IF NEGATE THEN
+  * +  CENTER-Y @ +
+  ;
 
-: .sec          ( n1 -- )
-                >r
-                center-x center-y  r@    220 xy-scale line
-                r@ 1- 020 xy-scale r@    220 xy-scale line
-                r@ 1+ 020 xy-scale r@    220 xy-scale line
-                center-x center-y  r@ 1- 020 xy-scale line
-                center-x center-y  r@ 1+ 020 xy-scale line
-                r> drop ;
+\ Hand angle 0..59 (SINTBL index); keep non-negative after MOD.
+: ANG  ( n -- n' )
+  60 MOD  DUP 0< IF  60 +  THEN
+  ;
 
-: .min          ( n1 -- )
-                >r
-                center-x center-y  r@    180 xy-scale line
-                r@ 1- 100 xy-scale r@    180 xy-scale line
-                r@ 1+ 100 xy-scale r@    180 xy-scale line
-                center-x center-y  r@ 1- 100 xy-scale line
-                center-x center-y  r@ 1+ 100 xy-scale line
-                r> drop ;
+: .SEC  ( n1 -- )
+  ANG >R
+  CENTER-X @ CENTER-Y @  R@     220 XY-SCALE  LINE
+  R@ 1- ANG 020 XY-SCALE  R@     220 XY-SCALE  LINE
+  R@ 1+ ANG 020 XY-SCALE  R@     220 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 1- ANG 020 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 1+ ANG 020 XY-SCALE  LINE
+  R> DROP
+  ;
 
-: .hr           ( n1 -- )
-                >r
-                center-x center-y   r@     120 xy-scale line
-                r@ 2 - 060 xy-scale r@     120 xy-scale line
-                r@ 2 + 060 xy-scale r@     120 xy-scale line
-                center-x center-y   r@ 2 - 060 xy-scale line
-                center-x center-y   r@ 2 + 060 xy-scale line
-                r> drop ;
+: .MIN  ( n1 -- )
+  ANG >R
+  CENTER-X @ CENTER-Y @  R@     180 XY-SCALE  LINE
+  R@ 1- ANG 100 XY-SCALE  R@     180 XY-SCALE  LINE
+  R@ 1+ ANG 100 XY-SCALE  R@     180 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 1- ANG 100 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 1+ ANG 100 XY-SCALE  LINE
+  R> DROP
+  ;
 
-: .second       ( -- )          \ draw second display
-                black color !
-                last-second 60 mod .sec this-second TO last-second
-                white color !
-                this-second 60 mod .sec ;
+: .HR  ( n1 -- )
+  ANG >R
+  CENTER-X @ CENTER-Y @  R@      120 XY-SCALE  LINE
+  R@ 2 - ANG 060 XY-SCALE  R@      120 XY-SCALE  LINE
+  R@ 2 + ANG 060 XY-SCALE  R@      120 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 2 - ANG 060 XY-SCALE  LINE
+  CENTER-X @ CENTER-Y @  R@ 2 + ANG 060 XY-SCALE  LINE
+  R> DROP
+  ;
 
-: .minute       ( -- )          \ draw minute display
-                black color !
-                last-minute 60 mod .min this-minute TO last-minute
-                ltgreen color !
-                this-minute 60 mod .min ;
+: .SECOND  ( -- )
+  PEN-BLACK
+  LAST-SECOND @ .SEC
+  THIS-SECOND @ LAST-SECOND !
+  PEN-WHITE
+  THIS-SECOND @ .SEC
+  ;
 
-: .hour         ( -- )          \ draw hour  display
-                black color !
-                last-hour 5 * last-hour-minute 12 /   + 60 mod .hr
-                this-hour   TO last-hour
-                this-minute TO last-hour-minute
-                ltblue color !
-                this-hour 5 * this-minute      12 /   + 60 mod .hr ;
+: .MINUTE  ( -- )
+  PEN-BLACK
+  LAST-MINUTE @ .MIN
+  THIS-MINUTE @ LAST-MINUTE !
+  PEN-LTGREEN
+  THIS-MINUTE @ .MIN
+  ;
 
-: ?second       ( -- f )        \ f = true if second has changed.
-                gettime  256 / >r  256 /mod swap  r>
-                dup last-second <>
-                if      TO this-second
-                        TO this-minute
-                        TO this-hour
-                        true
-                else    3drop false
-                then    ;
+: .HOUR  ( -- )
+  PEN-BLACK
+  LAST-HOUR @ 5 *  LAST-HOUR-MINUTE @ 12 /  +  .HR
+  THIS-HOUR @ LAST-HOUR !
+  THIS-MINUTE @ LAST-HOUR-MINUTE !
+  PEN-LTBLUE
+  THIS-HOUR @ 5 *  THIS-MINUTE @ 12 /  +  .HR
+  ;
 
-: init-vars     ( -- )
-                ?second drop            \ to initialize LAST-SECOND
-                this-second TO last-second
-                this-minute TO last-minute
-                this-minute TO last-hour-minute
-                this-hour   TO last-hour ;
+: ?SECOND  ( -- f )
+  HMS                                   \ hour min sec
+  DUP LAST-SECOND @ <>
+  IF
+    THIS-SECOND !
+    THIS-MINUTE !
+    THIS-HOUR !
+    TRUE
+  ELSE
+    3DROP FALSE
+  THEN
+  ;
 
-: .hms          ( -- )
-                .second         \ draw second
-                .minute         \ draw minute
-                .hour           \ draw hour
-                show-circle ;   \ draw the circles
+: INIT-VARS  ( -- )
+  ?SECOND DROP
+  THIS-SECOND @ LAST-SECOND !
+  THIS-MINUTE @ LAST-MINUTE !
+  THIS-MINUTE @ LAST-HOUR-MINUTE !
+  THIS-HOUR @ LAST-HOUR !
+  ;
 
-: new_clock     ( -- )          \ draw a new clock, of random oblong amount
-                640x350x16                      \ set graphics mode
-                .clock-info
-                oblong rnd !> oblong2
-                show-border ;
+: SHOW-CIRCLE  ( -- )
+  CCOLOR @ 1+ CCOLOR !
+  CCOLOR @ PEN!
+  60 0 DO
+    I CDIAM @ XY-SCALE PLOT
+  LOOP
+  CDIAM @ 5 + CDIAM !
+  CDIAM @ 210 > IF  16 CDIAM !  THEN
+  ;
 
-: show-time     ( -- )          \ show the time if it has changed
-                ?second                         \ if second changed
-                if      this-second 5 mod 0=    \ if on a 5 second marker
-                        oblong 1 > and          \ and oblong is above 1
-                        if      new_clock       \ redisplay clock border
-                        then
-                        .hms                    \ and then the time
-                then    ;
+: SHOW-BORDER  ( -- )
+  \ Prefer UNLOOP EXIT over LEAVE — emitter COLON-WALK treats LEAVE like a
+  \ branch with an offset cell and can "scan: overrun" (see reach.fth).
+  60 0 DO
+    KEY? IF  UNLOOP EXIT  THEN
+    PEN-WHITE
+    I 239 XY-SCALE  I 1+ ANG 239 XY-SCALE  LINE
+    I 228 XY-SCALE  I 1+ ANG 228 XY-SCALE  LINE
+    I 5 MOD
+    IF
+      PEN-LTCYAN
+      I 228 XY-SCALE  I 239 XY-SCALE  LINE
+    ELSE
+      PEN-YELLOW
+      I 220 XY-SCALE  I 239 XY-SCALE  LINE
+    THEN
+  LOOP
+  PREFRESH                              \ pixels need PREFRESH; KEY? only ?REFRESH
+  ;
 
- 0 value ccolor
-16 value cdiam
+: GC-LAYOUT  ( -- )
+  G-PX 2/ CENTER-X !
+  G-PY 2/ 1- CENTER-Y !
+  240 240 CENTER-Y @ */ SCALE-Y !
+  G-PX GC-LAST-PX !
+  G-PY GC-LAST-PY !
+  ;
 
-: show-circle   ( -- )
-                ccolor 1+ ccolor
-                ccolor color !
-                60 0
-                do      i    cdiam xy-scale cplot
-                loop    5 cdiam + TO cdiam
-                cdiam 210 > if 16 TO cdiam then ;
+: .CLOCK-INFO  ( -- )
+  \ Character grid labels; col tracks G-COLS so they move with the face
+  \ after a live resize (pixel blit stretch-scales; text uses cell AT).
+  G-COLS 40 - 0 MAX 0 AT ." Tom & Bob's Graphic Clock"
+  G-COLS 40 - 0 MAX 1 AT ." Esc=quit  Enter=reshape  Space=redraw"
+  ;
 
-: show-border   ( -- )
-                60 0
-                do      white  color !
-                        i 239 xy-scale i 1+ 239 xy-scale line
-                        i 228 xy-scale i 1+ 228 xy-scale line
-                        i 5 mod
-                        if      ltcyan color !           \ 1 second markers
-                                i    228 xy-scale i    239 xy-scale line
-                        else    yellow color !           \ 5 second markers
-                                i    220 xy-scale i    239 xy-scale line
-                        then
-                        key? IF leave THEN
-                loop    ;
+: .HMS  ( -- )
+  .SECOND
+  .MINUTE
+  .HOUR
+  SHOW-CIRCLE
+  PREFRESH
+  ;
 
-: .clock-info   ( -- )
-                ltgray >fg black >bg
-                53  0 g-at ." Tom & Bob's Graphic Clock"
-                53  1 g-at ."     Press "
-                white  >fg green  >bg  ."  ESC "  ltgray >fg black >bg
-                           ."  to QUIT"
-                00 24 g-at ." Modify clock shape = "
-                ltblue >fg yellow >bg ."  Enter " ltgray >fg black >bg
-                53 24 g-at ." Clear and redraw = "
-                yellow >fg cyan   >bg ."  Space " ltgray >fg black >bg
-                ;
+\ Full face + chrome after layout change (resize, Space, startup).
+: GC-REDRAW  ( -- )
+  COLOR8  PCLS
+  .CLOCK-INFO
+  SHOW-BORDER
+  INIT-VARS
+  .HMS
+  ;
 
-: do-clock      ( -- )          \ while no key pressed, show the time
-                show-border
-                show-circle             \ display the circle
-                init-vars               \ then initialize variable
-                .hms                    \ show initial time
-                0
-        begin   dup 13 =                \ CR key
-                if      i oblong 1+ oblong
-                        oblong TO oblong2
-                        show-border
-                then
-                bl =                    \ space bar
-                if      new_clock
-                then
-                begin   key? 0=         \ while nobody has pressed a key
-                while   show-time       \ just keep showing the current time
-                        show-circle
-                repeat  key
-                        dup  13 <>
-                        over bl <> and
-        until   drop ;
+: NEW-CLOCK  ( -- )
+  GC-LAYOUT
+  OBLONG @ RND OBLONG2 !
+  GC-REDRAW
+  ;
 
-: tcom_init     ( -- )
-                DECIMAL ;                       \ always select decimal
+\ Adopt host grid when the user finishes a live resize; redraw so the
+\ help text and hands share the new G-PX×G-PY (not a stretched old frame).
+: GC-ADOPT-WINDOW  ( -- )
+  (APP-SIZE?) 0= IF  2DROP EXIT  THEN
+  WINDOW-SIZE
+  GC-LAYOUT
+  GC-REDRAW
+  ;
 
-: main          ( -- )          \ a simple drawing program
-                tcom_init                       \ init I/O
-                randomize                       \ init random number generator
-                ?vmode 7 = abort" Sorry, EGA/VGA Color required"
-                640x350x16                      \ set graphics mode
-                vdots 2/ 1- !> center-y         \ calibrate screen center
-                240 240 center-y */ !> scale-y  \ calibrate aspect ratio
-                white color !                   \ default color=white
-                .clock-info
-                do-clock                        \ show the clock
-                 graph_bye                       \ and terminate the program
-                ;
+: SHOW-TIME  ( -- )
+  ?SECOND
+  IF
+    THIS-SECOND @ 5 MOD 0=
+    OBLONG @ 1 > AND
+    IF  NEW-CLOCK  ELSE  .HMS  THEN
+  THEN
+  ;
 
+: DO-CLOCK  ( -- )
+  SHOW-BORDER
+  INIT-VARS
+  .HMS
+  BEGIN
+    BEGIN
+      KEY? 0=
+    WHILE
+      GC-ADOPT-WINDOW
+      SHOW-TIME
+      \ Soft yield so AppKit can paint / take Esc (avoid beach-ball spin).
+      16 MS
+      (APP-PUMP)
+    REPEAT
+    KEY
+    DUP 13 = IF                    \ Enter — more oblong
+      DROP
+      OBLONG @ 1+ OBLONG !
+      OBLONG @ OBLONG2 !
+      SHOW-BORDER
+      .HMS
+      FALSE
+    ELSE DUP BL = IF               \ Space — new random face
+      DROP  NEW-CLOCK  FALSE
+    ELSE DUP 27 = IF               \ Esc — quit
+      DROP  TRUE
+    ELSE
+      DROP  TRUE                   \ any other key quits
+    THEN THEN THEN
+  UNTIL
+  ;
 
+: GCLOCK  ( -- )
+  DECIMAL
+  RANDOMIZE
+  S" 64Forth Graphic Clock" APP-NAME
+  COLOR8  WINDOW  PCLS
+  GC-LAYOUT
+  PEN-WHITE
+  .CLOCK-INFO
+  DO-CLOCK
+  WINDOW-OFF
+  \ Do not ONLY/ALSO here — stand-alone emit has no CODE-BOUNDS for ONLY.
+  GCLOCK-CREDIT
+  ;
+
+\ Keep GRAPHICS searchable for EMIT-WINDOW-APP; FORTH first for console CR.
+ONLY FORTH ALSO GRAPHICS ALSO FORTH DEFINITIONS
+
+CR .( GCLOCK — graphic clock; Esc quits) CR
+CR .( Run:  GCLOCK ) CR
+CR .( Emit: EMIT-WINDOW-APP GCLOCK ) CR

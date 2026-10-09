@@ -66,6 +66,8 @@ final class WorkspaceModel: ObservableObject {
     /// Folder-search result tabs (hit lists only — not file buffers).
     @Published private(set) var searchTabs: [SearchSession] = []
     @Published var selectedTabID: UUID?
+    /// Right-hand editor pane tab while split; nil means split is closed.
+    @Published private(set) var splitSecondaryTabID: UUID?
 
     private var tabCancellables: [UUID: AnyCancellable] = [:]
     private var searchCancellables: [UUID: AnyCancellable] = [:]
@@ -79,11 +81,80 @@ final class WorkspaceModel: ObservableObject {
         searchTabs.first { $0.id == selectedTabID }
     }
 
+    /// True when a second editor pane is open beside the primary.
+    var isEditorSplit: Bool { splitSecondaryTabID != nil }
+
+    /// File tab shown in the right pane (nil if split closed or tab was closed).
+    var splitSecondaryTab: EditorTab? {
+        guard let id = splitSecondaryTabID else { return nil }
+        return tabs.first { $0.id == id }
+    }
+
     /// Ordered strip: file tabs then search tabs (v1).
     var tabStripItems: [(id: UUID, title: String, isSearch: Bool)] {
         let files = tabs.map { (id: $0.id, title: $0.title, isSearch: false) }
         let searches = searchTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
         return files + searches
+    }
+
+    // MARK: - Editor split
+
+    /// Open a side-by-side editor. Left stays the current file tab; right picks
+    /// another open file, or an Open… panel when only one file is open.
+    func openEditorSplit() {
+        // Need a file tab on the left — prefer selection, else last file tab.
+        let left: EditorTab? = selectedTab ?? tabs.last
+        guard let left else { return }
+        if selectedTabID != left.id {
+            selectedTabID = left.id
+        }
+
+        if let other = tabs.first(where: { $0.id != left.id }) {
+            splitSecondaryTabID = other.id
+            objectWillChange.send()
+            return
+        }
+
+        // Only one file tab — open another file for the right pane.
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.forthSource, .plainText, .utf8PlainText, .sourceCode]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a file for the right editor pane"
+        panel.prompt = "Open in Split"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let opened = openURL(url, viewMode: false, line: nil) else { return }
+        // openURL focuses the new tab (left). Put the previous file back on the
+        // left and the newly opened file on the right.
+        selectedTabID = left.id
+        splitSecondaryTabID = opened.id
+        objectWillChange.send()
+    }
+
+    func closeEditorSplit() {
+        guard splitSecondaryTabID != nil else { return }
+        splitSecondaryTabID = nil
+        objectWillChange.send()
+    }
+
+    /// Change which file tab fills the right pane.
+    func setSplitSecondaryTab(id: UUID) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        splitSecondaryTabID = id
+        objectWillChange.send()
+    }
+
+    /// Keep left and right on different tabs when the tab bar focuses the right’s file.
+    func ensureSplitPanesDistinct() {
+        guard let secondary = splitSecondaryTabID,
+              secondary == selectedTabID
+        else { return }
+        if let other = tabs.first(where: { $0.id != selectedTabID }) {
+            splitSecondaryTabID = other.id
+        } else {
+            splitSecondaryTabID = nil
+        }
+        objectWillChange.send()
     }
 
     // MARK: - Open / focus
@@ -405,6 +476,14 @@ final class WorkspaceModel: ObservableObject {
             } else {
                 let next = min(index, tabs.count - 1)
                 selectedTabID = tabs[next].id
+            }
+        }
+        if splitSecondaryTabID == id {
+            // Prefer another file that is not the left pane; else close the split.
+            if let other = tabs.first(where: { $0.id != selectedTabID }) {
+                splitSecondaryTabID = other.id
+            } else {
+                splitSecondaryTabID = nil
             }
         }
         objectWillChange.send()

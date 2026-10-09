@@ -410,6 +410,45 @@ S" CR"         (EMIT-GFX-XT) CONSTANT (EMIT-GFX-CR)
   S" ." EMIT-WINDOW-APP-TO ;
 
 \ =============================================================================
+\ SYSTEM helpers — open Terminal / launch .app / run last EMIT product.
+\ SYSTEM is host-hooked in EditForth and HOST-APP slot 31 in stand-alone.
+\ Paths are single-quoted for /bin/sh (same as (EMIT-MKDIR) / app-build).
+\ =============================================================================
+
+\ open -a Terminal '<dir>'  — macOS Terminal at that folder.
+: OPEN-TERMINAL-AT  ( c-addr u -- n )
+  {: a u -- :}
+  EMIT-CMDBUF (EMIT-S0)
+  S" open -a Terminal " EMIT-CMDBUF (EMIT-S+)
+  a u EMIT-CMDBUF (EMIT-QUOTE+)
+  EMIT-CMDBUF COUNT SYSTEM ;
+
+\ open '<path.app>'  — launch a macOS .app (or any path open(1) accepts).
+: OPEN-APP  ( c-addr u -- n )
+  {: a u -- :}
+  EMIT-CMDBUF (EMIT-S0)
+  S" open " EMIT-CMDBUF (EMIT-S+)
+  a u EMIT-CMDBUF (EMIT-QUOTE+)
+  EMIT-CMDBUF COUNT SYSTEM ;
+
+\ Launch the .app path left in EMIT-APPBUF by the last successful EMIT-*.
+: RUN-EMITTED  ( -- n )
+  EMIT-APPBUF C@ 0= IF
+    ." RUN-EMITTED: no .app yet (EMIT first)" CR
+    -1 EXIT
+  THEN
+  EMIT-APPBUF COUNT OPEN-APP ;
+
+\ Example: Terminal on the EditForth Documents tree.
+: EDITFORTH-TERM  ( -- n )
+  S" /Users/thomaszimmer/Documents/EditForth" OPEN-TERMINAL-AT ;
+
+\ Example: open GCLOCK.app under Sample (after it has been emitted).
+: EDITFORTH-GCLOCK  ( -- n )
+  S" /Users/thomaszimmer/Documents/EditForth/Library/Sample/GCLOCK/GCLOCK.app"
+  OPEN-APP ;
+
+\ =============================================================================
 \ Editor EMIT directives (FORTH). Put near the top of the main source file.
 \ Flags are sticky until EMIT-FLAGS-RESET (editor INCLUDE resets them).
 \

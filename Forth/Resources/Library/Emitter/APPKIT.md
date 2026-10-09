@@ -83,7 +83,7 @@ Samples: `Library/Sample/DOODLE64.fth` → `DOODLE` (1-bit); `Library/Sample/DOO
 - `(APP-FILE-SLURP) ( c-addr max -- u ior )` — read staged file into buffer.
 - `(APP-FILE-SPEW) ( c-addr u -- ior )` — write buffer to staged path.
 
-Emitter `HOST-APP` slot table is append-only; `(APP-MOUSE)` **15**, `(APP-CBLIT)` **16**, `(APP-IMG-*)` **17–20**, `(APP-FILE-*)` **21–25**, `(APP-SIZE?)` **26** in `reloc.fth` / `emit-host.inc`. Stand-alone `TGT-BUILD` opens a **2 MiB** data arena (and **256 KiB** code) so TRUECOLOR `G-PIX` (~1 MiB) can import.
+Emitter `HOST-APP` slot table is append-only in `reloc.fth` / `emit-host.inc` / `emit-run.m` (`#HOST-APP` **33**, slots **0–32**): `(APP-*)` **0–8**, `MS@` **9**, `ALLOCATE`/`FREE` **10–11**, `BI-*` **12–14**, `(APP-MOUSE)` **15**, `(APP-CBLIT)` **16**, `(APP-IMG-*)` **17–20**, `(APP-FILE-*)` **21–25**, `(APP-SIZE?)` **26**, `TIME&DATE` **27**, `CLIP!`/`CLIP@`/`CWD@` **28–30**, `SYSTEM` **31**, `MS` **32**. Hook-style words (`BI-*`, `TIME&DATE`, `SYSTEM`) use `SA-FIX-BI-HOOK` (NOP `CBZ`, retarget `BLR X9`). Forth helpers: `OPEN-APP`, `OPEN-TERMINAL-AT`, `RUN-EMITTED` in `app.fth`. Stand-alone `TGT-BUILD` opens a **2 MiB** data arena (and **256 KiB** code) so TRUECOLOR `G-PIX` (~1 MiB) can import.
 
 **`emit-run` binary:** the stand-alone runner at `Library/Emitter/runner/emit-run` is **gitignored** (build product). Sources are `emit-run.m` + `emit-host.inc` (tracked). After changing host slots or `emit-host.inc`, rebuild before `EMIT-WINDOW-APP` / `app-build.sh`:
 

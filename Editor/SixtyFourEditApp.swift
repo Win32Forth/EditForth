@@ -147,6 +147,17 @@ struct SixtyFourEditApp: App {
 
                 Divider()
 
+                Button(workspace.isEditorSplit ? "Close Split" : "Split Editor") {
+                    if workspace.isEditorSplit {
+                        workspace.closeEditorSplit()
+                    } else {
+                        workspace.openEditorSplit()
+                    }
+                }
+                .disabled(workspace.tabs.isEmpty)
+
+                Divider()
+
                 Menu("Wrap at Column\t\(wrapAtColumnLabel)") {
                     Button("\(wrapMode == "off" ? "✓ " : "   ")Off") {
                         wrapMode = "off"

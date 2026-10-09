@@ -30,9 +30,14 @@ struct ContentView: View {
     @State private var debugKeys = DebugKeyMonitor()
     /// After cold start settles, allow auto-reveal (do not pop chrome for Engine down alone).
     @State private var chromeAutoRevealReady = false
+    /// Fraction of editor width for the left pane while split (0.2…0.8).
+    @AppStorage("editorSplitFraction") private var splitFraction = 0.5
+    @State private var liveSplitFraction: CGFloat?
+    @State private var splitDragStartFraction: CGFloat?
 
     private static let consoleMinHeight: CGFloat = 88
     private static let editorMinHeight: CGFloat = 120
+    private static let splitMinPaneWidth: CGFloat = 160
 
     var body: some View {
         GeometryReader { geo in
@@ -51,36 +56,14 @@ struct ContentView: View {
                     emptyEditorPlaceholder
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let search = workspace.selectedSearchTab {
+                    // Search results use the full editor area (split stays latent).
                     SearchResultsView(session: search, workspace: workspace)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if workspace.isEditorSplit, workspace.splitSecondaryTab != nil {
+                    splitEditorArea
                 } else {
-                    ZStack {
-                        ForEach(workspace.tabs) { tab in
-                            let selected = tab.id == workspace.selectedTabID
-                            TabEditorPane(
-                                tab: tab,
-                                fontSize: fontSize,
-                                showLineNumbers: showLineNumbers,
-                                wrapMode: wrapMode,
-                                wrapColumn: wrapColumn,
-                                isDebugArmed: forth.isDebugSessionArmed,
-                                breakpointEntries: forth.breakpointEntries,
-                                onDebugStepOver: { forth.stepOver() },
-                                onDebugStepInto: { forth.stepInto() },
-                                onDebugStepOut: { forth.stepOut() },
-                                onDebugContinue: { forth.resumeDebug() },
-                                onDebugStop: { forth.stopDebug() },
-                                onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
-                                onCommandClickWord: { word in forth.viewWord(word) },
-                                onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
-                            )
-                            .opacity(selected ? 1 : 0)
-                            .allowsHitTesting(selected)
-                            // Keep layout size even when faded so the stack stays stable.
-                            .accessibilityHidden(!selected)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    fileEditorStack(visibleTabID: workspace.selectedTabID, paneID: "main")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 // Keep the docked console mounted while chrome is "hidden" so Show
@@ -232,6 +215,9 @@ struct ContentView: View {
             NSApp.activate(ignoringOtherApps: true)
             ForthMenuSupport.presentFload(forth: forth)
         }
+        .onChange(of: workspace.selectedTabID) { _, _ in
+            workspace.ensureSplitPanesDistinct()
+        }
     }
 
     /// Persistently show Forth chrome when companion activity arrives while hidden.
@@ -240,6 +226,177 @@ struct ContentView: View {
     private func revealForthChromeIfNeeded() {
         guard chromeAutoRevealReady, !showForthChrome, forth.isConnected else { return }
         showForthChrome = true
+    }
+
+    // MARK: - Editor stacks / split
+
+    /// Side-by-side file editors; tab bar still drives the left pane.
+    private var splitEditorArea: some View {
+        GeometryReader { geo in
+            let fraction = liveSplitFraction ?? CGFloat(splitFraction)
+            let clamped = min(max(fraction, 0.2), 0.8)
+            let splitterW = EditorHSplitter.width
+            let total = max(geo.size.width - splitterW, Self.splitMinPaneWidth * 2)
+            let leftW = min(
+                max(total * clamped, Self.splitMinPaneWidth),
+                total - Self.splitMinPaneWidth
+            )
+
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    splitPaneHeader(title: workspace.selectedTab?.title ?? "Editor", isSecondary: false)
+                    fileEditorStack(visibleTabID: workspace.selectedTabID, paneID: "left")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(width: leftW)
+
+                EditorHSplitter(
+                    onDrag: { translationX in
+                        let base = splitDragStartFraction ?? CGFloat(splitFraction)
+                        if splitDragStartFraction == nil {
+                            splitDragStartFraction = CGFloat(splitFraction)
+                        }
+                        let delta = translationX / max(total, 1)
+                        liveSplitFraction = min(max(base + delta, 0.2), 0.8)
+                    },
+                    onEnd: {
+                        if let live = liveSplitFraction {
+                            splitFraction = Double(live)
+                        }
+                        liveSplitFraction = nil
+                        splitDragStartFraction = nil
+                    }
+                )
+
+                VStack(spacing: 0) {
+                    splitSecondaryHeader
+                    // Mount only the right tab (left stack already keep-alives every tab).
+                    if let tab = workspace.splitSecondaryTab {
+                        TabEditorPane(
+                            tab: tab,
+                            fontSize: fontSize,
+                            showLineNumbers: showLineNumbers,
+                            wrapMode: wrapMode,
+                            wrapColumn: wrapColumn,
+                            isDebugArmed: forth.isDebugSessionArmed,
+                            breakpointEntries: forth.breakpointEntries,
+                            onDebugStepOver: { forth.stepOver() },
+                            onDebugStepInto: { forth.stepInto() },
+                            onDebugStepOut: { forth.stepOut() },
+                            onDebugContinue: { forth.resumeDebug() },
+                            onDebugStop: { forth.stopDebug() },
+                            onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
+                            onCommandClickWord: { word in forth.viewWord(word) },
+                            onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
+                        )
+                        .id("right-\(tab.id)")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var splitSecondaryHeader: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(workspace.tabs) { tab in
+                    Button(tab.title) {
+                        workspace.setSplitSecondaryTab(id: tab.id)
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(workspace.splitSecondaryTab?.title ?? "Right")
+                        .fontWeight(.medium)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Spacer(minLength: 0)
+
+            Button {
+                workspace.closeEditorSplit()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .help("Close Split")
+        }
+        .font(.system(size: 11))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+    }
+
+    private func splitPaneHeader(title: String, isSecondary: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(isSecondary ? "Right" : "Left")
+                .foregroundStyle(.secondary)
+            Text(title)
+                .fontWeight(.medium)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+    }
+
+    /// File tabs stay mounted for keep-alive; `visibleTabID` picks which one is interactive.
+    /// While split, the right pane’s tab is omitted here so it is not duplicated (hidden
+    /// left copies were stealing VIEW-miss find / selection from the right pane).
+    private func fileEditorStack(visibleTabID: UUID?, paneID: String) -> some View {
+        let secondaryID = workspace.splitSecondaryTabID
+        let tabs = workspace.tabs.filter { tab in
+            secondaryID == nil || tab.id != secondaryID || tab.id == visibleTabID
+        }
+        return ZStack {
+            ForEach(tabs) { tab in
+                let selected = tab.id == visibleTabID
+                TabEditorPane(
+                    tab: tab,
+                    fontSize: fontSize,
+                    showLineNumbers: showLineNumbers,
+                    wrapMode: wrapMode,
+                    wrapColumn: wrapColumn,
+                    isDebugArmed: forth.isDebugSessionArmed,
+                    breakpointEntries: forth.breakpointEntries,
+                    onDebugStepOver: { forth.stepOver() },
+                    onDebugStepInto: { forth.stepInto() },
+                    onDebugStepOut: { forth.stepOut() },
+                    onDebugContinue: { forth.resumeDebug() },
+                    onDebugStop: { forth.stopDebug() },
+                    onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
+                    onCommandClickWord: { word in forth.viewWord(word) },
+                    onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
+                )
+                .opacity(selected ? 1 : 0)
+                .allowsHitTesting(selected)
+                .accessibilityHidden(!selected)
+                // Distinct identity per pane so left/right can both host a tab.
+                .id("\(paneID)-\(tab.id)")
+            }
+        }
     }
 
     // MARK: - Tab bar
@@ -701,6 +858,47 @@ private struct DebugToolbar: View {
     private static let f6 = KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!))
     private static let f7 = KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!))
     private static let f8 = KeyEquivalent(Character(UnicodeScalar(NSF8FunctionKey)!))
+}
+
+/// Vertical drag handle between left and right editor panes.
+private struct EditorHSplitter: View {
+    static let width: CGFloat = 8
+
+    var onDrag: (CGFloat) -> Void
+    var onEnd: () -> Void
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor).opacity(0.55))
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 2)
+            Rectangle()
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+                .onHover { inside in
+                    if inside {
+                        NSCursor.resizeLeftRight.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { value in
+                            onDrag(value.translation.width)
+                        }
+                        .onEnded { _ in
+                            onEnd()
+                        }
+                )
+        }
+        .frame(width: Self.width)
+        .frame(maxHeight: .infinity)
+        .accessibilityLabel("Resize editor split")
+        .accessibilityAddTraits(.isButton)
+    }
 }
 
 /// Drag handle between editor and console; drag up to grow the console.

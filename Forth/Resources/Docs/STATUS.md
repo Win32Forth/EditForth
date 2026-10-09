@@ -1,18 +1,19 @@
 # 64Forth development status
 
-**Current:** **2.0.3** (build **4**) — Finder `.fth` open + Library Testing/ layout (in-tree; last DMG **v2.0.2**)  
+**Current:** **2.0.3** (build **4**) — dual-app DMG + GitHub **v2.0.3**  
+
 **Last updated:** 2026-10-08
 
 ---
 
-## v2.0.3 — Forth menu Update / Restore user data
+## v2.0.3 — Search / Split / GCLOCK / emittable TIME&DATE + SYSTEM
 
-**Version strings:** marketing **2.0.3**, build **4** (EditForth + companion 64Forth lockstep). **Not** cut as a GitHub/DMG release yet; last shipped DMG remains **v2.0.2**.
+**Version strings:** marketing **2.0.3**, build **4** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.0.3** (`Releases/EditForth-2.0.3-macOS.dmg`). Replaces **v2.0.2**.
 
 **Console header stamp:**
 
 ```text
-=== 64Forth 2.0.3 === Oct 6, 2026 10:45 PM ===
+=== 64Forth 2.0.3 === Oct 8, 2026 8:54 PM ===
 ```
 
 ### Highlights
@@ -20,9 +21,14 @@
 - EditForth **Forth** menu: **Update User Data in EditForth Folder** and **Restore Shipped Files to EditForth Folder** (confirm in EditForth; companion FileHost copies shipped Library/AutoLoad/Docs via sock `updateUserTree` / `restoreUserTree`).
 - Companion File menu titles say EditForth Folder (same Documents/EditForth tree).
 - **Finder `.fth` open:** fixed UTI export (`com.win32forth.forth-source`), `WindowGroup` cold-launch, AppDelegate brings windows forward. Stale **64Editor** DerivedData was the default handler with zero windows.
-- **Library/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`. Sample adds `CLOCK.fth` / `GCLOCK.FTH` (GCLOCK still WIP).
+- **Library/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`.
 - **View → Wrap at Column** (Off / Window / 60 / 80 / 100 / Other…). **EMIT-AUTO** writes `<source-dir>/<STEM>/{.app,.img,.emit.log}`.
-- **Edit → Search in Folders…** (⌘⇧F): multi-root literal search → Search results tab; click opens file at line. Editor tabs keep text in memory; panes stay mounted so tab switches do not rebuild `NSTextView`.
+- **Edit → Search in Folders…** (⌘⇧F): multi-root literal search → Search results tab; click opens file at line. Match Case / Whole Word beside Find:. Nested folder history. Editor tabs keep text in memory; panes stay mounted so tab switches do not rebuild `NSTextView`.
+- **View → Split Editor**: side-by-side file panes in the main window; tab bar drives the left pane, right pane has a tab picker; Close Split / divider resize. Search tabs still use the full editor width. ⌘-click find hits the focused pane.
+- **Sample/GCLOCK.FTH**: GRAPHICS COLOR8 port (PREFRESH, CELLS, y-up, no `LEAVE`/`ONLY` in emit path). `HMS` uses `TIME&DATE`; live resize adopts `(APP-SIZE?)` / `WINDOW-SIZE` and redraws face + help text. Emit: `EMIT-WINDOW-APP GCLOCK` then `RUN-EMITTED`.
+- **Emitter HOST-APP** append-only through slot **32**: **27** `TIME&DATE` (localtime_r), **28–30** `CLIP!` / `CLIP@` / `CWD@`, **31** `SYSTEM` (`/bin/sh -c`), **32** `MS` (`nanosleep`). Kernel `CODE-BOUNDS` end labels for `CLIP!`/`CLIP@`/`CWD@`/`SYSTEM`.
+- **SYSTEM helpers** in `Emitter/app.fth`: `OPEN-TERMINAL-AT`, `OPEN-APP`, `RUN-EMITTED` (last `EMIT-APPBUF`), examples `EDITFORTH-TERM` / `EDITFORTH-GCLOCK`.
+- Buffer↔disk change comparison remains deferred (next editor topic after search/split).
 
 ---
 
