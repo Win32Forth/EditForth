@@ -46,9 +46,9 @@ enum ForthMenuSupport {
             UTType(filenameExtension: "4th") ?? .plainText,
             .plainText
         ]
-        panel.directoryURL = userTreeURL
+        panel.directoryURL = forth.panelStartURL
         panel.prompt = "Load"
-        panel.message = "FLOAD / INCLUDE a Forth source file (Documents/EditForth)"
+        panel.message = "FLOAD / INCLUDE a Forth source file"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         includeFile(at: url, forth: forth, autoAnew: false)
     }
@@ -153,17 +153,22 @@ enum ForthMenuSupport {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.directoryURL = userTreeURL
+        panel.directoryURL = forth.panelStartURL
         panel.prompt = "Choose"
         panel.message = "CHDIR — set Forth working directory"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let path = url.path
-        // CHDIR parses a name from the input stream (same as INCLUDE path form).
-        forth.send(.executeCommand(command: "CHDIR \(path)"))
+        // Quoted path — CHDIR uses _next_filespec (spaces OK).
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        // Optimistic cache so the next Open/FLOAD panel starts here before cwdChanged arrives.
+        forth.rememberWorkingDirectory(path)
+        forth.send(.executeCommand(command: "CHDIR \"\(escaped)\""))
     }
 
-    static func presentEdit(workspace: WorkspaceModel) {
-        workspace.openPanel()
+    static func presentEdit(workspace: WorkspaceModel, forth: ForthConnectionManager) {
+        workspace.openPanel(startDirectory: forth.panelStartURL)
     }
 
     /// Forth → Update User Data: fill missing Library/AutoLoad/Docs from companion ship.

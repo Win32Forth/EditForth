@@ -4411,12 +4411,11 @@ XLAST_INCLUDED_END:
     NEXT
 
 // CHDIR ( -- )  optional name: change cwd; bare → host folder picker (TZForth-style)
+// Named form supports "quoted paths with spaces" via _next_filespec (same as EDIT).
 
     BOOT_WORD "CHDIR", "CHDIR ( -- ) path|dialog change working directory", 0, XCHDIR
 XCHDIR:
-    bl _next_word                  // x0=scratch, x1=len (0 if bare)
-    // Preserve bare/named in x25 before SAVE_VM (x1 is not VM-saved)
-    mov  x25, x1
+    bl   _next_filespec            // x25=len (0 = bare); word_scratch if named
     SAVE_VM
     adrp x2, chdir_hook@page
     add  x2, x2, chdir_hook@pageoff

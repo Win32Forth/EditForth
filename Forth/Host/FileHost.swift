@@ -852,11 +852,20 @@ final class FileHost {
     }
 
     /// Bare CHDIR: folder picker. FROMLIB arms start at Library.
+    /// When EditForth is on edit.sock, ask that editor for the panel instead of
+    /// blocking the companion on NSOpenPanel (evaluate would never return —
+    /// same as bare EDIT / FLOAD behind the docked console).
     func presentDirectoryPicker() {
         #if !os(macOS)
         msg("? bare CHDIR: use CHDIR with a path on iOS (folder dialog not yet available)\n")
         return
         #else
+        if ForthEditorServer.shared.hasConnectedClients {
+            let start = panelStartDirectoryForEditor()
+            ForthEditorServer.shared.broadcast(.requestChdirOpen(startDirectory: start))
+            msg("CHDIR: choose a folder in EditForth…\n")
+            return
+        }
         let startDir: URL
         if fromLibraryArmed {
             clearFromLibrary()
@@ -896,6 +905,27 @@ final class FileHost {
         rememberScopedURL(url)
         UserDefaults.standard.set(url.path, forKey: lastCwdDefaultsKey)
         msg("Current directory: \(logicalCurrentDirectory)\n")
+        // Keep EditForth Open/FLOAD/CHDIR panels aligned with this cwd.
+        if ForthEditorServer.shared.hasConnectedClients {
+            ForthEditorServer.shared.broadcast(.cwdChanged(path: logicalCurrentDirectory))
+        }
+    }
+
+    /// Start folder for EditForth-hosted NSOpenPanel (bare EDIT / FLOAD / CHDIR).
+    /// Honors FROMLIB Library and a one-shot dialog override; otherwise logical cwd.
+    private func panelStartDirectoryForEditor() -> String {
+        if fromLibraryArmed {
+            clearFromLibrary()
+            if let lib = libraryURL {
+                return lib.path
+            }
+        }
+        if let override = fileDialogStartDirectoryOverride {
+            fileDialogStartDirectoryOverride = nil
+            return override
+        }
+        clearFromLibrary()
+        return logicalCurrentDirectory
     }
 
     func printPwd() {
@@ -1289,10 +1319,11 @@ final class FileHost {
         // hangs evaluate (same as bare EDIT behind the docked console).
         // Return an empty successful include so (INCLUDE) does not print
         // "can't open" / abandon — the editor then sends S" path" INCLUDED.
+        // Panel starts at logical cwd (after CHDIR) or FROMLIB Library.
         if ForthEditorServer.shared.hasConnectedClients {
-            clearFromLibrary()
+            let start = panelStartDirectoryForEditor()
             preserveSessionCwdAfterFileOp = false
-            ForthEditorServer.shared.broadcast(.requestFloadOpen)
+            ForthEditorServer.shared.broadcast(.requestFloadOpen(startDirectory: start))
             msg("FLOAD: choose a file in EditForth…\n")
             let p = UnsafeMutablePointer<CChar>.allocate(capacity: 1)
             p[0] = 0
@@ -1567,8 +1598,8 @@ final class FileHost {
         return
         #else
         if ForthEditorServer.shared.hasConnectedClients {
-            clearFromLibrary()
-            ForthEditorServer.shared.broadcast(.requestEditOpen)
+            let start = panelStartDirectoryForEditor()
+            ForthEditorServer.shared.broadcast(.requestEditOpen(startDirectory: start))
             msg("EDIT: choose a file in EditForth…\n")
             return
         }

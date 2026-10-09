@@ -9,6 +9,10 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Tags SwiftUI workspace windows (see `WindowChrome`) so Finder opens can
+    /// collapse duplicates without closing the floating Forth console.
+    static let workspaceWindowID = NSUserInterfaceItemIdentifier("EditForth.workspace")
+
     weak var workspace: WorkspaceModel?
     weak var forth: ForthConnectionManager?
     private var queuedURLs: [URL] = []
@@ -40,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.refreshDocumentEdited()
         DispatchQueue.main.async { [weak self] in
             self?.windowGuard.installOnOpenWindows()
+            self?.collapseExtraWorkspaceWindows()
             self?.bringWorkspaceWindowsForward()
         }
     }
@@ -48,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if let workspace {
             workspace.openExternalURLs(urls)
-            bringWorkspaceWindowsForward()
+            // Finder open can still race a second WindowGroup scene; collapse soon + delayed.
+            collapseExtraWorkspaceWindowsSoon()
         } else {
             queuedURLs.append(contentsOf: urls)
         }
@@ -57,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         windowGuard.installOnOpenWindows()
         workspace?.refreshDocumentEdited()
+        collapseExtraWorkspaceWindows()
         bringWorkspaceWindowsForward()
     }
 
@@ -70,7 +77,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    /// Collapse now and again after WindowChrome has a chance to tag a raced scene.
+    func collapseExtraWorkspaceWindowsSoon() {
+        DispatchQueue.main.async { [weak self] in
+            self?.collapseExtraWorkspaceWindows()
+            self?.bringWorkspaceWindowsForward()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.collapseExtraWorkspaceWindows()
+            self?.bringWorkspaceWindowsForward()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.collapseExtraWorkspaceWindows()
+            self?.bringWorkspaceWindowsForward()
+        }
+    }
+
+    /// Prefer a single workspace window; leave the floating "64Forth" console alone.
+    func collapseExtraWorkspaceWindows() {
+        let id = Self.workspaceWindowID
+        var workspaceWindows = NSApp.windows.filter { $0.identifier == id && $0.isVisible }
+        // Before WindowChrome tags a raced scene, also catch untitled SwiftUI windows
+        // that are not the floating Forth console / panels.
+        if workspaceWindows.count <= 1 {
+            let consoleTitle = "64Forth"
+            let extras = NSApp.windows.filter { win in
+                guard win.isVisible, win.canBecomeKey, !(win is NSPanel) else { return false }
+                if win.title == consoleTitle { return false }
+                if win.identifier == id { return true }
+                // Untagged SwiftUI workspace-like windows (titled, closable).
+                return win.styleMask.contains(.titled) && win.styleMask.contains(.closable)
+            }
+            workspaceWindows = extras
+        }
+        guard workspaceWindows.count > 1 else { return }
+        // Keep the oldest (first created) — that is the real workspace the user had open.
+        let keep = workspaceWindows.min(by: { $0.windowNumber < $1.windowNumber })
+            ?? workspaceWindows[0]
+        for window in workspaceWindows where window !== keep {
+            window.close()
+        }
+    }
+
     private func bringWorkspaceWindowsForward() {
+        let id = Self.workspaceWindowID
+        if let main = NSApp.windows.first(where: { $0.identifier == id && $0.isVisible })
+            ?? NSApp.windows.first(where: { $0.canBecomeKey && $0.isVisible && $0.title != "64Forth" }) {
+            main.makeKeyAndOrderFront(nil)
+            return
+        }
         for window in NSApp.windows where window.canBecomeKey {
             window.makeKeyAndOrderFront(nil)
         }

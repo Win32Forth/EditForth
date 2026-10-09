@@ -52,16 +52,28 @@ struct SixtyFourEditApp: App {
         // WindowGroup (not DocumentGroup): cold-launch from Finder / `open file.fth`
         // must always create the workspace window. A lone `Window(id:)` can leave
         // the process running with no UI when Launch Services opens a document.
+        //
+        // handlesExternalEvents(matching: ["*"]) — an *existing* scene claims Finder /
+        // `open file.fth` events so SwiftUI does not create a second WindowGroup window.
+        // (Empty matching does the opposite: no scene claims the event → new window.)
+        // AppDelegate.application(_:open:) still opens a tab in the shared workspace.
         WindowGroup("EditForth") {
             ContentView()
                 .environmentObject(workspace)
                 .environmentObject(forth)
                 .frame(minWidth: 640, minHeight: 420)
+                // Prefer this scene for external file opens (pairs with scene matching "*").
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                .onOpenURL { url in
+                    workspace.openExternalURLs([url])
+                    appDelegate.collapseExtraWorkspaceWindowsSoon()
+                }
                 .onAppear {
                     appDelegate.attach(workspace: workspace, forth: forth)
                     // ContentView owns connect/launch from Show Forth Console visibility.
                 }
         }
+        .handlesExternalEvents(matching: ["*"])
         .defaultSize(width: 960, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -246,7 +258,7 @@ struct SixtyFourEditApp: App {
                 .disabled(!forth.isConnected)
 
                 Button("Open File…") {
-                    ForthMenuSupport.presentEdit(workspace: workspace)
+                    ForthMenuSupport.presentEdit(workspace: workspace, forth: forth)
                 }
 
                 Divider()

@@ -75,10 +75,16 @@ enum ForthResponse: Codable, Equatable {
     case dockState(docked: Bool)
     /// Bare EDIT while EditForth is on edit.sock — show the editor Open panel
     /// (companion must not block on its own NSOpenPanel).
-    case requestEditOpen
+    /// `startDirectory` is the companion logical cwd (or FROMLIB Library).
+    case requestEditOpen(startDirectory: String)
     /// Bare FLOAD/INCLUDE while EditForth is on edit.sock — show the editor
     /// FLOAD Open panel, then send `S" path" INCLUDED` (do not block companion).
-    case requestFloadOpen
+    case requestFloadOpen(startDirectory: String)
+    /// Bare CHDIR while EditForth is on edit.sock — show the editor folder
+    /// panel, then send `CHDIR "path"` (do not block companion on NSOpenPanel).
+    case requestChdirOpen(startDirectory: String)
+    /// Companion logical working directory changed (CHDIR / boot / connect).
+    case cwdChanged(path: String)
     /// BYE from the companion — EditForth should quit (dirty Save sheets first),
     /// then terminate the companion. Companion must not exit on its own.
     case requestQuit

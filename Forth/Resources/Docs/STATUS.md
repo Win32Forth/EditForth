@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.0.3** (build **4**) — dual-app DMG + GitHub **v2.0.3**  
+**Current:** **2.0.4** (build **5**) — dual-app DMG + GitHub **v2.0.4** 
 
-**Last updated:** 2026-10-08
+**Last updated:** 2026-10-09
+
+---
+
+## v2.0.4 — AppIcon / CHDIR panels / Finder single window
+
+**Version strings:** marketing **2.0.4**, build **5** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.0.4** (`Releases/EditForth-2.0.4-macOS.dmg`). Replaces **v2.0.3**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.0.4 === Oct 9, 2026 9:44 AM ===
+```
+
+### Highlights
+
+- **EditForth AppIcon** from `Editor/EditForth.jpg` (CRT branding “EditForth for macOS”) into `Editor/Assets.xcassets/AppIcon.appiconset/`.
+- **Bare `CHDIR`** from the EditForth console no longer hangs: companion asks EditForth for the folder panel (`requestChdirOpen`), same pattern as bare `EDIT` / `FLOAD`. Kernel `CHDIR` uses `_next_filespec` so quoted paths with spaces work.
+- After **`CHDIR`**, bare **EDIT** / **FLOAD** / **INCLUDE** (and Forth-menu equivalents) open their panels at the companion working directory (`cwdChanged` + `startDirectory` on panel requests). `FROMLIB` still prefers Library.
+- **Finder `.fth` open** while EditForth is already running opens a **tab** in the existing window (no second workspace window): `WindowGroup.handlesExternalEvents(matching: ["*"])` plus duplicate-window collapse.
+- Buffer↔disk file comparison remains deferred.
 
 ---
 

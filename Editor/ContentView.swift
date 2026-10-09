@@ -206,14 +206,19 @@ struct ContentView: View {
             }
         }
         .onChange(of: forth.editOpenRequestSeq) { _, _ in
-            // Bare EDIT from the companion — Open panel lives in EditForth.
+            // Bare EDIT from the companion — Open panel lives in EditForth (cwd after CHDIR).
             NSApp.activate(ignoringOtherApps: true)
-            workspace.openPanel()
+            workspace.openPanel(startDirectory: forth.panelStartURL)
         }
         .onChange(of: forth.floadOpenRequestSeq) { _, _ in
-            // Bare FLOAD/INCLUDE — Load panel in EditForth, then INCLUDED.
+            // Bare FLOAD/INCLUDE — Load panel in EditForth at companion cwd, then INCLUDED.
             NSApp.activate(ignoringOtherApps: true)
             ForthMenuSupport.presentFload(forth: forth)
+        }
+        .onChange(of: forth.chdirOpenRequestSeq) { _, _ in
+            // Bare CHDIR — folder panel in EditForth, then CHDIR "path".
+            NSApp.activate(ignoringOtherApps: true)
+            ForthMenuSupport.presentChdir(forth: forth)
         }
         .onChange(of: workspace.selectedTabID) { _, _ in
             workspace.ensureSplitPanesDistinct()
@@ -964,11 +969,24 @@ private struct WindowChrome: NSViewRepresentable {
 
     private func apply(from view: NSView) {
         guard let window = view.window else { return }
+        let id = AppDelegate.workspaceWindowID
+        // If another workspace window is already tagged, this scene is a Finder-open
+        // duplicate — close it so only one EditForth window remains.
+        let others = NSApp.windows.filter {
+            $0.identifier == id && $0 !== window && ($0.isVisible || $0.isKeyWindow)
+        }
+        if !others.isEmpty {
+            DispatchQueue.main.async {
+                window.close()
+            }
+            return
+        }
+        window.identifier = id
         window.representedURL = url
         if let url {
             window.title = url.lastPathComponent
         } else if window.title.isEmpty {
-            window.title = "64Edit"
+            window.title = "EditForth"
         }
     }
 }

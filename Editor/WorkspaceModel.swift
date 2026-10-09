@@ -212,13 +212,13 @@ final class WorkspaceModel: ObservableObject {
         handlePendingGoto()
     }
 
-    func openPanel() {
+    func openPanel(startDirectory: URL? = nil) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.plainText, .text, .utf8PlainText, .forthSource]
-        panel.directoryURL = ForthMenuSupport.userTreeURL
+        panel.directoryURL = startDirectory ?? ForthMenuSupport.userTreeURL
         panel.prompt = "Open"
         let accessory = OpenPanelNewFileAccessory(panel: panel)
         panel.accessoryView = accessory.view

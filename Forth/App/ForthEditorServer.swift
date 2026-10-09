@@ -165,6 +165,8 @@ final class ForthEditorServer {
         writeResponse(.debugSession(armed: armed), to: cfd)
         // Sync BREAK table so pale-red wash matches the host.
         writeResponse(.breakpoints(entries: KernelBridge.shared.breakEntries()), to: cfd)
+        // Sync logical cwd so EditForth Open/FLOAD/CHDIR panels start there.
+        writeResponse(.cwdChanged(path: FileHost.shared.logicalCurrentDirectory), to: cfd)
     }
 
     private func dropClient(_ fd: Int32) {

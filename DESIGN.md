@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.0.3** / build **4** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.0.3** (`Releases/EditForth-2.0.3-macOS.dmg`). First public release was **v2.0.0**.
+Marketing **2.0.4** / build **5** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.0.4** (`Releases/EditForth-2.0.4-macOS.dmg`). First public release was **v2.0.0**.
 
 ## Why a new project
 

@@ -46,6 +46,12 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var editOpenRequestSeq: UInt = 0
     /// Bumps when companion bare FLOAD/INCLUDE asks EditForth for the Load panel.
     @Published private(set) var floadOpenRequestSeq: UInt = 0
+    /// Bumps when companion bare CHDIR asks EditForth for the folder panel.
+    @Published private(set) var chdirOpenRequestSeq: UInt = 0
+    /// Companion logical working directory (CHDIR / boot). Used as NSOpenPanel start.
+    @Published private(set) var forthWorkingDirectory: String = ""
+    /// Pending panel start directory from the latest request*Open (may be FROMLIB Library).
+    private(set) var pendingPanelStartDirectory: String = ""
     /// Bumps on successful VIEW so the console transcript can refresh even when
     /// `consoleLines` are unchanged (editor open/layout left the clip view blank).
     @Published private(set) var consoleRefreshSeq: UInt = 0
@@ -216,6 +222,25 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     /// Editor-side refusal (no open tab, debugger armed, …) — sticky strip + console.
+    /// Directory for EditForth NSOpenPanel: pending request path, else cached cwd, else Documents/EditForth.
+    var panelStartURL: URL {
+        let pending = pendingPanelStartDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pending.isEmpty {
+            return URL(fileURLWithPath: pending, isDirectory: true)
+        }
+        let cwd = forthWorkingDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cwd.isEmpty {
+            return URL(fileURLWithPath: cwd, isDirectory: true)
+        }
+        return ForthMenuSupport.userTreeURL
+    }
+
+    func rememberWorkingDirectory(_ path: String) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        forthWorkingDirectory = trimmed
+    }
+
     func noteUserError(_ message: String) {
         lastError = message
         appendConsole("Error: \(message)\n")
@@ -825,10 +850,20 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         case .dockState:
             // Legacy window-dock ack — editor owns dock/undock via preferDocked.
             isForthDocked = preferDocked
-        case .requestEditOpen:
+        case .requestEditOpen(let startDirectory):
+            rememberWorkingDirectory(startDirectory)
+            pendingPanelStartDirectory = startDirectory
             editOpenRequestSeq &+= 1
-        case .requestFloadOpen:
+        case .requestFloadOpen(let startDirectory):
+            rememberWorkingDirectory(startDirectory)
+            pendingPanelStartDirectory = startDirectory
             floadOpenRequestSeq &+= 1
+        case .requestChdirOpen(let startDirectory):
+            rememberWorkingDirectory(startDirectory)
+            pendingPanelStartDirectory = startDirectory
+            chdirOpenRequestSeq &+= 1
+        case .cwdChanged(let path):
+            rememberWorkingDirectory(path)
         case .requestQuit:
             // BYE from companion: same path as Cmd-Q (dirty Save sheets, then
             // terminateLaunchedCompanion via AppDelegate).
