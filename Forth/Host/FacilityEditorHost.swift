@@ -195,7 +195,7 @@ final class FacilityEditorHost: NSObject, NSWindowDelegate {
         // Inject editor quit (key 17); Forth runs S/D then FACILITY-OFF → close().
         // Do not tear down here (same rule as AppOutput).
         if KernelBridge.shared.isEvaluating, FacilityTerminal.shared.isActive {
-            _ = KernelBridge.shared.pushKey(17)
+            _ = KernelBridge.shared.pushKey(17) // SZ-CTRL-Q (⌘W — close editor)
             return false
         }
         opened = false

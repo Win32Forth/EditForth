@@ -16,6 +16,8 @@ final class LineNumberRulerView: NSRulerView {
     private var font: NSFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
     private var textObserver: NSObjectProtocol?
     private var frameObserver: NSObjectProtocol?
+    /// 1-based line → enabled. Drawn as a gutter dot (red enabled, gray off).
+    private var gutterMarks: [Int: Bool] = [:]
 
     convenience init(textView: NSTextView) {
         self.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
@@ -55,6 +57,12 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     func invalidate() {
+        needsDisplay = true
+    }
+
+    /// Breakpoint dots. `line` is 1-based. `enabled` false draws gray.
+    func setGutterMarks(_ marks: [Int: Bool]) {
+        gutterMarks = marks
         needsDisplay = true
     }
 
@@ -128,9 +136,13 @@ final class LineNumberRulerView: NSRulerView {
             // Number only the first fragment of each hard line (wraps stay blank).
             if charIndex == hardLine.location {
                 let label = String(format: "%\(Self.digitColumns)d", line)
+                let y = fragRect.minY + inset.y
+                if let enabled = gutterMarks[line] {
+                    drawBreakDot(enabled: enabled, atTextY: y, originInRuler: originInRuler)
+                }
                 drawLabel(
                     label,
-                    atTextY: fragRect.minY + inset.y,
+                    atTextY: y,
                     originInRuler: originInRuler,
                     attrs: attrs
                 )
@@ -140,6 +152,17 @@ final class LineNumberRulerView: NSRulerView {
             if next <= glyphIndex { break }
             glyphIndex = next
         }
+    }
+
+    private func drawBreakDot(enabled: Bool, atTextY y: CGFloat, originInRuler: NSPoint) {
+        let d: CGFloat = 7
+        let yPos = originInRuler.y + y + font.ascender * 0.35
+        let rect = NSRect(x: 3, y: yPos, width: d, height: d)
+        let color = enabled
+            ? NSColor.systemRed.withAlphaComponent(0.9)
+            : NSColor.systemGray.withAlphaComponent(0.85)
+        color.setFill()
+        NSBezierPath(ovalIn: rect).fill()
     }
 
     private func drawLabel(
@@ -173,7 +196,7 @@ final class LineNumberRulerView: NSRulerView {
         textView.postsFrameChangedNotifications = true
     }
 
-    private static func lineNumber(forCharacter index: Int, in ns: NSString) -> Int {
+    static func lineNumber(forCharacter index: Int, in ns: NSString) -> Int {
         guard ns.length > 0 else { return 1 }
         let loc = min(max(0, index), ns.length)
         var current = 1

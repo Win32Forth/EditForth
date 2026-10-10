@@ -22,12 +22,43 @@ final class BufferDiskDiffSession: Identifiable, ObservableObject {
 
     private var generation: UInt = 0
     private weak var workspace: WorkspaceModel?
+    private var diskWatch: DispatchSourceFileSystemObject?
 
     init(sourceTabID: UUID, fileURL: URL, workspace: WorkspaceModel) {
         self.sourceTabID = sourceTabID
         self.fileURL = fileURL.standardizedFileURL
         self.workspace = workspace
         self.title = "Diff: \(fileURL.lastPathComponent)"
+        startDiskWatch()
+    }
+
+    deinit {
+        stopDiskWatch()
+    }
+
+    /// Reload hunks when the on-disk file is written, renamed, or removed.
+    private func startDiskWatch() {
+        stopDiskWatch()
+        let fd = open(fileURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .extend],
+            queue: .main
+        )
+        src.setEventHandler { [weak self] in
+            self?.reload()
+        }
+        src.setCancelHandler {
+            close(fd)
+        }
+        diskWatch = src
+        src.resume()
+    }
+
+    private func stopDiskWatch() {
+        diskWatch?.cancel()
+        diskWatch = nil
     }
 
     /// Re-read disk and current buffer text, then recompute hunks.

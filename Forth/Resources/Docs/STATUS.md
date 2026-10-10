@@ -1,8 +1,44 @@
 # 64Forth development status
 
-**Current:** **2.1.0** (build **6**) — dual-app DMG + GitHub **v2.1.0**  
+**Current:** **2.2.0** (build **7**) — dual-app DMG + GitHub **v2.2.0**  
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-10
+
+---
+
+## v2.2.0 — Debugger polish after 2.1.0
+
+**Version strings:** marketing **2.2.0**, build **7** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.2.0** (`Releases/EditForth-2.2.0-macOS.dmg`). Replaces **v2.1.0**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.2.0 === Oct 10, 2026 9:32 AM ===
+```
+
+**2.1.0 note:** Break Now plus Space/F6 stepped *into* colon calls. That is fixed in this build. Do not judge Step Over after Pause on a 2.1.0 DMG.
+
+### Highlights
+
+- **Step Over after Break Now.** A zero `debug_floor` no longer skips the over/out checks, so Space and F6 skip a colon call instead of single-stepping into it.
+- **Token highlight.** Literal, string, and branch payload cells inherit the owning token’s span. Branch alignment picks the nearest `IF`/`WHILE`/`UNTIL` or `ELSE`/`REPEAT`/`AGAIN`, so `DO-CLOCK` no longer jumps the green wash. A dirty editor buffer uses the word name instead of file-byte offsets.
+- **F9 / ⌘\\ while paused.** `kernel_break_toggle_name` updates the break table without `EVALUATE`.
+- **Gutter dots** for breakpoint lines (red enabled, gray disabled).
+- **Idle Arm** runs `BPGO` on the caret word, or the first enabled breakpoint.
+- **RUN / F5** fills from the caret token when it is one Forth word, otherwise `LAST`.
+- **Idle F6** emits the current tab. While debugging, F6 stays Step Over.
+- **Break Now** sets the floor to the caller frame so returning past that word disarms. A blocked console `KEY` or graphics `(APP-KEY)` wakes so the next threaded step can pause. Tight `CODE` that never hits `NEXT` still runs until it returns.
+- **Run to Here** miss text says to click a call site, not a `: header`. While Run-to is executing, Space, Return, and Esc go to the program (GCLOCK) instead of Step Over. The pause on `DUP` after `KEY` is before the `IF` that redraws the clock.
+- **Compare with Disk** reloads when the file changes on disk.
+- Debugger library files in Documents update from the app when the shipped copy is newer.
+- `release.sh validate` also runs `Testing/DbgSpan/span-check.fth` (`DBG-SPAN: PASS`, `DEBUGGER-END: PASS`).
+- While debugging, the INCLUDE / RUN / EMIT buttons hide. The strip shows the step hint. Key codes in the editor and companion sources are commented.
+
+### Limits
+
+- Run to targets a call site, not a definition header.
+- Break Now does not stop inside pure `CODE` that never returns to `NEXT`.
+- Space-over, Break Now, and paused F9 are not driven by the headless span check.
 
 ---
 

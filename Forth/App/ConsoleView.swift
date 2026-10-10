@@ -57,7 +57,7 @@ extension Notification.Name {
 // Update the date/time stamp only when finishing a change set for a version —
 // just before DMG + commit/push (not on every intermediate build).
 // Format: === 64Forth M.N.P === Mon D, YYYY H:MM AM/PM ===
-private let banner = "=== 64Forth 2.1.0 === Oct 9, 2026 9:29 PM ===\n"
+private let banner = "=== 64Forth 2.2.0 === Oct 10, 2026 9:32 AM ===\n"
 
 struct ConsoleView: View {
     @State private var consoleText = banner
@@ -785,7 +785,7 @@ struct ConsoleView: View {
             presentSzEditorOpenPanel(startDirectory: startDir) { url in
                 guard let url else { return }
                 self.kernel.stageEditorOpenPath(url.path)
-                _ = self.kernel.pushKey(30)
+                _ = self.kernel.pushKey(30) // SZ-CMD-OPEN (⌘O while SZ-EDITOR waits)
             }
             return
         }
@@ -858,7 +858,7 @@ struct ConsoleView: View {
     /// ⌘N / File→New — untitled buffer. Editor KEY: 31. Idle: SZ-EDIT-NEW.
     private func handleFileNew() {
         if kernel.isEvaluating, kernel.isFacilityTerminalActive {
-            kernel.pushKey(31)
+            kernel.pushKey(31) // SZ-EDIT-NEW (⌘N)
             return
         }
         if kernel.isEvaluating {
@@ -876,7 +876,7 @@ struct ConsoleView: View {
             markProtectedThroughEndOfText()
             return
         }
-        kernel.pushKey(19)
+        kernel.pushKey(19) // SZ-CTRL-S (⌘S)
     }
 
     /// ⌘⇧S / File→Save As… — always pick a path (copy of the current buffer).
@@ -902,7 +902,7 @@ struct ConsoleView: View {
             // Not in editor: ignore (must not quit the window/app; use ⌘Q to quit).
             return
         }
-        kernel.pushKey(17)
+        kernel.pushKey(17) // SZ-CTRL-Q (⌘W — close editor, not the app)
     }
 
     /// ⌘← / ⌘→ — same-file find prev/next (menu key-equivalent path; same as ⌘S).

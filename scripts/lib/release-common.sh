@@ -112,6 +112,16 @@ check_ans_validate() {
   ok "ANS-VALIDATE"
 }
 
+check_dbg_span() {
+  local log="$1"
+  transcript_has "$log" 'DBG-SPAN: PASS' || die "dbg-span: missing DBG-SPAN: PASS (see $log)"
+  transcript_has "$log" 'DEBUGGER-END: PASS' || die "dbg-span: DEBUGGER-END is not above ACCEPT (see $log)"
+  if grep -q 'DBG-SPAN: FAIL' "$log"; then
+    die "dbg-span: FAIL (see $log)"
+  fi
+  ok "dbg-span"
+}
+
 check_hayes() {
   local log="$1"
   # Mid-run "********** HAYES FAIL **********" banners are expected from

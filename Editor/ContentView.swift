@@ -95,7 +95,7 @@ struct ContentView: View {
                 // Debug chrome belongs with the Forth console (below the splitter),
                 // replacing the idle status strip — not above the editor/console split.
                 if forth.isDebugSessionArmed, showForthChrome {
-                    DebugToolbar(forth: forth)
+                    DebugToolbar(forth: forth, idleArmWord: { workspace.forthTokenAtCaret() })
                 }
 
                 if showForthChrome, consoleEmbedded {
@@ -171,12 +171,22 @@ struct ContentView: View {
         }
         .onChange(of: forth.debugLocation) { _, loc in
             guard let loc else { return }
+            // dbg-map offsets are file bytes. A dirty buffer will not line up,
+            // so fall back to the name near the VIEW line instead of a wrong wash.
+            let dirty = workspace.findTab(matching: loc.path)?.isDirty ?? false
+            if dirty, loc.len > 0, !workspace.debugDirtySpanNoted {
+                workspace.debugDirtySpanNoted = true
+                forth.noteInfo("debug highlight: buffer has unsaved edits — using the word name, not the file span")
+            }
+            if !dirty {
+                workspace.debugDirtySpanNoted = false
+            }
             workspace.applyDebugLocation(
                 path: loc.path,
                 line: loc.line,
                 name: loc.name,
-                off: loc.off,
-                len: loc.len
+                off: dirty ? 0 : loc.off,
+                len: dirty ? 0 : loc.len
             )
             if forth.isDebugSessionArmed {
                 DispatchQueue.main.async { EditorFocus.request() }
@@ -290,15 +300,20 @@ struct ContentView: View {
                             wrapMode: wrapMode,
                             wrapColumn: wrapColumn,
                             isDebugArmed: forth.isDebugSessionArmed,
+                            isDebugPaused: forth.isDebugPaused,
                             breakpointEntries: forth.breakpointEntries,
                             onDebugStepOver: { forth.stepOver() },
                             onDebugStepInto: { forth.stepInto() },
                             onDebugStepOut: { forth.stepOut() },
                             onDebugContinue: { forth.resumeDebug() },
                             onDebugStop: { forth.stopDebug() },
-                            onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
+                            onForwardProgramKey: { forth.forwardProgramKey($0) },
+                            onPrepareRunLine: { kind, name in forth.prepareRunLine(kind, name: name) },
                             onCommandClickWord: { word in forth.viewWord(word) },
                             onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                            onEmitCurrent: {
+                                ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
+                            },
                             onRunToOffset: { offset in forth.runTo(offset: offset) }
                         )
                         .id("right-\(tab.id)")
@@ -392,15 +407,20 @@ struct ContentView: View {
                     wrapMode: wrapMode,
                     wrapColumn: wrapColumn,
                     isDebugArmed: forth.isDebugSessionArmed,
+                    isDebugPaused: forth.isDebugPaused,
                     breakpointEntries: forth.breakpointEntries,
                     onDebugStepOver: { forth.stepOver() },
                     onDebugStepInto: { forth.stepInto() },
                     onDebugStepOut: { forth.stepOut() },
                     onDebugContinue: { forth.resumeDebug() },
                     onDebugStop: { forth.stopDebug() },
-                    onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
+                    onForwardProgramKey: { forth.forwardProgramKey($0) },
+                    onPrepareRunLine: { kind, name in forth.prepareRunLine(kind, name: name) },
                     onCommandClickWord: { word in forth.viewWord(word) },
                     onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                    onEmitCurrent: {
+                        ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
+                    },
                     onRunToOffset: { offset in forth.runTo(offset: offset) }
                 )
                 .opacity(selected ? 1 : 0)
@@ -464,7 +484,10 @@ struct ContentView: View {
                 if forth.isDebugSessionArmed {
                     Text("· debugging")
                         .foregroundStyle(.orange)
+                    Text("F6 over · F7 into · view mode: Space/i")
+                        .foregroundStyle(.secondary)
                 }
+                if !forth.isDebugSessionArmed {
                 Button("INCLUDE") {
                     ForthMenuSupport.includeCurrentTab(workspace: workspace, forth: forth)
                 }
@@ -472,10 +495,13 @@ struct ContentView: View {
                 .help("INCLUDE current tab (F4) — save if needed, ANEW <file>_MODULE, then INCLUDED")
                 .controlSize(.small)
                 Button("RUN") {
-                    forth.prepareRunLine(ForthConnectionManager.runLineKindFromCurrentModifiers())
+                    forth.prepareRunLine(
+                        ForthConnectionManager.runLineKindFromCurrentModifiers(),
+                        name: workspace.forthTokenAtCaret()
+                    )
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
-                .help("RUN (F5) — LAST name on the console; Return to run. ⌘F5 / ⌘-click = DEBUG; ⌘⇧F5 / ⌘⇧-click = BPGO")
+                .help("RUN (F5) — caret token, else LAST. Return to run. ⌘F5 = DEBUG; ⌘⇧F5 = BPGO")
                 .controlSize(.small)
                 Button("EMIT") {
                     ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
@@ -483,16 +509,17 @@ struct ContentView: View {
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed || workspace.selectedTab == nil)
                 .help("Emit Window App — INCLUDE then EMIT-AUTO (LAST). Default: WINDOW + Press a key to exit. See EMIT-NO-PAUSE / EMIT-NO-WINDOW / EMIT-NO-WRAPPER")
                 .controlSize(.small)
+                }
                 Button("Pause") {
                     forth.breakAsap()
                     EditorFocus.request()
                 }
                 .disabled(!forth.isConnected)
-                .help("Break Now — pause at the next Forth instruction above DEBUGGER-END (⌃⌘Y)")
+                .help("Break Now — next ITC instruction at/above DEBUGGER-END (⌃⌘Y). Not inside CODE or a blocked KEY.")
                 .controlSize(.small)
                 .keyboardShortcut("y", modifiers: [.control, .command])
                 Spacer()
-                BreakpointsPanelButton(forth: forth)
+                BreakpointsPanelButton(forth: forth, idleArmWord: { workspace.forthTokenAtCaret() })
                 if forth.isConnected {
                     if forth.preferDocked {
                         Button("Undock") { forth.undockForth() }
@@ -594,15 +621,18 @@ private struct TabEditorPane: View {
     var wrapMode: String
     var wrapColumn: Int
     var isDebugArmed: Bool
+    var isDebugPaused: Bool
     var breakpointEntries: [BreakpointEntry]
     var onDebugStepOver: () -> Void
     var onDebugStepInto: () -> Void
     var onDebugStepOut: () -> Void
     var onDebugContinue: () -> Void
     var onDebugStop: () -> Void
-    var onPrepareRunLine: (ForthConnectionManager.RunLineKind) -> Void
+    var onForwardProgramKey: (Int32) -> Void
+    var onPrepareRunLine: (ForthConnectionManager.RunLineKind, String?) -> Void
     var onCommandClickWord: (String) -> Void
     var onToggleBreakpoint: (String) -> Void
+    var onEmitCurrent: () -> Void
     var onRunToOffset: (Int) -> Void
 
     var body: some View {
@@ -613,7 +643,9 @@ private struct TabEditorPane: View {
                         .fontWeight(.semibold)
                     Text(
                         isDebugArmed
-                            ? "Read-only — F5–F8 / i o Space g q drive the stepper"
+                            ? (isDebugPaused
+                                ? "Read-only — F5–F8 / i o Space g q drive the stepper"
+                                : "Running — Space and Return go to the program")
                             : "Read-only — typing asks to switch to Edit"
                     )
                         .foregroundStyle(.secondary)
@@ -656,6 +688,7 @@ private struct TabEditorPane: View {
                     set: { tab.topVisibleLine = $0 }
                 ),
                 isDebugArmed: isDebugArmed,
+                isDebugPaused: isDebugPaused,
                 showLineNumbers: showLineNumbers,
                 wrapMode: wrapMode,
                 wrapColumn: wrapColumn,
@@ -665,9 +698,11 @@ private struct TabEditorPane: View {
                 onDebugStepOut: onDebugStepOut,
                 onDebugContinue: onDebugContinue,
                 onDebugStop: onDebugStop,
+                onForwardProgramKey: onForwardProgramKey,
                 onPrepareRunLine: onPrepareRunLine,
                 onCommandClickWord: onCommandClickWord,
                 onToggleBreakpoint: onToggleBreakpoint,
+                onEmitCurrent: onEmitCurrent,
                 onRunToOffset: onRunToOffset
             )
         }
@@ -678,6 +713,7 @@ private struct TabEditorPane: View {
 /// and opens the list to enable/disable/delete / Arm.
 private struct BreakpointsPanelButton: View {
     @ObservedObject var forth: ForthConnectionManager
+    var idleArmWord: (() -> String?)? = nil
     @State private var isPresented = false
 
     var body: some View {
@@ -696,7 +732,7 @@ private struct BreakpointsPanelButton: View {
         }
         .help("Toggle BREAK on the word under the editor caret (F9 / ⌘\\), then show the list")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            BreakpointsPanel(forth: forth)
+            BreakpointsPanel(forth: forth, idleArmWord: idleArmWord)
                 .frame(minWidth: 300, idealWidth: 340, minHeight: 240, idealHeight: 300, maxHeight: 480)
                 .padding(12)
         }
@@ -711,6 +747,7 @@ private struct BreakpointsPanelButton: View {
 /// Shared BREAK table UI for the console header and Debug toolbar.
 private struct BreakpointsPanel: View {
     @ObservedObject var forth: ForthConnectionManager
+    var idleArmWord: (() -> String?)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -728,14 +765,14 @@ private struct BreakpointsPanel: View {
                 .help("Toggle BREAK on the word under the editor caret (F9 / ⌘\\)")
                 .controlSize(.small)
                 Button("Arm") {
-                    forth.armBreakGo()
+                    forth.armBreakGo(runWord: idleArmWord?())
                     EditorFocus.request()
                 }
-                .disabled(!forth.isDebugSessionArmed || !forth.isConnected)
+                .disabled(!forth.isConnected)
                 .help(
                     forth.isDebugSessionArmed
                         ? "Continue until an enabled BREAK hits"
-                        : "While idle, use ⌘⇧F5 / BPGO LAST, or type BPGO <word>"
+                        : "Idle: BPGO the caret word, else the first enabled breakpoint"
                 )
                 .controlSize(.small)
             }
@@ -816,6 +853,7 @@ private struct BreakpointRow: View {
 /// view-mode letter mapping lives in `EditorTextView` only while armed.
 private struct DebugToolbar: View {
     @ObservedObject var forth: ForthConnectionManager
+    var idleArmWord: (() -> String?)? = nil
 
     private var barColor: Color {
         forth.isConnected
@@ -835,10 +873,12 @@ private struct DebugToolbar: View {
                 .fontWeight(.semibold)
             BreakpointsPanelButton(forth: forth)
             Button("Arm") {
-                forth.armBreakGo()
+                forth.armBreakGo(runWord: idleArmWord?())
                 EditorFocus.request()
             }
-            .help("Continue until an enabled BREAK hits")
+            .help(forth.isDebugSessionArmed
+                  ? "Continue until an enabled BREAK hits"
+                  : "Idle: BPGO caret word, else the first enabled breakpoint")
             Button("Pause") {
                 forth.breakAsap()
                 EditorFocus.request()

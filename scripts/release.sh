@@ -53,6 +53,10 @@ cmd_validate() {
   note "=== Hayes ==="
   run_agent "$hayes_log" -e 'FROMLIB FLOAD Testing/HayesTest/HayesTest.fth'
   check_hayes "$hayes_log"
+  note "=== dbg-span ==="
+  local span_log="$LOG_DIR/dbg-span.txt"
+  run_agent "$span_log" -e 'FROMLIB FLOAD Testing/DbgSpan/span-check.fth'
+  check_dbg_span "$span_log"
   ok "validate complete"
 }
 

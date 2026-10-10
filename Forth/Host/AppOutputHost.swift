@@ -237,6 +237,17 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     @discardableResult
     func routeKeyIfActive(_ event: NSEvent) -> Bool {
         guard isKeyWindowActive, event.type == .keyDown else { return false }
+        return enqueueMappedKey(event)
+    }
+
+    /// Graphics window is open but not key. Used while DEBUG is running (not paused)
+    /// so Run-to does not swallow Return/Space as Step Over.
+    func routeKeyIfOpen(_ event: NSEvent) -> Bool {
+        guard opened, event.type == .keyDown else { return false }
+        return enqueueMappedKey(event)
+    }
+
+    private func enqueueMappedKey(_ event: NSEvent) -> Bool {
         let code = Self.mapKeyEvent(event)
         if code >= 0 {
             pushKey(code)
@@ -246,12 +257,12 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
 
     fileprivate static func mapKeyEvent(_ event: NSEvent) -> Int64 {
         switch event.keyCode {
-        case 123: return 203
-        case 124: return 205
-        case 125: return 208
-        case 126: return 200
-        case 53: return 0x1B
-        case 49: return 0x20
+        case 123: return 203 // Left arrow → EDIT64 left
+        case 124: return 205 // Right arrow → EDIT64 right
+        case 125: return 208 // Down arrow → EDIT64 down
+        case 126: return 200 // Up arrow → EDIT64 up
+        case 53: return 0x1B // Esc → ASCII 27
+        case 49: return 0x20 // Space → ASCII 32
         default: break
         }
         if let chars = event.charactersIgnoringModifiers, let ch = chars.utf16.first, ch < 128 {
@@ -644,6 +655,8 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             if !opened { return 0x1B }
             let k = takeKey()
             if k >= 0 { return k }
+            // Break Now, and nothing queued: let GRAPHICS KEY return to NEXT.
+            if KernelBridge.shared.debugBreakPending() { return -1 }
             Thread.sleep(forTimeInterval: 0.05)
         }
         return -1
@@ -745,7 +758,7 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         // Defer teardown — closing mid pumpUIForKeyInput/sendEvent crashes.
         opened = false
-        pushKey(0x1B)
+        pushKey(0x1B) // Esc — unblock GRAPHICS KEY if it is waiting
         DispatchQueue.main.async { [weak self] in
             self?.teardownWindow()
         }

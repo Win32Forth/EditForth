@@ -172,7 +172,7 @@ ONLY FORTH ALSO SYSVOC ALSO DEBUGGER DEFINITIONS
   CASE
      -1 OF  ." runto: no paused definition" CR  ENDOF
      -2 OF  ." runto: paused word has no source file / map" CR  ENDOF
-     -3 OF  ." runto: token not in debugger map (save file? wrong def?)" CR  ENDOF
+     -3 OF  ." runto: not a call site (click the use inside a definition, not the : header)" CR  ENDOF
      ." runto: cannot resolve offset in debugger map" CR
   ENDCASE
   DBG-CURSOR-ON ;

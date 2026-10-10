@@ -298,7 +298,7 @@ final class DockedConsoleTextView: NSTextView {
             forth.prepareRunLine(kind)
             return
         }
-        if event.keyCode == 96, coordinator?.forth.isDebugSessionArmed != true {
+        if event.keyCode == 96, coordinator?.forth.isDebugSessionArmed != true { // F5 — block Complete
             return
         }
         // Forward printable keys to companion for KEY waits; still insert locally via super.

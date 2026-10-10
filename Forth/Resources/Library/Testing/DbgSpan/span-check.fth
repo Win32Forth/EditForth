@@ -1,0 +1,44 @@
+\ Headless dbg-map check for release validate.
+\ Payload cells (LIT/SLIT/BR) must inherit the owning token span.
+\ DEBUGGER-END must sit above ACCEPT (Break Now low-water).
+\
+\ Space-over, Break Now, and paused F9 need a live pause; they are not
+\ driven here. This file locks the library half of that highlight path.
+
+: SPAN-DEMO  ( -- )
+  1 2 + DROP
+;
+
+ALSO SYSVOC ALSO DEBUGGER
+
+' SPAN-DEMO VIEW-FILE# CONSTANT SPAN-FF
+SPAN-FF DBG-MAP-ENSURE-FILE CONSTANT SPAN-FSEC
+SPAN-FSEC SPAN-FF DBG-MAP-LOAD-FILE-BUF DROP
+' SPAN-DEMO DBG-MAP-BUILD
+' SPAN-DEMO DBG-MAP-FIND-CFA CONSTANT SPAN-CM
+
+0 VALUE SPAN-A0
+0 VALUE SPAN-U0
+0 VALUE SPAN-A1
+0 VALUE SPAN-U1
+0 VALUE SPAN-RAW
+
+: SPAN-CHECK  ( -- flag )
+  SPAN-CM 0= IF  FALSE EXIT  THEN
+  SPAN-CM 0 DBG-MAP-SPAN@ TO SPAN-U0 TO SPAN-A0
+  SPAN-U0 0= IF  FALSE EXIT  THEN
+  SPAN-CM 1 DBG-MAP-SPAN@ TO SPAN-RAW DROP
+  SPAN-RAW 0<> IF  FALSE EXIT  THEN
+  SPAN-CM 1 DBG-MAP-SPAN-RESOLVE TO SPAN-U1 TO SPAN-A1
+  SPAN-A0 SPAN-A1 = SPAN-U0 SPAN-U1 = AND
+;
+
+: SPAN-REPORT  ( -- )
+  CR ." DBG-SPAN: "
+  SPAN-CHECK IF  ." PASS"  ELSE  ." FAIL"  THEN  CR
+  CR ." DEBUGGER-END: "
+  ['] ACCEPT DEBUGGER-END U< IF  ." PASS"  ELSE  ." FAIL"  THEN  CR
+;
+SPAN-REPORT
+
+PREVIOUS PREVIOUS

@@ -310,7 +310,25 @@ final class ForthEditorServer {
             // Confirm alerts run in EditForth; companion only performs the copy.
             FileHost.shared.restoreUserTreeFromEditor(renameFirst: renameFirst)
             return
-        case .executeCommand, .loadSource, .viewWord, .toggleBreakpoint, .breakGo:
+        case .toggleBreakpoint(let name):
+            // FIND + table update. No EVALUATE, so F9 works while paused.
+            let word = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if word.isEmpty || word.contains(where: { $0.isWhitespace || $0.isNewline }) {
+                writeResponse(.error(message: "BREAK needs a single token"), to: fd)
+            } else {
+                switch kernel.breakToggle(named: word) {
+                case 1, 2:
+                    let entries = kernel.breakEntries()
+                    broadcast(.breakpoints(entries: entries))
+                    writeResponse(.breakpoints(entries: entries), to: fd)
+                case -1:
+                    writeResponse(.error(message: "BREAK table full"), to: fd)
+                default:
+                    writeResponse(.error(message: "undefined: \(word)"), to: fd)
+                }
+            }
+            return
+        case .executeCommand, .loadSource, .viewWord, .breakGo:
             break
         }
 
@@ -381,25 +399,10 @@ final class ForthEditorServer {
                         response = .viewResult(word: word, opened: opened)
                     }
                 }
-            case .toggleBreakpoint(let name):
-                // TOGGLE-BREAK via ' — undefined aborts evaluate (status ≠ 0).
-                let word = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                if word.isEmpty || word.contains(where: { $0.isWhitespace || $0.isNewline }) {
-                    response = .error(message: "BREAK needs a single token")
-                } else if kernel.isAnyDebugArmed {
-                    response = .error(message: "debugger paused — use Step/Continue")
-                } else {
-                    let st = kernel.evaluate("TOGGLE-BREAK \(word)")
-                    kernel.forceFlushEmitSync()
-                    if st != 0 {
-                        response = .error(message: "status=\(st)")
-                    } else {
-                        let entries = kernel.breakEntries()
-                        // Broadcast so every connected editor refreshes pale-red wash.
-                        self.broadcast(.breakpoints(entries: entries))
-                        response = .breakpoints(entries: entries)
-                    }
-                }
+            case .toggleBreakpoint:
+                // Handled on the I/O queue before evaluate (paused-safe).
+                response = .error(message: "internal: toggleBreakpoint")
+                break
             case .breakGo(let name):
                 // Idle Arm: BPGO <name> (runs that word until an enabled BREAK hits).
                 let word = name.trimmingCharacters(in: .whitespacesAndNewlines)

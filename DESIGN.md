@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.1.0** / build **6** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.1.0** (`Releases/EditForth-2.1.0-macOS.dmg`). First public release was **v2.0.0**. Highlights: Debug **Run to Here**, **Break Now / Pause** (`DEBUGGER-END` floor), **File → Compare with Disk**.
+Marketing **2.2.0** / build **7** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.2.0** (`Releases/EditForth-2.2.0-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.1.0: Step Over after Break Now, dbg-map highlight (literals and `DO-CLOCK` control flow), paused F9, gutter breakpoint dots, caret RUN, idle F6 EMIT, Compare-with-Disk watch, GCLOCK keys during Run-to. 2.1.0 Break Now + Space stepped into colon calls; that is fixed here.
 
 ## Why a new project
 

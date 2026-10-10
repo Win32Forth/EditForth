@@ -28,6 +28,8 @@ struct EditorTextView: NSViewRepresentable {
     @Binding var topVisibleLine: Int
     /// When 64Forth DEBUG is armed, F-keys (and view-mode letter keys) drive the stepper.
     var isDebugArmed: Bool = false
+    /// False while Run-to / Continue is executing. Space and Return then go to the program.
+    var isDebugPaused: Bool = true
     /// View → Show Line Numbers (AppStorage); vertical ruler on/off.
     var showLineNumbers: Bool = true
     /// View → Wrap at Column mode: `off` | `window` | `column`.
@@ -41,12 +43,15 @@ struct EditorTextView: NSViewRepresentable {
     var onDebugStepOut: (() -> Void)?
     var onDebugContinue: (() -> Void)?
     var onDebugStop: (() -> Void)?
+    var onForwardProgramKey: ((Int32) -> Void)?
     /// Idle F5 / ⌘F5 / ⌘⇧F5 — fill console from LAST (not NSTextView Complete).
-    var onPrepareRunLine: ((ForthConnectionManager.RunLineKind) -> Void)?
+    var onPrepareRunLine: ((ForthConnectionManager.RunLineKind, String?) -> Void)?
     /// ⌘-click on a Forth token → Hyper VIEW via IPC (`VIEW <word>`).
     var onCommandClickWord: ((String) -> Void)?
     /// F9 / ⌘\ / Debug menu: toggle BREAK on the Forth token under the caret.
     var onToggleBreakpoint: ((String) -> Void)?
+    /// Idle F6 — EMIT current tab. Ignored while DEBUG is armed (F6 is Step Over).
+    var onEmitCurrent: (() -> Void)?
     /// Right-click Run to Here while DEBUG armed: UTF-8 file-relative byte offset.
     var onRunToOffset: ((Int) -> Void)?
 
@@ -412,6 +417,7 @@ struct EditorTextView: NSViewRepresentable {
             guard let tv = textView, let layout = tv.layoutManager else {
                 breakpointHighlightRanges = []
                 lastBreakpointEntries = []
+                lineNumberRuler?.setGutterMarks([:])
                 return
             }
             let charCount = (tv.string as NSString).length
@@ -424,6 +430,7 @@ struct EditorTextView: NSViewRepresentable {
             }
             breakpointHighlightRanges = []
             lastBreakpointEntries = []
+            lineNumberRuler?.setGutterMarks([:])
         }
 
         /// Whole-word wash for every occurrence of each BREAK name.
@@ -449,6 +456,7 @@ struct EditorTextView: NSViewRepresentable {
             let ns = tv.string as NSString
             let charCount = ns.length
             var painted: [NSRange] = []
+            var gutter: [Int: Bool] = [:]
             var enabledByName: [String: Bool] = [:]
             for e in normalized {
                 // Later duplicate name wins; host table should be unique.
@@ -468,6 +476,8 @@ struct EditorTextView: NSViewRepresentable {
                 let range = NSRange(location: idx, length: hi - idx)
                 let token = ns.substring(with: range)
                 if let enabled = enabledByName[token] {
+                    let line = LineNumberRulerView.lineNumber(forCharacter: range.location, in: ns)
+                    gutter[line] = (gutter[line] ?? false) || enabled
                     // Do not overwrite the live DEBUG green wash.
                     let overlapsDebug = debugHighlightRange.map {
                         NSIntersectionRange($0, range).length > 0
@@ -487,6 +497,7 @@ struct EditorTextView: NSViewRepresentable {
                 idx = hi
             }
             breakpointHighlightRanges = painted
+            lineNumberRuler?.setGutterMarks(gutter)
             for range in painted {
                 layout.invalidateDisplay(forCharacterRange: range)
             }
@@ -781,6 +792,13 @@ struct EditorTextView: NSViewRepresentable {
             if !parent.isDebugArmed, tryHandleRunKey(event) {
                 return nil
             }
+            // Idle F6 — EMIT current tab. Armed F6 stays Step Over.
+            if !parent.isDebugArmed, event.keyCode == 97, // F6 — EMIT while idle
+               !event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                .contains(.command) {
+                parent.onEmitCurrent?()
+                return nil
+            }
 
             // DEBUG armed: F-keys / ⌘⇧Y always; Forth letter keys only in view mode
             // so edit-mode typing and the console field stay unaffected.
@@ -839,7 +857,16 @@ struct EditorTextView: NSViewRepresentable {
         /// F5 / ⌘F5 / ⌘⇧F5 while idle → console fill from LAST.
         private func tryHandleRunKey(_ event: NSEvent) -> Bool {
             guard let kind = ForthConnectionManager.runLineKind(from: event) else { return false }
-            parent.onPrepareRunLine?(kind)
+            let token: String?
+            if let tv = textView {
+                token = EditorNSTextView.forthToken(
+                    at: tv.selectedRange().location,
+                    in: tv.string as NSString
+                )
+            } else {
+                token = nil
+            }
+            parent.onPrepareRunLine?(kind, token)
             return true
         }
 
@@ -873,6 +900,27 @@ struct EditorTextView: NSViewRepresentable {
                 return true
             default:
                 break
+            }
+
+            // Run-to / Continue: the program is executing. Space and Return are
+            // GCLOCK keys, not Step Over.
+            if !parent.isDebugPaused {
+                if event.keyCode == 36 || event.keyCode == 76 {
+                    // Return (36) / keypad Enter (76) → ASCII 13 for GRAPHICS KEY
+                    parent.onForwardProgramKey?(13)
+                    return true
+                }
+                if event.keyCode == 49 {
+                    // Space (49) → ASCII 32
+                    parent.onForwardProgramKey?(32)
+                    return true
+                }
+                if event.keyCode == 53 {
+                    // Esc (53) → ASCII 27 (GCLOCK quit)
+                    parent.onForwardProgramKey?(27)
+                    return true
+                }
+                return false
             }
 
             // Letter / Esc / Return only in view mode — never steal edit-mode typing.
@@ -997,7 +1045,7 @@ final class EditorNSTextView: NSTextView {
     override func keyDown(with event: NSEvent) {
         // Belt-and-suspenders: default F5 binding is Complete — never let it through
         // if the local monitor somehow misses an idle RUN chord.
-        if event.keyCode == 96 {
+        if event.keyCode == 96 { // F5 — swallow NSTextView Complete when idle RUN missed it
             return
         }
         if handleHomeEndKeys(event) { return }
@@ -1037,7 +1085,7 @@ extension NSTextView {
     @discardableResult
     func handleHomeEndKeys(_ event: NSEvent) -> Bool {
         let key = event.keyCode
-        guard key == 115 || key == 119 else { return false }
+        guard key == 115 || key == 119 else { return false } // Home (115) / End (119)
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // Leave Option/Control chords to the system.
         if mods.contains(.option) || mods.contains(.control) { return false }

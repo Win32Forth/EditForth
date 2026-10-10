@@ -83,6 +83,9 @@ private func kernel_break_set_enabled(_ index: Int32, _ enabled: Int32)
 @_silgen_name("kernel_break_clear")
 private func kernel_break_clear(_ index: Int32)
 
+@_silgen_name("kernel_break_toggle_name")
+private func kernel_break_toggle_name(_ name: UnsafePointer<CChar>?) -> Int32
+
 @_silgen_name("kernel_debug_bp_go")
 private func kernel_debug_bp_go()
 
@@ -100,6 +103,12 @@ private func kernel_debug_runto_status() -> Int64
 
 @_silgen_name("kernel_debug_break_asap")
 private func kernel_debug_break_asap()
+
+@_silgen_name("kernel_debug_break_pending")
+private func kernel_debug_break_pending() -> Int32
+
+@_silgen_name("kernel_debug_busy")
+private func kernel_debug_busy() -> Int32
 
 @_silgen_name("kernel_debug_force_disarm")
 private func kernel_debug_force_disarm()
@@ -1011,7 +1020,7 @@ final class KernelBridge {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.isEvaluating, self.isFacilityTerminalActive else { return }
-            _ = self.pushKey(0)
+            _ = self.pushKey(0) // wake SZ-EDITOR so it redraws after a resize
         }
         facilitySizeWakeWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
@@ -1203,10 +1212,10 @@ final class KernelBridge {
     func reportFacilityEdgeScroll(vertical: Int, horizontal: Int) {
         guard isFacilityTerminalActive, isEvaluating else { return }
         // 129=SZ-VIEW-UP 130=SZ-VIEW-DN 12=SZ-HSCROLL-LEFT 128=SZ-HSCROLL-RIGHT
-        if vertical < 0 { _ = pushKey(129) }
-        if vertical > 0 { _ = pushKey(130) }
-        if horizontal < 0 { _ = pushKey(12) }
-        if horizontal > 0 { _ = pushKey(128) }
+        if vertical < 0 { _ = pushKey(129) } // SZ-VIEW-UP
+        if vertical > 0 { _ = pushKey(130) } // SZ-VIEW-DN
+        if horizontal < 0 { _ = pushKey(12) } // SZ-HSCROLL-LEFT
+        if horizontal > 0 { _ = pushKey(128) } // SZ-HSCROLL-RIGHT
     }
 
     /// Queue a facility mouse event (down / drag / up) and wake SZ-MOUSE (key 25).
@@ -1271,7 +1280,7 @@ final class KernelBridge {
         lock.unlock()
         if shouldPushKey {
             // 25 = SZ-MOUSE in sz-edit.fth
-            pushKey(25)
+            pushKey(25) // SZ-MOUSE
         }
     }
 
@@ -1310,7 +1319,7 @@ final class KernelBridge {
 
         // Drain remaining events one KEY at a time (down → drag* → up).
         if more {
-            _ = pushKey(25)
+            _ = pushKey(25) // SZ-MOUSE — another queued mouse event remains
         }
         return flag
     }
@@ -1621,7 +1630,7 @@ final class KernelBridge {
     /// Do not use NotificationCenter/`onReceive` — same deferral trap as Open.
     func requestFileSave() {
         if isEvaluating, isFacilityTerminalActive {
-            _ = pushKey(19)
+            _ = pushKey(19) // SZ-CTRL-S (⌘S)
             return
         }
         // Idle: let ConsoleView print the hint via the notification path.
@@ -1647,7 +1656,7 @@ final class KernelBridge {
     /// ⌘W / File→Close Editor while KEY waits: inject quit-editor key (17).
     func requestFileClose() {
         if isEvaluating, isFacilityTerminalActive {
-            _ = pushKey(17)
+            _ = pushKey(17) // SZ-CTRL-Q (⌘W — close editor)
             return
         }
         let post: () -> Void = {
@@ -1659,7 +1668,7 @@ final class KernelBridge {
     /// ⌘N / File→New while KEY waits: inject new-buffer key (31).
     func requestFileNew() {
         if isEvaluating, isFacilityTerminalActive {
-            _ = pushKey(31)
+            _ = pushKey(31) // SZ-EDIT-NEW (⌘N)
             return
         }
         let post: () -> Void = {
@@ -1671,7 +1680,7 @@ final class KernelBridge {
     /// ⌘← / ⌘→ / ⌘G — find prev/next in the open SZ-EDITOR buffer.
     func requestEditorFind(prev: Bool) {
         if isEvaluating, isFacilityTerminalActive {
-            _ = pushKey(prev ? 20 : 21)
+            _ = pushKey(prev ? 20 : 21) // SZ-FIND-PREV (20) / SZ-FIND-NEXT (21)
             return
         }
         let name: Notification.Name = prev ? .editorFindPrev : .editorFindNext
@@ -1682,7 +1691,7 @@ final class KernelBridge {
     /// ⌘PgUp / ⌘PgDn — Hyper prev/next while editor KEY waits, else host evaluate.
     func requestHyperNav(prev: Bool) {
         if isEvaluating, isFacilityTerminalActive {
-            _ = pushKey(prev ? 26 : 27)
+            _ = pushKey(prev ? 26 : 27) // SZ-HYPER-PREV (26) / SZ-HYPER-NEXT (27)
             return
         }
         if isEvaluating { return }
@@ -2222,6 +2231,14 @@ final class KernelBridge {
         return nil
     }
 
+    /// Toggle BREAK by dictionary name. Works while DEBUG is paused.
+    /// 1 = added, 2 = removed, 0 = not found, -1 = table full.
+    func breakToggle(named name: String) -> Int32 {
+        let word = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return 0 }
+        return word.withCString { kernel_break_toggle_name($0) }
+    }
+
     /// Clear a BREAK slot by name (works while DEBUG is paused).
     @discardableResult
     func breakClear(named name: String) -> Bool {
@@ -2252,7 +2269,7 @@ final class KernelBridge {
     }
 
     /// Host special key for Run to Here (Forth DBG-MOD-RUNTO).
-    private static let debugRunToKey: Int32 = 135
+    private static let debugRunToKey: Int32 = 135 // pause-thread Run-to (not ASCII, not debug-continue 134)
 
     /// Break Now: set sticky `debug_break_asap` so the next allowed ITC NEXT
     /// pauses (enclosing colon at/above DEBUGGER-END). Nil = armed; else error.
@@ -2260,6 +2277,11 @@ final class KernelBridge {
         guard isEvaluating || isAnyDebugArmed else { return "nothing running" }
         kernel_debug_break_asap()
         return nil
+    }
+
+    /// True while Break Now is waiting for the next allowed ITC pause.
+    func debugBreakPending() -> Bool {
+        kernel_debug_break_pending() != 0
     }
 
     /// Clear armed/busy/break-asap when Stop cannot pushKey (evaluate already ended).
@@ -2336,24 +2358,24 @@ final class KernelBridge {
 
         // ⌘← / ⌘→ — in-buffer find (not line ends). Ignore ⌘⇧ (selection).
         if cmd && !shift && !opt {
-            if left { return 20 }
-            if right { return 21 }
-            if pgUp { return 26 }
-            if pgDn { return 27 }
-            if home { return 28 }
-            if end { return 29 }
+            if left { return 20 }   // ⌘← SZ-FIND-PREV
+            if right { return 21 }  // ⌘→ SZ-FIND-NEXT
+            if pgUp { return 26 }   // ⌘PgUp SZ-HYPER-PREV
+            if pgDn { return 27 }   // ⌘PgDn SZ-HYPER-NEXT
+            if home { return 28 }   // ⌘Home SZ-DOC-HOME
+            if end { return 29 }    // ⌘End SZ-DOC-END
             // ⌘X / ⌘C / ⌘V handled via characters path (not special keys)
         }
         // Plain navigation (no command)
         if !cmd && !opt {
-            if left { return 2 }
-            if right { return 6 }
-            if up { return 16 }
-            if down { return 14 }
-            if pgUp { return 23 }
-            if pgDn { return 24 }
-            if home { return shift ? 28 : 1 }
-            if end { return shift ? 29 : 5 }
+            if left { return 2 }    // Left
+            if right { return 6 }   // Right
+            if up { return 16 }     // Up
+            if down { return 14 }   // Down
+            if pgUp { return 23 }   // Page Up
+            if pgDn { return 24 }   // Page Down
+            if home { return shift ? 28 : 1 } // ⇧Home doc start (28), Home line start (1)
+            if end { return shift ? 29 : 5 }  // ⇧End doc end (29), End line end (5)
         }
         #endif
         return nil
@@ -2377,7 +2399,7 @@ final class KernelBridge {
         // Still allow ⌘ find / Hyper from any window while facility is open.
         if !FacilityEditorHost.shared.isKeyWindowActive {
             switch key {
-            case 20, 21, 26, 27, 28, 29:
+            case 20, 21, 26, 27, 28, 29: // find, Hyper, doc home/end — allowed from the console too
                 return pushKey(key)
             default:
                 return false
@@ -2476,6 +2498,9 @@ final class KernelBridge {
     @discardableResult
     private func deliverDebugStepperKey(_ event: NSEvent) -> Bool {
         guard event.type == .keyDown, kernel_any_debug_armed() != 0 else { return false }
+        // Armed but running (Run to / Continue): Space and Return belong to
+        // the program (GCLOCK KEY), not to Step Over.
+        guard kernel_debug_busy() != 0 else { return false }
         let mods = event.modifierFlags.intersection([.control, .option, .shift, .command])
         if mods.contains(.command), mods.contains(.shift),
            (event.charactersIgnoringModifiers ?? "").lowercased() == "y" {
@@ -2484,9 +2509,9 @@ final class KernelBridge {
         }
         if mods.contains(.command) { return false }
         switch event.keyCode {
-        case 97:  pushKey(FacilityFKey.event(FacilityFKey.f6)); return true
-        case 98:  pushKey(FacilityFKey.event(FacilityFKey.f7)); return true
-        case 100: pushKey(FacilityFKey.event(FacilityFKey.f8)); return true
+        case 97:  pushKey(FacilityFKey.event(FacilityFKey.f6)); return true // F6 — step over
+        case 98:  pushKey(FacilityFKey.event(FacilityFKey.f7)); return true // F7 — step into
+        case 100: pushKey(FacilityFKey.event(FacilityFKey.f8)); return true // F8 — step out
         case 53:  pushKey(27); return true  // Esc = abort DEBUG
         case 49:  pushKey(Int32(Character(" ").asciiValue ?? 32)); return true  // Space = over
         case 36, 76: pushKey(13); return true  // Return / keypad Enter = over
@@ -2526,7 +2551,7 @@ final class KernelBridge {
             if facilityOn {
                 let ch = (event.charactersIgnoringModifiers ?? "").lowercased()
                 if ch == "s", !mods.contains(.shift) {
-                    pushKey(19)
+                    pushKey(19) // SZ-CTRL-S (⌘S)
                     return true
                 }
                 if ch == "s", mods.contains(.shift) {
@@ -2534,7 +2559,7 @@ final class KernelBridge {
                     return true
                 }
                 if ch == "n", !mods.contains(.shift) {
-                    pushKey(31)
+                    pushKey(31) // SZ-EDIT-NEW (⌘N)
                     return true
                 }
                 if ch == "o", !mods.contains(.shift) {
@@ -2542,7 +2567,7 @@ final class KernelBridge {
                     return true
                 }
                 if ch == "w", !mods.contains(.shift) {
-                    pushKey(17)
+                    pushKey(17) // SZ-CTRL-Q (⌘W — close editor)
                     return true
                 }
                 if ch == "q", !mods.contains(.shift) {
@@ -2550,23 +2575,23 @@ final class KernelBridge {
                     return true
                 }
                 if ch == "f", !mods.contains(.shift) {
-                    pushKey(131)
+                    pushKey(131) // SZ-FIND (⌘F)
                     return true
                 }
                 if ch == "g" {
-                    pushKey(mods.contains(.shift) ? 20 : 21)
+                    pushKey(mods.contains(.shift) ? 20 : 21) // ⇧⌘G find prev (20), ⌘G find next (21)
                     return true
                 }
                 if ch == "e", !mods.contains(.shift) {
-                    pushKey(18)
+                    pushKey(18) // SZ-VIEW-UNDER (⌘E)
                     return true
                 }
                 if !mods.contains(.shift), ch == "x" || ch == "c" || ch == "v" {
                     if pushEditorClipboardKey(ch) { return true }
                 }
                 switch event.keyCode {
-                case 115: pushKey(28); return true
-                case 119: pushKey(29); return true
+                case 115: pushKey(28); return true // ⌘Home → SZ-DOC-HOME
+                case 119: pushKey(29); return true // ⌘End → SZ-DOC-END
                 default: break
                 }
             }
@@ -2576,24 +2601,24 @@ final class KernelBridge {
 
         // macOS Delete (backspace) is keyCode 51; character is often DEL (127).
         if event.keyCode == 51 {
-            pushKey(8)
+            pushKey(8) // Delete/Backspace (51) → ASCII BS (8), not DEL 127
             return true
         }
 
         // Return (36): plain → LF (10); ⇧Return → 132 (find previous).
         if facilityOn, event.keyCode == 36 {
             if mods.contains(.shift), !mods.contains(.command), !mods.contains(.option) {
-                pushKey(132)
+                pushKey(132) // ⇧Return → SZ-FIND-PREV-LINE
             } else {
-                pushKey(10)
+                pushKey(10) // Return (36) → ASCII LF (10)
             }
             return true
         }
 
         if mods.contains(.control) {
             switch event.keyCode {
-            case 115: pushKey(28); return true
-            case 119: pushKey(29); return true
+            case 115: pushKey(28); return true // Ctrl-Home → SZ-DOC-HOME
+            case 119: pushKey(29); return true // Ctrl-End → SZ-DOC-END
             default: break
             }
         }
@@ -2640,14 +2665,20 @@ final class KernelBridge {
             if AppOutputHost.shared.routeKeyIfActive(event) {
                 return nil
             }
+            // GCLOCK is open but this process is not key (EditForth is).
+            // While the program is running, still give Return/Space to GRAPHICS KEY.
+            if AppOutputHost.shared.isOpened, kernel_debug_busy() == 0,
+               AppOutputHost.shared.routeKeyIfOpen(event) {
+                return nil
+            }
             if FacilityEditorHost.shared.routeKeyIfActive(event) {
                 return nil
             }
 
             // Idle console: ⌘PgUp / ⌘PgDn → evaluate HYPER-PREV / HYPER-NEXT
             if mods.contains(.command), !mods.contains(.shift), !active,
-               event.keyCode == 116 || event.keyCode == 121 {
-                let prev = (event.keyCode == 116)
+               event.keyCode == 116 || event.keyCode == 121 { // PgUp (116) / PgDn (121)
+                let prev = (event.keyCode == 116) // PgUp → HYPER-PREV
                 self.evaluateHyperNav(prev ? "HYPER-PREV" : "HYPER-NEXT")
                 return nil
             }
@@ -2679,7 +2710,7 @@ final class KernelBridge {
             }
 
             // Idle console: F9 → toggle BREAK under caret (same as ⌘\).
-            if !active, !mods.contains(.command), event.keyCode == 101 {
+            if !active, !mods.contains(.command), event.keyCode == 101 { // F9 — toggle BREAK
                 self.requestToggleBreakpointUnderCursor()
                 return nil
             }
@@ -2705,7 +2736,7 @@ final class KernelBridge {
                 }
                 // Find / clipboard: facility-global while editor KEY waits (any window).
                 if ch == "f", active && facilityOn, !mods.contains(.shift) {
-                    self.pushKey(131)
+                    self.pushKey(131) // SZ-FIND (⌘F)
                     return nil
                 }
                 if ch == "g", active && facilityOn {
@@ -2744,7 +2775,7 @@ final class KernelBridge {
         guard event.type == .keyDown else { return false }
         // Esc by keyCode (characters may be empty).
         if event.keyCode == 53 {
-            pushKey(27)
+            pushKey(27) // Esc (53) → ASCII 27
             return true
         }
         let chars = event.charactersIgnoringModifiers ?? event.characters
@@ -2766,28 +2797,28 @@ final class KernelBridge {
     private static func facilityFKeyId(for event: NSEvent) -> Int? {
         // Prefer keyCode for arrows / nav (charactersIgnoringModifiers may be empty).
         switch event.keyCode {
-        case 123: return FacilityFKey.left
-        case 124: return FacilityFKey.right
-        case 125: return FacilityFKey.down
-        case 126: return FacilityFKey.up
-        case 115: return FacilityFKey.home
-        case 119: return FacilityFKey.end
-        case 116: return FacilityFKey.prior   // page up
-        case 121: return FacilityFKey.next    // page down
-        case 114: return FacilityFKey.insert
-        case 117: return FacilityFKey.delete  // forward delete
-        case 122: return FacilityFKey.f1
-        case 120: return FacilityFKey.f2
-        case 99:  return FacilityFKey.f3
-        case 118: return FacilityFKey.f4
-        case 96:  return FacilityFKey.f5
-        case 97:  return FacilityFKey.f6
-        case 98:  return FacilityFKey.f7
-        case 100: return FacilityFKey.f8
-        case 101: return FacilityFKey.f9
-        case 109: return FacilityFKey.f10
-        case 103: return FacilityFKey.f11
-        case 111: return FacilityFKey.f12
+        case 123: return FacilityFKey.left    // Left arrow
+        case 124: return FacilityFKey.right   // Right arrow
+        case 125: return FacilityFKey.down    // Down arrow
+        case 126: return FacilityFKey.up      // Up arrow
+        case 115: return FacilityFKey.home    // Home
+        case 119: return FacilityFKey.end     // End
+        case 116: return FacilityFKey.prior   // Page Up
+        case 121: return FacilityFKey.next    // Page Down
+        case 114: return FacilityFKey.insert  // Help/Insert
+        case 117: return FacilityFKey.delete  // Forward Delete
+        case 122: return FacilityFKey.f1      // F1
+        case 120: return FacilityFKey.f2      // F2
+        case 99:  return FacilityFKey.f3      // F3
+        case 118: return FacilityFKey.f4      // F4
+        case 96:  return FacilityFKey.f5      // F5
+        case 97:  return FacilityFKey.f6      // F6
+        case 98:  return FacilityFKey.f7      // F7
+        case 100: return FacilityFKey.f8      // F8
+        case 101: return FacilityFKey.f9      // F9
+        case 109: return FacilityFKey.f10     // F10
+        case 103: return FacilityFKey.f11     // F11
+        case 111: return FacilityFKey.f12     // F12
         default: break
         }
         return nil
@@ -2800,15 +2831,15 @@ final class KernelBridge {
     /// Classic F-PC codes used by sz-edit.fth (SZ-LEFT=2, SZ-RIGHT=6, …).
     private static func editorPCKeyCode(forFacilityId id: Int) -> Int32? {
         switch id {
-        case FacilityFKey.left: return 2
-        case FacilityFKey.right: return 6
-        case FacilityFKey.down: return 14
-        case FacilityFKey.up: return 16
-        case FacilityFKey.home: return 1
-        case FacilityFKey.end: return 5
-        case FacilityFKey.prior: return 23
-        case FacilityFKey.next: return 24
-        case FacilityFKey.delete: return 127
+        case FacilityFKey.left: return 2    // SZ-LEFT
+        case FacilityFKey.right: return 6   // SZ-RIGHT
+        case FacilityFKey.down: return 14   // SZ-DOWN
+        case FacilityFKey.up: return 16     // SZ-UP
+        case FacilityFKey.home: return 1    // line start
+        case FacilityFKey.end: return 5     // line end
+        case FacilityFKey.prior: return 23  // Page Up
+        case FacilityFKey.next: return 24   // Page Down
+        case FacilityFKey.delete: return 127 // DEL
         default: return nil
         }
     }
@@ -3421,6 +3452,8 @@ final class KernelBridge {
                 return c
             }
             lock.unlock()
+            // Break Now, queue empty: XKEY treats -2 as "pause on KEY".
+            if debugBreakPending() { return -2 }
             if Date() > deadline { return -1 }
             // Short wait; main thread's evaluate loop keeps AppKit alive.
             _ = keyAvailable.wait(timeout: .now() + 0.05)

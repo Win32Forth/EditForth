@@ -1215,6 +1215,9 @@ final class FileHost {
             UserDefaults.standard.set(dest.path, forKey: firstRunDefaultDirKey)
             logicalCurrentDirectory = dest.path
             _ = fm.changeCurrentDirectoryPath(dest.path)
+            // Debugger library is loaded from Documents. Copy newer shipped
+            // files over stale ones; leave a newer user edit alone.
+            syncNewerShippedDebugger()
             if replaceExisting {
                 msg("\nEditForth files restored\n")
             } else {
@@ -1224,6 +1227,41 @@ final class FileHost {
         } catch {
             msg("installUserTree: \(error.localizedDescription)\n")
             return false
+        }
+    }
+
+    /// Copy `Resources/Library/Debugger/*.fth` into Documents when the
+    /// shipped file is newer (or missing). Other Library folders are untouched.
+    func syncNewerShippedDebugger() {
+        let fm = FileManager.default
+        guard let res = Bundle.main.resourceURL else { return }
+        guard let destRoot = userTreeURL else { return }
+        let fromDir = res.appendingPathComponent("Library/Debugger", isDirectory: true)
+        let toDir = destRoot.appendingPathComponent("Library/Debugger", isDirectory: true)
+        guard fm.fileExists(atPath: fromDir.path) else { return }
+        do {
+            try fm.createDirectory(at: toDir, withIntermediateDirectories: true)
+            let names = try fm.contentsOfDirectory(atPath: fromDir.path)
+            var copied = 0
+            for name in names where name.hasSuffix(".fth") {
+                let from = fromDir.appendingPathComponent(name)
+                let to = toDir.appendingPathComponent(name)
+                if fm.fileExists(atPath: to.path) {
+                    let fromDate = (try? fm.attributesOfItem(atPath: from.path)[.modificationDate] as? Date) ?? .distantPast
+                    let toDate = (try? fm.attributesOfItem(atPath: to.path)[.modificationDate] as? Date) ?? .distantPast
+                    if fromDate <= toDate { continue }
+                }
+                if fm.fileExists(atPath: to.path) {
+                    try fm.removeItem(at: to)
+                }
+                try fm.copyItem(at: from, to: to)
+                copied += 1
+            }
+            if copied > 0 {
+                msg("\nUpdated \(copied) Debugger library file(s) in Documents/EditForth\n")
+            }
+        } catch {
+            msg("sync Debugger library: \(error.localizedDescription)\n")
         }
     }
 

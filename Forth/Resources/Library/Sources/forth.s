@@ -284,13 +284,21 @@ next_debug:
     adrp x2, debug_break_asap@page
     add  x2, x2, debug_break_asap@pageoff
     str  xzr, [x2]                  // hit — clear sticky seek
+    // Caller frame is one cell shallower. Current word stays "deeper" so
+    // single-step still pauses; returning past this word disarms (DBG-ON style).
+    add  x3, x23, #8
+    adrp x4, debug_floor@page
+    add  x4, x4, debug_floor@pageoff
+    str  x3, [x4]
     b    6f                         // force pause (x21 already peeked)
 21:
     adrp x2, debug_floor@page
     add  x2, x2, debug_floor@pageoff
     
     ldr  x2, [x2]
-    cbz  x2, 2f
+    // floor=0 (Break ASAP): still honor F6 over / F8 out — do not jump to 2f
+    // (that skipped the over check so Space always behaved like Into).
+    cbz  x2, 20f
     cmp  x23, x2
     b.lo 20f                        // deeper than BPGO → F8 / pause checks
     b.eq 1f                         // same frame as DBG-ON → execute, stay armed
@@ -2861,6 +2869,15 @@ XKEY:
     SAVE_VM
     bl   _getchar
     RESTORE_VM
+    // Break Now while blocked in KEY: do not push a character (that would
+    // look like a key to the caller). Back up IP onto KEY and re-enter
+    // next_debug, which pauses on this token. Step runs KEY again.
+    mov  x1, #-2
+    cmp  x0, x1
+    b.ne 8f
+    sub  x19, x19, #8
+    b    next_debug
+8:
     // Function-key event (2<<24): skip for KEY, leave for EKEY consumers
     mov  x1, x0
     lsr  x2, x1, #24
@@ -18294,6 +18311,83 @@ _kernel_break_clear:
 1:
     ret
 
+// int kernel_break_toggle_name(const char *name)
+// FIND in the current search order, then toggle that xt in the 8-slot table.
+// Safe while DEBUG is paused (no EVALUATE).
+// Returns 1 = added, 2 = removed, 0 = not found, -1 = table full.
+.globl _kernel_break_toggle_name
+_kernel_break_toggle_name:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    stp x19, x20, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    cbz x0, _kbt_miss
+    mov x19, x0
+    mov x1, #0
+1:
+    ldrb w2, [x19, x1]
+    cbz w2, 2f
+    add x1, x1, #1
+    cmp x1, #64
+    b.lo 1b
+    b _kbt_miss
+2:
+    cbz x1, _kbt_miss
+    mov x0, x19
+    bl _find_word                     // x0 = CFA or 0
+    cbz x0, _kbt_miss
+    mov x19, x0                       // xt
+    mov x20, #0                       // index
+    mov x21, #-1                      // first empty slot
+3:
+    cmp x20, #8
+    b.hs 6f
+    adrp x0, debug_bp_xts@page
+    add x0, x0, debug_bp_xts@pageoff
+    ldr x2, [x0, x20, lsl #3]
+    cbz x2, 4f
+    cmp x2, x19
+    b.eq 5f                           // already set → remove
+    b 41f
+4:
+    cmp x21, #0
+    b.ge 41f
+    mov x21, x20
+41:
+    add x20, x20, #1
+    b 3b
+5:
+    adrp x0, debug_bp_xts@page
+    add x0, x0, debug_bp_xts@pageoff
+    str xzr, [x0, x20, lsl #3]
+    adrp x0, debug_bp_en@page
+    add x0, x0, debug_bp_en@pageoff
+    str xzr, [x0, x20, lsl #3]
+    mov x0, #2
+    b _kbt_done
+6:
+    cmp x21, #0
+    b.lt _kbt_full
+    adrp x0, debug_bp_xts@page
+    add x0, x0, debug_bp_xts@pageoff
+    str x19, [x0, x21, lsl #3]
+    adrp x0, debug_bp_en@page
+    add x0, x0, debug_bp_en@pageoff
+    mov x2, #-1
+    str x2, [x0, x21, lsl #3]
+    mov x0, #1
+    b _kbt_done
+_kbt_full:
+    mov x0, #-1
+    b _kbt_done
+_kbt_miss:
+    mov x0, #0
+_kbt_done:
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
+    ldp x29, x30, [sp], #16
+    ret
+
 // void kernel_debug_bp_go(void)
 // Arm "run until enabled BREAK" (same as Forth (BP-GO)). Safe while paused.
 .globl _kernel_debug_bp_go
@@ -18375,6 +18469,26 @@ _kernel_debug_force_disarm:
     adrp x0, debug_out@page
     add  x0, x0, debug_out@pageoff
     str  xzr, [x0]
+    ret
+
+// int kernel_debug_busy(void)
+.globl _kernel_debug_busy
+_kernel_debug_busy:
+    adrp x0, debug_busy@page
+    add  x0, x0, debug_busy@pageoff
+    ldr  x0, [x0]
+    cmp  x0, #0
+    cset x0, ne
+    ret
+
+// int kernel_debug_break_pending(void)
+.globl _kernel_debug_break_pending
+_kernel_debug_break_pending:
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    ldr  x0, [x0]
+    cmp  x0, #0
+    cset x0, ne
     ret
 
 // void kernel_debug_break_asap(void)

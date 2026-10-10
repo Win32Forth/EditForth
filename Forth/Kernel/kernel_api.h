@@ -62,6 +62,10 @@ void kernel_break_set_enabled(int index, int enabled);
 /// Clear xt and enable for slot `index` (no-op if out of range).
 void kernel_break_clear(int index);
 
+/// FIND `name` and toggle its BREAK slot. Safe while DEBUG is paused.
+/// Returns 1 = added, 2 = removed, 0 = not found, -1 = table full.
+int kernel_break_toggle_name(const char *name);
+
 /// Arm "run until enabled BREAK" (`debug_bp_go = 1`). Safe while DEBUG paused.
 void kernel_debug_bp_go(void);
 
@@ -80,6 +84,13 @@ int64_t kernel_debug_runto_status(void);
 
 /// Host: clear ITC DEBUG arming without a pause KEY (stuck chrome recovery).
 void kernel_debug_force_disarm(void);
+
+/// 1 if Break Now is still seeking a pause, else 0.
+int kernel_debug_break_pending(void);
+
+/// 1 while `_debug_pause` is waiting for a key, else 0.
+/// Run-to / Continue stay armed with this clear, so Space/Return belong to the program.
+int kernel_debug_busy(void);
 
 /// Host Break Now: set sticky `debug_break_asap` (no-op if already in pause).
 /// NEXT seeks until enclosing colon CFA >= break_min (DEBUGGER-END), then pauses.

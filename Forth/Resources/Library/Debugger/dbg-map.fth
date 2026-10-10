@@ -509,6 +509,39 @@ CREATE DBG-MAP-NAME  64 ALLOT
   u DBG-ED-TOKEN C!
   a DBG-ED-TOKEN CHAR+ u CMOVE ;
 
+\ Winning alias while several names compile to the same BRANCH / 0BRANCH.
+\ Searching IF before WHILE (or ELSE before REPEAT) skips the nearer word
+\ and the rest of the definition never aligns — DO-CLOCK's wash jumps.
+CREATE DBG-ALIAS-WIN  64 ALLOT
+0 VALUE DBG-ALIAS-BEST
+
+: DBG-ALIAS-SAVE  ( -- )
+  DBG-ED-TOKEN C@ 63 MIN
+  DUP DBG-ALIAS-WIN C!
+  DBG-ED-TOKEN 1+ DBG-ALIAS-WIN 1+ ROT CMOVE ;
+
+: DBG-ALIAS-RESTORE  ( -- )
+  DBG-ALIAS-WIN C@ 63 MIN
+  DUP DBG-ED-TOKEN C!
+  DBG-ALIAS-WIN 1+ DBG-ED-TOKEN 1+ ROT CMOVE ;
+
+\ ( scan end c-addr u -- )  keep this hit if it is closer than DBG-ALIAS-BEST.
+: DBG-ALIAS-NOTE  ( scan end c-addr u -- )
+  DBG-SET-TOKEN
+  DBG-SEARCH-TO
+  DUP 0= IF  DROP EXIT  THEN
+  DBG-ALIAS-BEST 0= IF
+    DBG-ALIAS-SAVE
+    TO DBG-ALIAS-BEST
+    EXIT
+  THEN
+  DUP DBG-ALIAS-BEST U< IF
+    DBG-ALIAS-SAVE
+    TO DBG-ALIAS-BEST
+  ELSE
+    DROP
+  THEN ;
+
 : DBG-ALIAS-SETUP  ( kind xt -- )
   {: kind xt -- :}
   kind DBG-K-EXIT = IF
@@ -530,6 +563,41 @@ CREATE DBG-MAP-NAME  64 ALLOT
         0 DBG-ED-TOKEN C!
      THEN
   THEN ;
+
+\ Closest forward alias for this branch/exit cell. 0 = none.
+\ Restores the winning counted token into DBG-ED-TOKEN.
+: DBG-ALIGN-BRANCH  ( kind xt scan end -- ha|0 )
+  {: kind xt scan end -- :}
+  0 TO DBG-ALIAS-BEST
+  kind DBG-K-EXIT = IF
+    scan end S" EXIT" DBG-ALIAS-NOTE
+    scan end S" ;" DBG-ALIAS-NOTE
+  ELSE
+    xt 0BRANCH-ADDR = IF
+      scan end S" IF" DBG-ALIAS-NOTE
+      scan end S" WHILE" DBG-ALIAS-NOTE
+      scan end S" UNTIL" DBG-ALIAS-NOTE
+    ELSE
+      xt BRANCH-ADDR = IF
+        scan end S" ELSE" DBG-ALIAS-NOTE
+        scan end S" REPEAT" DBG-ALIAS-NOTE
+        scan end S" AGAIN" DBG-ALIAS-NOTE
+      ELSE
+        kind xt DBG-ALIAS-SETUP
+        DBG-ED-TOKEN C@ IF
+          scan end DBG-SEARCH-TO
+          DUP IF
+            DBG-ALIAS-SAVE
+            TO DBG-ALIAS-BEST
+          ELSE
+            DROP
+          THEN
+        THEN
+      THEN
+    THEN
+  THEN
+  DBG-ALIAS-BEST DUP IF  DBG-ALIAS-RESTORE  THEN ;
+
 \ Match one slot; update scan; write src-off/len into slot.
 : DBG-ALIGN-ONE  ( cmap cell# scan end -- scan' )
   {: cmap cell# scan end | kind xt pay ha tbuf u nbuf ok -- :}
@@ -579,37 +647,8 @@ CREATE DBG-MAP-NAME  64 ALLOT
               ha IF  TRUE TO ok  THEN
            ELSE
               kind DBG-K-BR = kind DBG-K-EXIT = OR IF
-                 kind xt DBG-ALIAS-SETUP
-                 DBG-ED-TOKEN C@ IF
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
-                 \ TRY alternate aliases for 0BRANCH
-                 ok 0= kind DBG-K-BR = AND xt 0BRANCH-ADDR = AND IF
-                    S" WHILE" DBG-SET-TOKEN
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
-                 ok 0= kind DBG-K-BR = AND xt 0BRANCH-ADDR = AND IF
-                    S" UNTIL" DBG-SET-TOKEN
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
-                 ok 0= kind DBG-K-BR = AND xt BRANCH-ADDR = AND IF
-                    S" AGAIN" DBG-SET-TOKEN
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
-                 ok 0= kind DBG-K-BR = AND xt BRANCH-ADDR = AND IF
-                    S" REPEAT" DBG-SET-TOKEN
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
-                 ok 0= kind DBG-K-EXIT = AND IF
-                    S" ;" DBG-SET-TOKEN
-                    scan end DBG-SEARCH-TO TO ha
-                    ha IF  TRUE TO ok  THEN
-                 THEN
+                 kind xt scan end DBG-ALIGN-BRANCH TO ha
+                 ha IF  TRUE TO ok  THEN
               THEN
            THEN
         THEN
@@ -734,6 +773,25 @@ CREATE DBG-MAP-NAME  64 ALLOT
      0 0
   THEN ;
 
+\ Pause IP often sits on LIT/SLIT/BR *payload* slots (EMPTY off/len). Inherit
+\ the previous slot's source span so wash stays on `10` / `IF` / … instead of
+\ falling through to name-near-line search.
+: DBG-MAP-SPAN-RESOLVE  ( cmap cell# -- addr u )
+  {: cmap cell# | addr u k -- :}
+  0 TO addr  0 TO u
+  cmap IF
+     cmap cell# DBG-MAP-SPAN@ TO u TO addr
+     u 0= IF
+        cell# IF
+           cmap cell# 1- DBG-SLOT-KIND@ TO k
+           k DBG-K-LIT =  k DBG-K-SLIT = OR  k DBG-K-BR = OR IF
+              cmap cell# 1- DBG-MAP-SPAN@ TO u TO addr
+           THEN
+        THEN
+     THEN
+  THEN
+  addr u ;
+
 \ Kernel debug_body_cells = (IP − CFA − 8) / 8. Map slots index from >BODY
 \ (CFA+16), so the spare DOES cell at CFA+8 is not a map slot. Subtract 1.
 : DBG-MAP-CELL#  ( -- cell# )
@@ -772,7 +830,7 @@ CREATE DBG-MAP-NAME  64 ALLOT
   THEN
   cmap IF
      DBG-MAP-CELL# TO cell#
-     cmap cell# DBG-MAP-SPAN@ TO len TO addr
+     cmap cell# DBG-MAP-SPAN-RESOLVE TO len TO addr
      len IF
         addr len DBG-ED-HL-SPAN
         TRUE TO used
@@ -855,7 +913,7 @@ VARIABLE DBG-LAST-PUB-LEN
   THEN
   cmap IF
      DBG-MAP-CELL# TO cell#
-     cmap cell# DBG-MAP-SPAN@ TO len TO addr
+     cmap cell# DBG-MAP-SPAN-RESOLVE TO len TO addr
      len IF
         DBG-ED-TBUF IF
            addr DBG-ED-TBUF - TO hoff

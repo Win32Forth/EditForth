@@ -58,6 +58,13 @@ final class EditorTab: Identifiable, ObservableObject {
     }
 
     var pathString: String? { fileURL?.path }
+
+    /// Whitespace-delimited Forth token at the stored caret, if any.
+    func forthTokenAtCaret() -> String? {
+        let ns = text as NSString
+        let idx = min(max(0, selection.location), ns.length)
+        return EditorNSTextView.forthToken(at: idx, in: ns)
+    }
 }
 
 /// Owns the open-tab list and find-or-open for VIEW / EDIT / debugLocation.
@@ -68,6 +75,8 @@ final class WorkspaceModel: ObservableObject {
     /// Buffer ↔ disk diff tabs (hunk lists only — not file buffers).
     @Published private(set) var diffTabs: [BufferDiskDiffSession] = []
     @Published var selectedTabID: UUID?
+    /// One console note per dirty-buffer debug session (span offsets are file bytes).
+    var debugDirtySpanNoted = false
     /// Right-hand editor pane tab while split; nil means split is closed.
     @Published private(set) var splitSecondaryTabID: UUID?
 
@@ -78,6 +87,11 @@ final class WorkspaceModel: ObservableObject {
     /// Selected file editor tab (nil when a search/diff tab is selected).
     var selectedTab: EditorTab? {
         tabs.first { $0.id == selectedTabID }
+    }
+
+    /// Token under the selected file tab's caret (RUN / idle Arm). Nil on search/diff tabs.
+    func forthTokenAtCaret() -> String? {
+        selectedTab?.forthTokenAtCaret()
     }
 
     var selectedSearchTab: SearchSession? {
@@ -723,7 +737,7 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Internals
 
-    private func findTab(matching path: String) -> EditorTab? {
+    func findTab(matching path: String) -> EditorTab? {
         tabs.first { tab in
             guard let p = tab.pathString else { return false }
             return PendingGoto.pathsMatch(p, path)

@@ -36,6 +36,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleLines: [String] = []
     /// True while 64Forth ITC DEBUG / TDBG is waiting for step/continue/abort.
     @Published private(set) var isDebugSessionArmed = false
+    /// True only while the stepper is sitting at a pause. Run-to / Continue clear it
+    /// so Space and Return go to the program (GCLOCK) instead of Step Over.
+    @Published private(set) var isDebugPaused = false
     /// Latest paused-word VIEW location from 64Forth (nil when not debugging).
     @Published private(set) var debugLocation: DebugLocation?
     /// Bumps when VIEW miss should fall back to in-editor find (`viewMissWord`).
@@ -77,7 +80,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// F5 keyCode 96 → run-line kind from chords. Nil if not F5 or Option/Control held.
     /// Unions `NSEvent.modifierFlags` because some F-key deliveries omit ⌘/⇧ on the event.
     static func runLineKind(from event: NSEvent) -> RunLineKind? {
-        guard event.keyCode == 96 else { return nil }
+        guard event.keyCode == 96 else { return nil } // F5
         var flags = event.modifierFlags
         flags.formUnion(NSEvent.modifierFlags)
         let mods = flags.intersection(.deviceIndependentFlagsMask)
@@ -251,9 +254,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         appendConsole("\(message)\n")
     }
 
-    /// Query LAST and put `NAME` / `DEBUG NAME` / `BPGO NAME` on the console input line.
-    /// Does not submit — user edits (e.g. stack args) and presses Return.
-    func prepareRunLine(_ kind: RunLineKind) {
+    /// Put `NAME` / `DEBUG NAME` / `BPGO NAME` on the console input line.
+    /// `name` overrides LAST (caret token). Does not submit — user edits and presses Return.
+    func prepareRunLine(_ kind: RunLineKind, name overrideName: String? = nil) {
         guard isConnected else {
             noteUserError("Forth is not connected")
             return
@@ -262,8 +265,28 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             noteUserError("debugger paused — use Step/Continue")
             return
         }
+        if let raw = overrideName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty,
+           raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
+            applyRunLine(kind, name: raw)
+            return
+        }
         pendingRunKind = kind
         send(.queryLastName)
+    }
+
+    private func applyRunLine(_ kind: RunLineKind, name: String) {
+        let line: String
+        switch kind {
+        case .execute: line = name
+        case .debug: line = "DEBUG \(name)"
+        case .bpgo: line = "BPGO \(name)"
+        }
+        if consoleHidden {
+            unhideForthConsole()
+        }
+        consoleFillText = line
+        consoleFillSeq &+= 1
     }
 
     /// First paint of the empty console — keep banner in durable transcript too.
@@ -520,11 +543,30 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         isForthDocked = preferDocked
     }
 
-    func stepOver() { send(.stepOver) }
-    func stepInto() { send(.stepInto) }
-    func stepOut() { send(.stepOut) }
-    func resumeDebug() { send(.resume) }
+    func stepOver() {
+        isDebugPaused = false
+        send(.stepOver)
+    }
+    func stepInto() {
+        isDebugPaused = false
+        send(.stepInto)
+    }
+    func stepOut() {
+        isDebugPaused = false
+        send(.stepOut)
+    }
+    func resumeDebug() {
+        isDebugPaused = false
+        send(.resume)
+    }
     func stopDebug() { send(.stop) }
+
+    /// While Run-to / Continue is in progress, send a key to the program
+    /// (graphics KEY if a window is open) instead of the stepper.
+    /// `code` is the character the program sees: 13 Return, 32 Space, 27 Esc.
+    func forwardProgramKey(_ code: Int32) {
+        send(.pushKey(code: code))
+    }
 
     /// Break Now: pause at the next ITC token whose enclosing colon is at/above
     /// DEBUGGER-END. Works while free-running or during Continue/BPGO/Run-to.
@@ -578,15 +620,18 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         }
         lastError = nil
         if isDebugSessionArmed {
+            isDebugPaused = false
             send(.armBreakGo)
             return
         }
-        let name = (runWord ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let explicit = (runWord ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let enabled = breakpointEntries.first(where: \.enabled)?.name
+        let name = !explicit.isEmpty ? explicit : (enabled ?? "")
         guard !name.isEmpty,
               name.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
         else {
             lastError = "Arm needs a word to BPGO while idle"
-            appendConsole("Arm: pick a breakpoint or type BPGO <word>\n")
+            appendConsole("Arm: set a breakpoint, or put the caret on a word, or type BPGO <word>\n")
             return
         }
         send(.breakGo(name: name))
@@ -610,21 +655,16 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             return
         }
         lastError = nil
+        isDebugPaused = false
         send(.runTo(offset: offset))
     }
 
-    /// F9 / ⌘\: toggle BREAK on a dictionary word via `TOGGLE-BREAK` on the host.
-    /// Refuses while DEBUG is paused (host cannot evaluate then).
+    /// F9 / ⌘\: toggle BREAK on a dictionary word. Works while DEBUG is paused.
     func toggleBreakpoint(_ word: String) {
         let name = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty,
               name.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
         else { return }
-        if isDebugSessionArmed {
-            lastError = "debugger paused — use Step/Continue"
-            appendConsole("BREAK \(name): debugger paused\n")
-            return
-        }
         if fd < 0 {
             start()
         }
@@ -826,6 +866,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 appendConsole("Error: \(message)\n")
             }
         case .debugSession(let armed):
+            if !armed { isDebugPaused = false }
             isDebugSessionArmed = armed
             if !armed {
                 debugLocation = nil
@@ -834,6 +875,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 }
             }
         case .debugLocation(let path, let line, let name, let off, let len):
+            isDebugPaused = true
             // A pause location implies the stepper is live; arm immediately so
             // letter keys do not race the debugSession poll / paint notify.
             isDebugSessionArmed = true
@@ -873,18 +915,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 noteUserError("LAST has no name")
                 return
             }
-            let line: String
-            switch kind {
-            case .execute: line = trimmed
-            case .debug: line = "DEBUG \(trimmed)"
-            case .bpgo: line = "BPGO \(trimmed)"
-            }
-            // Ensure a console can receive the fill (hidden floating → show).
-            if consoleHidden {
-                unhideForthConsole()
-            }
-            consoleFillText = line
-            consoleFillSeq &+= 1
+            applyRunLine(kind, name: trimmed)
         case .dockState:
             // Legacy window-dock ack — editor owns dock/undock via preferDocked.
             isForthDocked = preferDocked

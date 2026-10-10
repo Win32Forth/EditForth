@@ -79,12 +79,21 @@ final class DebugKeyMonitor {
             return nil
         }
 
+        // Idle F6 — EMIT current tab when the editor is not focused
+        // (the text view consumes F6 itself). Armed F6 is Step Over.
+        if noChord, event.keyCode == 97, let forth, !forth.isDebugSessionArmed, // F6 — EMIT
+           !EditorFocus.editorIsKeyFirstResponder(),
+           let workspace {
+            ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
+            return nil
+        }
+
         // F5 family while idle — fill console from LAST; user presses Return.
         // When DEBUG is armed, F5 remains Continue (handled below).
         // Always consume bare/⌘ F5 so NSTextView's default Complete (F5) does not fire.
         if let forth, !forth.isDebugSessionArmed,
            let kind = ForthConnectionManager.runLineKind(from: event) {
-            forth.prepareRunLine(kind)
+            forth.prepareRunLine(kind, name: workspace?.forthTokenAtCaret())
             return nil
         }
 
@@ -151,6 +160,25 @@ final class DebugKeyMonitor {
             forth.stopDebug()
             return nil
         }
+        if !forth.isDebugPaused {
+            if event.keyCode == 36 || event.keyCode == 76 {
+                // Return (36) / keypad Enter (76) → ASCII 13 for GRAPHICS KEY
+                forth.forwardProgramKey(13)
+                return nil
+            }
+            if event.keyCode == 49 {
+                // Space (49) → ASCII 32
+                forth.forwardProgramKey(32)
+                return nil
+            }
+            if event.keyCode == 53 {
+                // Esc (53) → ASCII 27 (GCLOCK quit)
+                forth.forwardProgramKey(27)
+                return nil
+            }
+            return event
+        }
+
         if event.keyCode == 36 { // Return
             forth.stepOver()
             return nil
