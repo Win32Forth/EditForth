@@ -47,6 +47,8 @@ struct EditorTextView: NSViewRepresentable {
     var onCommandClickWord: ((String) -> Void)?
     /// F9 / ⌘\ / Debug menu: toggle BREAK on the Forth token under the caret.
     var onToggleBreakpoint: ((String) -> Void)?
+    /// Right-click Run to Here while DEBUG armed: UTF-8 file-relative byte offset.
+    var onRunToOffset: ((Int) -> Void)?
 
     /// Same wash as the Debug toolbar when connected (`Color.green.opacity(0.18)`).
     static var debugHighlightColor: NSColor {
@@ -566,6 +568,12 @@ struct EditorTextView: NSViewRepresentable {
             tv.onCommandClickWord = { [weak self] word in
                 self?.parent.onCommandClickWord?(word)
             }
+            tv.onRunToOffset = { [weak self] offset in
+                self?.parent.onRunToOffset?(offset)
+            }
+            tv.isDebugArmedProvider = { [weak self] in
+                self?.parent.isDebugArmed ?? false
+            }
         }
 
         func installKeyMonitor() {
@@ -923,6 +931,9 @@ struct EditorTextView: NSViewRepresentable {
 /// NSTextView that turns ⌘-click into a Forth-token VIEW callback.
 final class EditorNSTextView: NSTextView {
     var onCommandClickWord: ((String) -> Void)?
+    var onRunToOffset: ((Int) -> Void)?
+    /// Live DEBUG armed flag from the representable (context menu enable).
+    var isDebugArmedProvider: (() -> Bool)?
 
     override func mouseDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -942,6 +953,45 @@ final class EditorNSTextView: NSTextView {
             }
         }
         super.mouseDown(with: event)
+    }
+
+    /// While DEBUG is armed, add **Run to Here** for the Forth token under the mouse.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu(title: "")
+        guard isDebugArmedProvider?() == true else { return menu }
+        let pt = convert(event.locationInWindow, from: nil)
+        let idx = characterIndexForInsertion(at: pt)
+        let ns = string as NSString
+        guard let range = Self.forthTokenRange(at: idx, in: ns),
+              range.length > 0,
+              let offset = Self.utf8Offset(forUTF16Location: range.location, in: string)
+        else { return menu }
+        let word = ns.substring(with: range)
+        guard word.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return menu }
+        if menu.items.count > 0 {
+            menu.addItem(.separator())
+        }
+        let title = "Run to Here (\(word))"
+        let item = NSMenuItem(title: title, action: #selector(runToHereMenuAction(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = offset
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func runToHereMenuAction(_ sender: NSMenuItem) {
+        guard let offset = sender.representedObject as? Int else { return }
+        onRunToOffset?(offset)
+    }
+
+    /// File-relative UTF-8 byte offset for an NSString UTF-16 index (dbg-map convention).
+    static func utf8Offset(forUTF16Location location: Int, in text: String) -> Int? {
+        guard location >= 0 else { return nil }
+        let ns = text as NSString
+        guard location <= ns.length else { return nil }
+        if location == 0 { return 0 }
+        let prefix = ns.substring(to: location)
+        return prefix.utf8.count
     }
 
     override func keyDown(with event: NSEvent) {

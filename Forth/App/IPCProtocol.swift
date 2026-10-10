@@ -30,6 +30,12 @@ enum EditorRequest: Codable, Equatable {
     case breakGo(name: String)
     /// Paused: set `debug_bp_go` and Continue (run until enabled BREAK).
     case armBreakGo
+    /// Paused Run to Here: file-relative UTF-8 byte offset of the clicked token.
+    /// Host resolves via dbg-map on the pause thread (key 135); map miss → error.
+    case runTo(offset: Int)
+    /// Break Now while evaluating / in BPGO-Continue: pause at next allowed ITC token
+    /// (enclosing colon at/above DEBUGGER-END). No-op if already paused.
+    case breakAsap
     /// Name of LAST (most recently defined word), for RUN / F5 console fill.
     case queryLastName
     case stepInto

@@ -526,6 +526,18 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     func resumeDebug() { send(.resume) }
     func stopDebug() { send(.stop) }
 
+    /// Break Now: pause at the next ITC token whose enclosing colon is at/above
+    /// DEBUGGER-END. Works while free-running or during Continue/BPGO/Run-to.
+    func breakAsap() {
+        if fd < 0 { start() }
+        guard fd >= 0 else {
+            lastError = lastError ?? "64Forth is not listening — start 64Forth first"
+            return
+        }
+        lastError = nil
+        send(.breakAsap)
+    }
+
     /// Remove a BREAK slot (works while paused).
     func removeBreakpoint(_ word: String) {
         let name = word.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -578,6 +590,27 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             return
         }
         send(.breakGo(name: name))
+    }
+
+    /// Paused Run to Here: UTF-8 file-relative byte offset of the clicked token.
+    /// Host resolves via dbg-map; map miss replies with `.error` (alert in UI).
+    func runTo(offset: Int) {
+        guard isDebugSessionArmed else {
+            lastError = "debugger not armed"
+            appendConsole("Run to: debugger not armed\n")
+            return
+        }
+        guard offset >= 0 else {
+            lastError = "runto: invalid offset"
+            return
+        }
+        if fd < 0 { start() }
+        guard fd >= 0 else {
+            lastError = lastError ?? "64Forth is not listening — start 64Forth first"
+            return
+        }
+        lastError = nil
+        send(.runTo(offset: offset))
     }
 
     /// F9 / ⌘\: toggle BREAK on a dictionary word via `TOGGLE-BREAK` on the host.
@@ -786,7 +819,12 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 return
             }
             lastError = message
-            appendConsole("Error: \(message)")
+            // Ensure Run to errors end with a newline in the console transcript.
+            if message.hasSuffix("\n") {
+                appendConsole("Error: \(message)")
+            } else {
+                appendConsole("Error: \(message)\n")
+            }
         case .debugSession(let armed):
             isDebugSessionArmed = armed
             if !armed {

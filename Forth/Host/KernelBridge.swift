@@ -86,6 +86,24 @@ private func kernel_break_clear(_ index: Int32)
 @_silgen_name("kernel_debug_bp_go")
 private func kernel_debug_bp_go()
 
+@_silgen_name("kernel_debug_runto_set")
+private func kernel_debug_runto_set(_ ip: UInt64)
+
+@_silgen_name("kernel_debug_runto_ip")
+private func kernel_debug_runto_ip() -> UInt64
+
+@_silgen_name("kernel_debug_runto_request")
+private func kernel_debug_runto_request(_ utf8Off: UInt64)
+
+@_silgen_name("kernel_debug_runto_status")
+private func kernel_debug_runto_status() -> Int64
+
+@_silgen_name("kernel_debug_break_asap")
+private func kernel_debug_break_asap()
+
+@_silgen_name("kernel_debug_force_disarm")
+private func kernel_debug_force_disarm()
+
 @_silgen_name("kernel_take_repl_batch_stop")
 private func kernel_take_repl_batch_stop() -> Int32
 
@@ -2231,6 +2249,43 @@ final class KernelBridge {
         guard isAnyDebugArmed else { return false }
         kernel_debug_bp_go()
         return debugResume()
+    }
+
+    /// Host special key for Run to Here (Forth DBG-MOD-RUNTO).
+    private static let debugRunToKey: Int32 = 135
+
+    /// Break Now: set sticky `debug_break_asap` so the next allowed ITC NEXT
+    /// pauses (enclosing colon at/above DEBUGGER-END). Nil = armed; else error.
+    func debugBreakAsap() -> String? {
+        guard isEvaluating || isAnyDebugArmed else { return "nothing running" }
+        kernel_debug_break_asap()
+        return nil
+    }
+
+    /// Clear armed/busy/break-asap when Stop cannot pushKey (evaluate already ended).
+    func debugForceDisarm() {
+        kernel_debug_force_disarm()
+    }
+
+    /// Paused Run to Here: stash UTF-8 file offset, push key 135, wait for
+    /// dbg-map resolve on the pause thread. Returns nil on success, else an
+    /// error message (session stays paused on failure).
+    func debugRunTo(offset: Int) -> String? {
+        guard isAnyDebugArmed else { return "debugger not armed" }
+        guard offset >= 0 else { return "runto: invalid offset" }
+        kernel_debug_runto_request(UInt64(offset))
+        guard pushKey(Self.debugRunToKey) else {
+            return "debugger not armed"
+        }
+        // Forth pause UI resolves on the evaluating thread; poll status here.
+        // Map miss already prints on the Forth console — do not also sock .error.
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline {
+            let st = kernel_debug_runto_status()
+            if st != 0 { return nil }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        return "runto: timed out waiting for map resolve"
     }
 
     /// NSEvent function-key characters → classic editor codes (no modifiers).

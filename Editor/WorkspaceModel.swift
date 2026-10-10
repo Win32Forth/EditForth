@@ -65,20 +65,27 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var tabs: [EditorTab] = []
     /// Folder-search result tabs (hit lists only — not file buffers).
     @Published private(set) var searchTabs: [SearchSession] = []
+    /// Buffer ↔ disk diff tabs (hunk lists only — not file buffers).
+    @Published private(set) var diffTabs: [BufferDiskDiffSession] = []
     @Published var selectedTabID: UUID?
     /// Right-hand editor pane tab while split; nil means split is closed.
     @Published private(set) var splitSecondaryTabID: UUID?
 
     private var tabCancellables: [UUID: AnyCancellable] = [:]
     private var searchCancellables: [UUID: AnyCancellable] = [:]
+    private var diffCancellables: [UUID: AnyCancellable] = [:]
 
-    /// Selected file editor tab (nil when a search tab is selected).
+    /// Selected file editor tab (nil when a search/diff tab is selected).
     var selectedTab: EditorTab? {
         tabs.first { $0.id == selectedTabID }
     }
 
     var selectedSearchTab: SearchSession? {
         searchTabs.first { $0.id == selectedTabID }
+    }
+
+    var selectedDiffTab: BufferDiskDiffSession? {
+        diffTabs.first { $0.id == selectedTabID }
     }
 
     /// True when a second editor pane is open beside the primary.
@@ -90,11 +97,12 @@ final class WorkspaceModel: ObservableObject {
         return tabs.first { $0.id == id }
     }
 
-    /// Ordered strip: file tabs then search tabs (v1).
+    /// Ordered strip: file tabs then search tabs then diff tabs.
     var tabStripItems: [(id: UUID, title: String, isSearch: Bool)] {
         let files = tabs.map { (id: $0.id, title: $0.title, isSearch: false) }
         let searches = searchTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
-        return files + searches
+        let diffs = diffTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
+        return files + searches + diffs
     }
 
     // MARK: - Editor split
@@ -296,10 +304,14 @@ final class WorkspaceModel: ObservableObject {
         closeTab(id: id)
     }
 
-    /// Close a file or search tab; dirty file tabs prompt Save / Don’t Save / Cancel.
+    /// Close a file, search, or diff tab; dirty file tabs prompt Save / Don’t Save / Cancel.
     func closeTab(id: UUID) {
         if searchTabs.contains(where: { $0.id == id }) {
             removeSearchTab(id: id)
+            return
+        }
+        if diffTabs.contains(where: { $0.id == id }) {
+            removeDiffTab(id: id)
             return
         }
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
@@ -389,10 +401,143 @@ final class WorkspaceModel: ObservableObject {
                 let next = min(index, searchTabs.count - 1)
                 selectedTabID = searchTabs[next].id
             } else {
-                selectedTabID = tabs.last?.id
+                selectedTabID = tabs.last?.id ?? diffTabs.last?.id
             }
         }
         objectWillChange.send()
+    }
+
+    // MARK: - Buffer ↔ disk diff tabs
+
+    /// Compare the selected file tab’s buffer with its on-disk contents.
+    @discardableResult
+    func compareSelectedWithDisk() -> BufferDiskDiffSession? {
+        guard let tab = selectedTab, let url = tab.fileURL else { return nil }
+        return openDiff(for: tab, fileURL: url)
+    }
+
+    /// Whether File → Compare with Disk should be enabled.
+    var canCompareSelectedWithDisk: Bool {
+        selectedTab?.fileURL != nil
+    }
+
+    @discardableResult
+    func openDiff(for tab: EditorTab, fileURL: URL) -> BufferDiskDiffSession {
+        let standardized = fileURL.standardizedFileURL
+        // Refresh an existing diff for the same source tab if present.
+        if let existing = diffTabs.first(where: { $0.sourceTabID == tab.id }) {
+            selectedTabID = existing.id
+            existing.reload()
+            objectWillChange.send()
+            return existing
+        }
+        let session = BufferDiskDiffSession(
+            sourceTabID: tab.id,
+            fileURL: standardized,
+            workspace: self
+        )
+        diffTabs.append(session)
+        bindDiff(session)
+        selectedTabID = session.id
+        objectWillChange.send()
+        session.reload()
+        return session
+    }
+
+    private func bindDiff(_ session: BufferDiskDiffSession) {
+        diffCancellables[session.id] = session.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    private func removeDiffTab(id: UUID) {
+        guard let index = diffTabs.firstIndex(where: { $0.id == id }) else { return }
+        diffCancellables[id] = nil
+        diffTabs.remove(at: index)
+        if selectedTabID == id {
+            if !diffTabs.isEmpty {
+                let next = min(index, diffTabs.count - 1)
+                selectedTabID = diffTabs[next].id
+            } else {
+                selectedTabID = tabs.last?.id ?? searchTabs.last?.id
+            }
+        }
+        objectWillChange.send()
+    }
+
+    /// Close every diff tab linked to a source editor tab (when that file tab closes).
+    private func removeDiffTabs(forSourceTabID sourceID: UUID) {
+        let linked = diffTabs.filter { $0.sourceTabID == sourceID }.map(\.id)
+        for id in linked {
+            removeDiffTab(id: id)
+        }
+    }
+
+    /// Jump from a hunk into the source editor buffer.
+    func focusDiffHunk(_ session: BufferDiskDiffSession, hunk: DiffHunk) {
+        guard let tab = tabs.first(where: { $0.id == session.sourceTabID }) else {
+            // Fall back to opening the path if the tab was somehow removed.
+            if let line = hunk.bufferLine ?? hunk.diskLine {
+                openURL(session.fileURL, viewMode: false, line: line)
+            } else {
+                openURL(session.fileURL, viewMode: false, line: nil)
+            }
+            return
+        }
+        let line = hunk.bufferLine ?? hunk.diskLine
+        focus(tab, viewMode: false, line: line, reloadIfClean: false, fileURL: session.fileURL)
+    }
+
+    /// Confirm and replace the source buffer with disk contents.
+    func revertDiffToDisk(_ session: BufferDiskDiffSession) {
+        guard let tab = tabs.first(where: { $0.id == session.sourceTabID }) else {
+            let alert = NSAlert()
+            alert.messageText = "Source tab closed"
+            alert.informativeText = "The editor tab for this file is no longer open."
+            alert.runModal()
+            return
+        }
+        let name = session.fileURL.lastPathComponent
+        let alert = NSAlert()
+        alert.messageText = "Revert “\(name)” to disk?"
+        alert.informativeText = "Replace the buffer with the contents from disk? Unsaved edits will be lost."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Revert to Disk")
+        alert.addButton(withTitle: "Cancel")
+
+        let applyRevert: () -> Void = { [weak self] in
+            guard let self else { return }
+            let disk = BufferDiskDiff.readDisk(url: session.fileURL)
+            if let err = disk.error {
+                NSAlert(error: NSError(
+                    domain: "EditForth",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: err]
+                )).runModal()
+                return
+            }
+            guard let text = disk.text else {
+                let missing = NSAlert()
+                missing.messageText = "Disk file missing"
+                missing.informativeText = "Cannot revert — \(name) is not on disk."
+                missing.runModal()
+                return
+            }
+            tab.text = text
+            tab.isDirty = false
+            self.objectWillChange.send()
+            self.refreshDocumentEdited()
+            session.reload()
+        }
+
+        if let window = Self.sheetHostWindow() {
+            alert.beginSheetModal(for: window) { response in
+                guard response == .alertFirstButtonReturn else { return }
+                applyRevert()
+            }
+        } else if alert.runModal() == .alertFirstButtonReturn {
+            applyRevert()
+        }
     }
 
     /// Walk dirty tabs with Save / Don’t Save / Cancel sheets; used before quit.
@@ -468,11 +613,13 @@ final class WorkspaceModel: ObservableObject {
 
     private func removeTab(id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        // Drop linked diff tabs before removing the file tab.
+        removeDiffTabs(forSourceTabID: id)
         tabCancellables[id] = nil
         tabs.remove(at: index)
         if selectedTabID == id {
             if tabs.isEmpty {
-                selectedTabID = nil
+                selectedTabID = searchTabs.last?.id ?? diffTabs.last?.id
             } else {
                 let next = min(index, tabs.count - 1)
                 selectedTabID = tabs[next].id
@@ -493,7 +640,7 @@ final class WorkspaceModel: ObservableObject {
     /// Cold-launch only: one Untitled when nothing was opened via `open -a` / pending-goto.
     /// Closing the last tab leaves the empty placeholder (New File / Open…).
     func newUntitledIfEmpty() {
-        guard tabs.isEmpty, searchTabs.isEmpty else { return }
+        guard tabs.isEmpty, searchTabs.isEmpty, diffTabs.isEmpty else { return }
         _ = newFile()
     }
 

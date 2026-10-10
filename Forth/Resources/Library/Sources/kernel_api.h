@@ -65,6 +65,32 @@ void kernel_break_clear(int index);
 /// Arm "run until enabled BREAK" (`debug_bp_go = 1`). Safe while DEBUG paused.
 void kernel_debug_bp_go(void);
 
+/// Arm run-to at absolute threaded cell IP (`debug_runto_ip`). Pass 0 to clear.
+void kernel_debug_runto_set(uint64_t ip);
+
+/// Current run-to IP, or 0 if inactive.
+uint64_t kernel_debug_runto_ip(void);
+
+/// Host Run to: stash UTF-8 file-relative offset, clear prior IP/status.
+/// Forth pause (key 135) resolves via dbg-map then arms IP + keep-armed Continue.
+void kernel_debug_runto_request(uint64_t utf8_off);
+
+/// Run-to resolve status: 0 = pending/idle, 1 = ok, negative = failed.
+int64_t kernel_debug_runto_status(void);
+
+/// Host: clear ITC DEBUG arming without a pause KEY (stuck chrome recovery).
+void kernel_debug_force_disarm(void);
+
+/// Host Break Now: set sticky `debug_break_asap` (no-op if already in pause).
+/// NEXT seeks until enclosing colon CFA >= break_min (DEBUGGER-END), then pauses.
+void kernel_debug_break_asap(void);
+
+/// Low-water CFA for Break ASAP (`DEBUGGER-END` HERE value). Pass 0 to clear.
+void kernel_debug_break_min_set(uint64_t cfa);
+
+/// Current Break ASAP low-water CFA, or 0 if unset.
+uint64_t kernel_debug_break_min_cfa(void);
+
 void kernel_set_emit(void (*fn)(int c));
 /// Bulk TYPE path: emit `n` bytes at `buf` as one UTF-8 (or Latin-1 fallback) chunk.
 void kernel_set_emit_buf(void (*fn)(const char *buf, size_t n));

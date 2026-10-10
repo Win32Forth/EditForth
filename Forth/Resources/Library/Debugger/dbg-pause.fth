@@ -52,6 +52,7 @@
 \ Decode EKEY → mode. Wheel keys are saved in DBG-PAUSE-KEY.
 \   0 ignore/retry   1 over   2 into   3 out
 \   4 go             5 abort  6 wheel  7 help
+\   8 runto (host key 135 — resolve pending UTF-8 offset then keep-armed go)
 0 CONSTANT DBG-MOD-IGNORE
 1 CONSTANT DBG-MOD-OVER
 2 CONSTANT DBG-MOD-INTO
@@ -60,6 +61,7 @@
 5 CONSTANT DBG-MOD-ABORT
 6 CONSTANT DBG-MOD-WHEEL
 7 CONSTANT DBG-MOD-HELP
+8 CONSTANT DBG-MOD-RUNTO
 
 VARIABLE DBG-PAUSE-KEY
 
@@ -83,6 +85,7 @@ VARIABLE DBG-PAUSE-KEY
     0 DBG-SKIP-NL !
   THEN
   DUP [CHAR] h [CHAR] H DBG-CH-EQ IF  DROP  DBG-MOD-HELP  EXIT  THEN
+  DUP 135 = IF  DROP  DBG-MOD-RUNTO  EXIT  THEN
   DUP 134 = OVER [CHAR] g [CHAR] G DBG-CH-EQ OR IF
     DROP  DBG-MOD-GO  EXIT
   THEN
@@ -116,6 +119,11 @@ DEFER DBG-PAUSE-BEFORE-PAINT
 : DBG-PAUSE-BEFORE-PAINT-NOP  ( -- )  ;
 ' DBG-PAUSE-BEFORE-PAINT-NOP IS DBG-PAUSE-BEFORE-PAINT
 
+\ debug-runto.fth arms this after dbg-map loads (key 135 Run to Here).
+DEFER DBG-RUNTO-DO
+: DBG-RUNTO-DO-NOP  ( -- flag )  FALSE ;
+' DBG-RUNTO-DO-NOP IS DBG-RUNTO-DO
+
 : DBG-PAUSE-UI  ( -- )
   \ Map→host span, then open/scroll 64Edit so the sock gets off+len with paint.
   DBG-PAUSE-BEFORE-PAINT
@@ -132,6 +140,10 @@ DEFER DBG-PAUSE-BEFORE-PAINT
       DBG-MOD-INTO   OF  DBG-STEP-INTO  TRUE  ENDOF
       DBG-MOD-OUT    OF  DBG-STEP-OUT   TRUE  ENDOF
       DBG-MOD-GO     OF  DBG-GO         TRUE  ENDOF
+      DBG-MOD-RUNTO  OF
+        \ Resolve host pending offset; keep-armed GO only on map hit.
+        DBG-RUNTO-DO IF  DBG-GO TRUE  ELSE  FALSE  THEN
+      ENDOF
       DBG-MOD-ABORT  OF  DBG-ABORT-SESSION  TRUE  ENDOF
       FALSE SWAP
     ENDCASE

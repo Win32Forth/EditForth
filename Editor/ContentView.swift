@@ -52,12 +52,16 @@ struct ContentView: View {
 
                 // Keep every editor pane mounted so tab switches do not rebuild
                 // NSTextView (text was already in memory; tear-down caused the lag).
-                if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty {
+                if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty && workspace.diffTabs.isEmpty {
                     emptyEditorPlaceholder
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let search = workspace.selectedSearchTab {
                     // Search results use the full editor area (split stays latent).
                     SearchResultsView(session: search, workspace: workspace)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let diff = workspace.selectedDiffTab {
+                    // Diff hunks use the full editor area (split stays latent).
+                    BufferDiskDiffView(session: diff, workspace: workspace)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if workspace.isEditorSplit, workspace.splitSecondaryTab != nil {
                     splitEditorArea
@@ -68,10 +72,6 @@ struct ContentView: View {
 
                 // Keep the docked console mounted while chrome is "hidden" so Show
                 // Forth Console can restore the same NSView / transcript.
-                if forth.isDebugSessionArmed, showForthChrome {
-                    DebugToolbar(forth: forth)
-                }
-
                 let consoleEmbedded = forth.preferDocked && !forth.consoleHidden
 
                 if showForthChrome, consoleEmbedded {
@@ -90,6 +90,12 @@ struct ContentView: View {
                             storedConsoleHeight = consoleHeight
                         }
                     )
+                }
+
+                // Debug chrome belongs with the Forth console (below the splitter),
+                // replacing the idle status strip — not above the editor/console split.
+                if forth.isDebugSessionArmed, showForthChrome {
+                    DebugToolbar(forth: forth)
                 }
 
                 if showForthChrome, consoleEmbedded {
@@ -292,7 +298,8 @@ struct ContentView: View {
                             onDebugStop: { forth.stopDebug() },
                             onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
                             onCommandClickWord: { word in forth.viewWord(word) },
-                            onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
+                            onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                            onRunToOffset: { offset in forth.runTo(offset: offset) }
                         )
                         .id("right-\(tab.id)")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -393,7 +400,8 @@ struct ContentView: View {
                     onDebugStop: { forth.stopDebug() },
                     onPrepareRunLine: { kind in forth.prepareRunLine(kind) },
                     onCommandClickWord: { word in forth.viewWord(word) },
-                    onToggleBreakpoint: { word in forth.toggleBreakpoint(word) }
+                    onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                    onRunToOffset: { offset in forth.runTo(offset: offset) }
                 )
                 .opacity(selected ? 1 : 0)
                 .allowsHitTesting(selected)
@@ -475,6 +483,14 @@ struct ContentView: View {
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed || workspace.selectedTab == nil)
                 .help("Emit Window App — INCLUDE then EMIT-AUTO (LAST). Default: WINDOW + Press a key to exit. See EMIT-NO-PAUSE / EMIT-NO-WINDOW / EMIT-NO-WRAPPER")
                 .controlSize(.small)
+                Button("Pause") {
+                    forth.breakAsap()
+                    EditorFocus.request()
+                }
+                .disabled(!forth.isConnected)
+                .help("Break Now — pause at the next Forth instruction above DEBUGGER-END (⌃⌘Y)")
+                .controlSize(.small)
+                .keyboardShortcut("y", modifiers: [.control, .command])
                 Spacer()
                 BreakpointsPanelButton(forth: forth)
                 if forth.isConnected {
@@ -587,6 +603,7 @@ private struct TabEditorPane: View {
     var onPrepareRunLine: (ForthConnectionManager.RunLineKind) -> Void
     var onCommandClickWord: (String) -> Void
     var onToggleBreakpoint: (String) -> Void
+    var onRunToOffset: (Int) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -650,7 +667,8 @@ private struct TabEditorPane: View {
                 onDebugStop: onDebugStop,
                 onPrepareRunLine: onPrepareRunLine,
                 onCommandClickWord: onCommandClickWord,
-                onToggleBreakpoint: onToggleBreakpoint
+                onToggleBreakpoint: onToggleBreakpoint,
+                onRunToOffset: onRunToOffset
             )
         }
     }
@@ -821,6 +839,11 @@ private struct DebugToolbar: View {
                 EditorFocus.request()
             }
             .help("Continue until an enabled BREAK hits")
+            Button("Pause") {
+                forth.breakAsap()
+                EditorFocus.request()
+            }
+            .help("Break Now — interrupt Continue/BPGO/Run-to at the next allowed token (⌃⌘Y)")
             Spacer(minLength: 8)
             Button("Step Over") { forth.stepOver() }
                 .keyboardShortcut(Self.f6)

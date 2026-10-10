@@ -1,8 +1,34 @@
 # 64Forth development status
 
-**Current:** **2.0.4** (build **5**) — dual-app DMG + GitHub **v2.0.4** 
+**Current:** **2.1.0** (build **6**) — dual-app DMG + GitHub **v2.1.0**  
 
 **Last updated:** 2026-10-09
+
+---
+
+## v2.1.0 — Run to Here / Break ASAP / Compare with Disk
+
+**Version strings:** marketing **2.1.0**, build **6** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.1.0** (`Releases/EditForth-2.1.0-macOS.dmg`). Replaces **v2.0.4**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.1.0 === Oct 9, 2026 9:29 PM ===
+```
+
+### Highlights
+
+- **Debug → Run to Here** (editor context menu while ITC DEBUG is paused): right-click a Forth **call site** → continue until that specific threaded cell (`dbg-map` UTF-8 file offset → `debug_runto_ip`). Cross-definition clicks work (e.g. paused in `MAIN`, target `initiate-seed` inside `MAINX`) via `DBG-RUNTO-CFA-AT-OFF` (file-relative offset + `DBG-ED-TBUF`). Map miss prints on the Forth console only (no modal). Keep-armed **Arm** / Run to: `DBG-GO` leaves the session armed when `debug_bp_go` or runto is set.
+- **Break Now / Pause** while Forth is free-running or in Continue/BPGO: host sets `debug_break_asap`; `NEXT` seeks until the enclosing colon CFA is at/above **`DEBUGGER-END`** (`HERE CONSTANT` at the end of `debugger.fth`), then pauses. Console strip **Pause**, Debug toolbar **Pause**, **Debug → Break Now** (⌃⌘Y). Does not land the first stop in ACCEPT / debugger plumbing. Verified with **GCLOCK**.
+- Break ASAP hardening: reload `debug_busy` after `_debug_resolve_enclosing` (fixes GCLOCK `memory access error` / stuck “debugging”); fault recovery and **Stop** force-disarm when there is no live pause KEY wait.
+- Debug toolbar sits **below** the console splitter with the Forth chrome (status strip may remain visible while armed).
+- **File → Compare with Disk** (menu only; no shortcut — ⌘⇧D is CHDIR): colored hunk tab (`Diff: name`) for the selected saved buffer vs on-disk text; click jumps to the buffer line; **Reload Diff** / **Revert to Disk…**. No FSEvents watch yet.
+
+### Notes / limits
+
+- Run to targets a **call site**, not a definition header (headers are not threaded cells).
+- Break ASAP stops at the next ITC `NEXT` (not inside pure CODE/asm or blocked KEY/host waits). Token highlight can be flaky (map/name fallback); polish later.
+- Library: ship `Debugger/debug-runto.fth`; Documents Autoload must see `DEBUGGER-END` / `DBG-BREAK-MIN!` (Update or Restore user tree if Documents lags).
 
 ---
 
@@ -22,7 +48,6 @@
 - **Bare `CHDIR`** from the EditForth console no longer hangs: companion asks EditForth for the folder panel (`requestChdirOpen`), same pattern as bare `EDIT` / `FLOAD`. Kernel `CHDIR` uses `_next_filespec` so quoted paths with spaces work.
 - After **`CHDIR`**, bare **EDIT** / **FLOAD** / **INCLUDE** (and Forth-menu equivalents) open their panels at the companion working directory (`cwdChanged` + `startDirectory` on panel requests). `FROMLIB` still prefers Library.
 - **Finder `.fth` open** while EditForth is already running opens a **tab** in the existing window (no second workspace window): `WindowGroup.handlesExternalEvents(matching: ["*"])` plus duplicate-window collapse.
-- Buffer↔disk file comparison remains deferred.
 
 ---
 
@@ -48,7 +73,7 @@
 - **Sample/GCLOCK.FTH**: GRAPHICS COLOR8 port (PREFRESH, CELLS, y-up, no `LEAVE`/`ONLY` in emit path). `HMS` uses `TIME&DATE`; live resize adopts `(APP-SIZE?)` / `WINDOW-SIZE` and redraws face + help text. Emit: `EMIT-WINDOW-APP GCLOCK` then `RUN-EMITTED`.
 - **Emitter HOST-APP** append-only through slot **32**: **27** `TIME&DATE` (localtime_r), **28–30** `CLIP!` / `CLIP@` / `CWD@`, **31** `SYSTEM` (`/bin/sh -c`), **32** `MS` (`nanosleep`). Kernel `CODE-BOUNDS` end labels for `CLIP!`/`CLIP@`/`CWD@`/`SYSTEM`.
 - **SYSTEM helpers** in `Emitter/app.fth`: `OPEN-TERMINAL-AT`, `OPEN-APP`, `RUN-EMITTED` (last `EMIT-APPBUF`), examples `EDITFORTH-TERM` / `EDITFORTH-GCLOCK`.
-- Buffer↔disk change comparison remains deferred (next editor topic after search/split).
+- Buffer↔disk change comparison was deferred here; see **Unreleased (post-2.0.4 editor)** above.
 
 ---
 

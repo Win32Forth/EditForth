@@ -228,14 +228,31 @@ final class ForthEditorServer {
             }
             return
         case .stop:
+            // Abort while paused (pushKey q). If not in a live pause KEY wait
+            // (e.g. Break ASAP fault left armed=1 but evaluate already ended),
+            // force-disarm so the editor does not stay stuck on "debugging".
             if !kernel.debugAbort() {
-                writeResponse(.executionFinished(exitCode: 0), to: fd)
+                kernel.debugForceDisarm()
+                writeResponse(.debugSession(armed: false), to: fd)
             }
             return
         case .armBreakGo:
             // Paused: set go-until-break then Continue (no evaluate).
             if !kernel.debugArmBreakGo() {
                 writeResponse(.error(message: "debugger not armed"), to: fd)
+            }
+            return
+        case .runTo(let offset):
+            // Paused Run to Here: resolve on pause thread (key 135); no evaluate.
+            if let err = kernel.debugRunTo(offset: offset) {
+                writeResponse(.error(message: err), to: fd)
+            }
+            return
+        case .breakAsap:
+            // Break Now: set sticky flag; Forth NEXT seeks past DEBUGGER-END.
+            // Must run on this I/O queue while evaluating (not executeCommand).
+            if let err = kernel.debugBreakAsap() {
+                writeResponse(.error(message: err), to: fd)
             }
             return
         case .removeBreakpoint(let name):

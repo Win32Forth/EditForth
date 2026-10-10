@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.0.4** / build **5** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.0.4** (`Releases/EditForth-2.0.4-macOS.dmg`). First public release was **v2.0.0**.
+Marketing **2.1.0** / build **6** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.1.0** (`Releases/EditForth-2.1.0-macOS.dmg`). First public release was **v2.0.0**. Highlights: Debug **Run to Here**, **Break Now / Pause** (`DEBUGGER-END` floor), **File → Compare with Disk**.
 
 ## Why a new project
 
@@ -33,7 +33,7 @@ EditForth/                 # repo root
 
 ## Companion GRAPHICS (post-2.0.0)
 
-`(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. Editor status **INCLUDE** / **RUN** / **EMIT** and `EMIT-NO-*` directives: see `ROADMAP.md` and `Forth/Resources/Docs/EMIT-AUTO.md`. Live Autoload uses `~/Documents/EditForth/Library`; copy Sample/Emitter edits back into `Forth/Resources/Library/` before shipping.
+`(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. Editor status **INCLUDE** / **RUN** / **EMIT** and `EMIT-NO-*` directives: see `ROADMAP.md` and `Forth/Resources/Docs/EMIT-AUTO.md`. Live Autoload uses `~/Documents/EditForth/Library`; copy Sample/Emitter edits back into `Forth/Resources/Library/` before shipping. **File → Compare with Disk** (menu only) opens a colored hunk-list tab for the selected saved buffer vs disk (Reload / Revert); no FSEvents watch yet.
 
 Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
 

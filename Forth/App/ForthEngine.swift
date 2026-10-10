@@ -52,6 +52,10 @@ final class ForthEngine: NSObject, ForthEngineXPC {
             return .consoleOutput(text: "ok")
         case .armBreakGo:
             return .consoleOutput(text: "arm break-go")
+        case .runTo(let offset):
+            return .consoleOutput(text: "runto \(offset)")
+        case .breakAsap:
+            return .consoleOutput(text: "break asap")
         case .queryLastName:
             return .lastName(name: "")
         case .stepInto:

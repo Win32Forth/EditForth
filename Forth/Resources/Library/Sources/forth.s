@@ -13,10 +13,10 @@
 // Register discipline (important):
 //   VM state lives in x19-x24 and x28 (DBG), which are AAPCS64 callee-saved.
 //   Helpers that use x19-x24 MUST save/restore (see SAVE_VM / RESTORE_VM).
-//   Do not use x28 as scratch — only DBG-ON / DBG-OFF / go / _vm_load /
-//   cold start may change it. Memory debug_armed stays authoritative for the
-//   Swift host (`kernel_debug_armed`); _vm_load reloads x28 from that cell
-//   because embed return restores C's x28.
+//   Do not use x28 as scratch — only DBG-ON / DBG-OFF / go / break-asap /
+//   _vm_load / cold start may change it. Memory debug_armed stays authoritative
+//   for the Swift host (`kernel_debug_armed`); _vm_load reloads x28 from that
+//   cell because embed return restores C's x28.
 //
 //   Darwin ARM64 unix syscalls (svc #0x80): the kernel preserves x1-x28
 //   and only returns a result in x0 (and sets NZCV.C on error). So raw
@@ -174,10 +174,15 @@
 // ============================================================================
 // Macros
 // ============================================================================
-// Hot path: one predicted-not-taken cbnz when DBG-OFF (x28=0). Armed work
-// lives at next_debug. Memory debug_armed is for the host; keep x28 in sync.
+// Hot path: predicted-not-taken when DBG-OFF (x28=0) and no async break.
+// Armed work + Break ASAP live at next_debug. Memory debug_armed is for the
+// host; keep x28 in sync. Extra load of debug_break_asap is the async-break tax.
 .macro NEXT
     cbnz x28, next_debug
+    adrp x1, debug_break_asap@page
+    add  x1, x1, debug_break_asap@pageoff
+    ldr  x1, [x1]
+    cbnz x1, next_debug
     ldr x21, [x19], #8          // W = CFA (xt)
     ldr x1, [x21]               // code field at CFA
     br x1
@@ -222,6 +227,65 @@ next_debug:
     add  x1, x1, debug_busy@pageoff
     ldr  x2, [x1]
     cbnz x2, 1f
+    // Break ASAP: host set debug_break_asap. Arm (if needed), clear go modes,
+    // pause when enclosing colon CFA >= debug_break_min_cfa (DEBUGGER-END).
+    // Stay sticky until that first allowed pause (skip ACCEPT/debugger/etc.).
+    adrp x2, debug_break_asap@page
+    add  x2, x2, debug_break_asap@pageoff
+    ldr  x3, [x2]
+    cbz  x3, 21f
+    ldr  x21, [x19]                 // peek upcoming xt
+    // Arm like mini DBG-ON; floor=0 so current frame can pause.
+    mov  x3, #1
+    mov  x28, x3
+    adrp x4, debug_armed@page
+    add  x4, x4, debug_armed@pageoff
+    ldr  x5, [x4]
+    str  x3, [x4]
+    cbz  x5, 22f                    // was cold → need intro on first pause
+    b    23f
+22:
+    adrp x4, debug_need_intro@page
+    add  x4, x4, debug_need_intro@pageoff
+    str  x3, [x4]
+23:
+    adrp x4, debug_floor@page
+    add  x4, x4, debug_floor@pageoff
+    str  xzr, [x4]
+    adrp x4, debug_bp_go@page
+    add  x4, x4, debug_bp_go@pageoff
+    str  xzr, [x4]
+    adrp x4, debug_runto_ip@page
+    add  x4, x4, debug_runto_ip@pageoff
+    str  xzr, [x4]
+    adrp x4, debug_over@page
+    add  x4, x4, debug_over@pageoff
+    str  xzr, [x4]
+    adrp x4, debug_out@page
+    add  x4, x4, debug_out@pageoff
+    str  xzr, [x4]
+    // Low-water: enclosing colon must be >= DEBUGGER-END (or min unset).
+    adrp x4, debug_break_min_cfa@page
+    add  x4, x4, debug_break_min_cfa@pageoff
+    ldr  x4, [x4]
+    cbz  x4, 24f                    // no floor → pause now
+    mov  x0, x19
+    mov  x1, x21
+    stp  x29, x30, [sp, #-16]!
+    bl   _debug_resolve_enclosing   // x0 = enclosing CFA or 0
+    ldp  x29, x30, [sp], #16
+    cbz  x0, 1f                     // interpret / no colon → keep seeking
+    adrp x4, debug_break_min_cfa@page
+    add  x4, x4, debug_break_min_cfa@pageoff
+    ldr  x4, [x4]
+    cmp  x0, x4
+    b.lo 1f                         // still in debugger-or-below → execute
+24:
+    adrp x2, debug_break_asap@page
+    add  x2, x2, debug_break_asap@pageoff
+    str  xzr, [x2]                  // hit — clear sticky seek
+    b    6f                         // force pause (x21 already peeked)
+21:
     adrp x2, debug_floor@page
     add  x2, x2, debug_floor@pageoff
     
@@ -236,6 +300,12 @@ next_debug:
     str  xzr, [x3]
     adrp x3, debug_bp_go@page
     add  x3, x3, debug_bp_go@pageoff
+    str  xzr, [x3]
+    adrp x3, debug_runto_ip@page
+    add  x3, x3, debug_runto_ip@pageoff
+    str  xzr, [x3]
+    adrp x3, debug_break_asap@page
+    add  x3, x3, debug_break_asap@pageoff
     str  xzr, [x3]
     b    1f
 20:
@@ -255,10 +325,31 @@ next_debug:
     b.lo 1f                         // F6: still inside stepped-over word
 2:
     ldr  x21, [x19]                 // peek upcoming xt (do not bump IP yet)
+    // Run-to: stop when live IP equals armed call-site cell address.
+    adrp x2, debug_runto_ip@page
+    add  x2, x2, debug_runto_ip@pageoff
+    ldr  x3, [x2]
+    cbz  x3, 25f                    // no run-to armed
+    cmp  x19, x3
+    b.ne 26f                        // not this site yet
+    str  xzr, [x2]                  // hit — clear run-to
+    adrp x2, debug_bp_go@page
+    add  x2, x2, debug_bp_go@pageoff
+    str  xzr, [x2]                  // leave single-step after stop
+    b    6f
+26:
+    // Run-to miss: still honor enabled BREAK if bp_go; else skip pause.
     adrp x2, debug_bp_go@page
     add  x2, x2, debug_bp_go@pageoff
     ldr  x3, [x2]
-    cbz  x3, 6f                     // not in "go until BP" mode
+    cbz  x3, 1f                     // run-to only → execute, no pause
+    b    27f                        // share BREAK scan with bp_go path
+25:
+    adrp x2, debug_bp_go@page
+    add  x2, x2, debug_bp_go@pageoff
+    ldr  x3, [x2]
+    cbz  x3, 6f                     // not in "go until BP" / run-to mode
+27:
     adrp x3, debug_bp_xts@page
     add  x3, x3, debug_bp_xts@pageoff
     adrp x6, debug_bp_en@page
@@ -277,6 +368,9 @@ next_debug:
     b    1f                         // no slot matched → execute, no pause
 7:
     str  xzr, [x2]                  // clear go-until; now single-step
+    adrp x3, debug_runto_ip@page
+    add  x3, x3, debug_runto_ip@pageoff
+    str  xzr, [x3]                  // BREAK wins — drop pending run-to
 6:
     ldr  x2, [x21]
     adrp x3, XCATCH_OK@page
@@ -293,6 +387,10 @@ next_debug:
     adrp x2, debug_out@page
     add  x2, x2, debug_out@pageoff
     str  xzr, [x2]                  // …or a step-out
+    // Reload debug_busy — Break ASAP may have called _debug_resolve_enclosing
+    // (caller-saved x1 trash); never assume x1 still holds the busy cell.
+    adrp x1, debug_busy@page
+    add  x1, x1, debug_busy@pageoff
     mov  x2, #1
     str  x2, [x1]
     stp  x29, x30, [sp, #-16]!
@@ -1434,7 +1532,29 @@ _kernel_eval:
     cbz  x0, 2f
     // Recovered from SIGSEGV/SIGBUS (or host kernel_on_memory_fault)
     bl   _vm_reset_stacks
+    // Disarm DEBUG so the editor does not stay stuck in "debugging" with
+    // a dead pause (Break ASAP / bad busy store used to leave armed=1).
+    mov  x28, #0
+    adrp x1, debug_armed@page
+    add  x1, x1, debug_armed@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_busy@page
+    add  x1, x1, debug_busy@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_break_asap@page
+    add  x1, x1, debug_break_asap@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_bp_go@page
+    add  x1, x1, debug_bp_go@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_runto_ip@page
+    add  x1, x1, debug_runto_ip@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_floor@page
+    add  x1, x1, debug_floor@pageoff
+    str  xzr, [x1]
     bl   _emit_memfault_msg        // console-visible (emit_hook), not only stderr
+    bl   _host_debug_paint         // push debugSession(armed: false) to editor
     bl   _vm_save
     mov  x0, #-1
     b    _embed_ret_x0
@@ -3150,7 +3270,7 @@ XDBGSTEPOUT:
     RESTORE_VM
     NEXT
 
-    BOOT_WORD "DBG-GO", "DBG-GO ( -- ) Cmd-Shift-Y/g — disarm, run rest", 0, XDBGGO
+    BOOT_WORD "DBG-GO", "DBG-GO ( -- ) Cmd-Shift-Y/g — disarm, or keep-armed if BPGO/runto", 0, XDBGGO
 XDBGGO:
     SAVE_VM
     bl _debug_cursor_off
@@ -3171,13 +3291,6 @@ XDBGGO:
     adrp x0, debug_help_shown@page
     add x0, x0, debug_help_shown@pageoff
     str xzr, [x0]
-    mov x28, #0
-    adrp x1, debug_armed@page
-    add x1, x1, debug_armed@pageoff
-    str xzr, [x1]
-    adrp x1, debug_bp_go@page
-    add x1, x1, debug_bp_go@pageoff
-    str xzr, [x1]
     adrp x1, debug_midline@page
     add x1, x1, debug_midline@pageoff
     str xzr, [x1]
@@ -3187,7 +3300,30 @@ XDBGGO:
     adrp x1, debug_out@page
     add x1, x1, debug_out@pageoff
     str xzr, [x1]
+    // Keep armed when (BP-GO) or run-to is pending (Arm / Run to Here).
+    adrp x1, debug_bp_go@page
+    add x1, x1, debug_bp_go@pageoff
+    ldr x0, [x1]
+    cbnz x0, 2f
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    ldr x0, [x1]
+    cbnz x0, 2f
+    mov x28, #0
+    adrp x1, debug_armed@page
+    add x1, x1, debug_armed@pageoff
+    str xzr, [x1]
+    adrp x1, debug_bp_go@page
+    add x1, x1, debug_bp_go@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    str xzr, [x1]
+    adrp x1, debug_break_asap@page
+    add x1, x1, debug_break_asap@pageoff
+    str xzr, [x1]
     bl _host_debug_paint
+2:
     RESTORE_VM
     NEXT
 
@@ -3230,6 +3366,18 @@ XDBGABORT:
     mov x28, #0
     adrp x1, debug_armed@page
     add x1, x1, debug_armed@pageoff
+    str xzr, [x1]
+    adrp x1, debug_bp_go@page
+    add x1, x1, debug_bp_go@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_off@page
+    add x1, x1, debug_runto_off@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_status@page
+    add x1, x1, debug_runto_status@pageoff
     str xzr, [x1]
     adrp x1, debug_midline@page
     add x1, x1, debug_midline@pageoff
@@ -3295,6 +3443,14 @@ XTDBGDISARM:
     str  xzr, [x0]
     NEXT
 
+    BOOT_WORD "DBG-BREAK-MIN!", "DBG-BREAK-MIN! ( addr -- ) Break ASAP low-water (DEBUGGER-END HERE)", 0, XDBGBREAKMIN
+XDBGBREAKMIN:
+    adrp x0, debug_break_min_cfa@page
+    add  x0, x0, debug_break_min_cfa@pageoff
+    str  x20, [x0]
+    ldr  x20, [x22], #8
+    NEXT
+
     BOOT_WORD "DBG-ON", "DBG-ON ( -- ) arm NEXT stepper (F6/Space/o over, F7/i into, F8 out, Esc/q abort, Cmd-Shift-Y/g go)", 0, XDBGON
 XDBGON:
     adrp x0, debug_floor@page
@@ -3305,6 +3461,21 @@ XDBGON:
     adrp x0, debug_armed@page
     add  x0, x0, debug_armed@pageoff
     str  x1, [x0]                   // host kernel_debug_armed
+    adrp x0, debug_bp_go@page
+    add  x0, x0, debug_bp_go@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_ip@page
+    add  x0, x0, debug_runto_ip@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_off@page
+    add  x0, x0, debug_runto_off@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_status@page
+    add  x0, x0, debug_runto_status@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    str  xzr, [x0]
     adrp x0, debug_over@page
     add  x0, x0, debug_over@pageoff
     str  xzr, [x0]
@@ -3404,6 +3575,21 @@ XDBGOFF:
     adrp x0, debug_out@page
     add  x0, x0, debug_out@pageoff
     str  xzr, [x0]
+    adrp x0, debug_bp_go@page
+    add  x0, x0, debug_bp_go@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_ip@page
+    add  x0, x0, debug_runto_ip@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_off@page
+    add  x0, x0, debug_runto_off@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_status@page
+    add  x0, x0, debug_runto_status@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    str  xzr, [x0]
     adrp x0, debug_abort@page
     add  x0, x0, debug_abort@pageoff
     str  xzr, [x0]
@@ -3458,6 +3644,30 @@ XBPGO:
     add  x0, x0, debug_bp_go@pageoff
     mov  x1, #1
     str  x1, [x0]
+    NEXT
+
+    BOOT_WORD "(RUNTO-IP)", "(RUNTO-IP) ( addr -- ) arm run-to at threaded cell IP", 0, XRUNTOIP
+XRUNTOIP:
+    DPOP                           // addr → x0; next cell → x20
+    adrp x1, debug_runto_ip@page
+    add  x1, x1, debug_runto_ip@pageoff
+    str  x0, [x1]
+    NEXT
+
+    BOOT_WORD "RUNTO-OFF@", "RUNTO-OFF@ ( -- off ) pending UTF-8 file offset for Run to", 0, XRUNTOOFFAT
+XRUNTOOFFAT:
+    str  x20, [x22, #-8]!
+    adrp x20, debug_runto_off@page
+    add  x20, x20, debug_runto_off@pageoff
+    ldr  x20, [x20]
+    NEXT
+
+    BOOT_WORD "RUNTO-STATUS!", "RUNTO-STATUS! ( n -- ) host Run-to status (1=ok, -1=fail)", 0, XRUNTOSTAT
+XRUNTOSTAT:
+    DPOP                           // n → x0
+    adrp x1, debug_runto_status@page
+    add  x1, x1, debug_runto_status@pageoff
+    str  x0, [x1]
     NEXT
 
 // .( ( -- ) IMMEDIATE — parse until ')' and TYPE (Core Ext). Boot CODE so AutoLoad
@@ -17171,6 +17381,18 @@ _debug_pause:
     adrp x1, debug_armed@page
     add x1, x1, debug_armed@pageoff
     str xzr, [x1]
+    adrp x1, debug_bp_go@page
+    add x1, x1, debug_bp_go@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_off@page
+    add x1, x1, debug_runto_off@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_status@page
+    add x1, x1, debug_runto_status@pageoff
+    str xzr, [x1]
     adrp x1, debug_midline@page
     add x1, x1, debug_midline@pageoff
     str xzr, [x1]
@@ -17201,13 +17423,6 @@ _debug_pause:
     adrp x0, debug_help_shown@page
     add x0, x0, debug_help_shown@pageoff
     str xzr, [x0]
-    mov  x28, #0
-    adrp x1, debug_armed@page
-    add  x1, x1, debug_armed@pageoff
-    str  xzr, [x1]
-    adrp x1, debug_bp_go@page
-    add  x1, x1, debug_bp_go@pageoff
-    str  xzr, [x1]
     adrp x1, debug_midline@page
     add  x1, x1, debug_midline@pageoff
     str  xzr, [x1]
@@ -17216,6 +17431,25 @@ _debug_pause:
     str  xzr, [x1]
     adrp x1, debug_out@page
     add  x1, x1, debug_out@pageoff
+    str  xzr, [x1]
+    // Keep armed when (BP-GO) or run-to is pending (Arm / Run to Here).
+    adrp x1, debug_bp_go@page
+    add  x1, x1, debug_bp_go@pageoff
+    ldr  x0, [x1]
+    cbnz x0, 4f
+    adrp x1, debug_runto_ip@page
+    add  x1, x1, debug_runto_ip@pageoff
+    ldr  x0, [x1]
+    cbnz x0, 4f
+    mov  x28, #0
+    adrp x1, debug_armed@page
+    add  x1, x1, debug_armed@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_bp_go@page
+    add  x1, x1, debug_bp_go@pageoff
+    str  xzr, [x1]
+    adrp x1, debug_runto_ip@page
+    add  x1, x1, debug_runto_ip@pageoff
     str  xzr, [x1]
     bl   _host_debug_paint
 
@@ -18070,6 +18304,111 @@ _kernel_debug_bp_go:
     str x1, [x0]
     ret
 
+// void kernel_debug_runto_set(uint64_t ip)
+// Arm run-to at absolute threaded cell address (0 clears). Safe while paused.
+.globl _kernel_debug_runto_set
+_kernel_debug_runto_set:
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    str x0, [x1]
+    ret
+
+// uint64_t kernel_debug_runto_ip(void)
+.globl _kernel_debug_runto_ip
+_kernel_debug_runto_ip:
+    adrp x0, debug_runto_ip@page
+    add x0, x0, debug_runto_ip@pageoff
+    ldr x0, [x0]
+    ret
+
+// void kernel_debug_runto_request(uint64_t utf8_off)
+// Host Run to: stash file-relative UTF-8 offset, clear prior arm/status.
+// Forth pause key 135 resolves via dbg-map then (RUNTO-IP) + keep-armed GO.
+.globl _kernel_debug_runto_request
+_kernel_debug_runto_request:
+    adrp x1, debug_runto_off@page
+    add x1, x1, debug_runto_off@pageoff
+    str x0, [x1]
+    adrp x1, debug_runto_ip@page
+    add x1, x1, debug_runto_ip@pageoff
+    str xzr, [x1]
+    adrp x1, debug_runto_status@page
+    add x1, x1, debug_runto_status@pageoff
+    str xzr, [x1]
+    ret
+
+// int64_t kernel_debug_runto_status(void)
+// 0 = pending/idle, 1 = resolved ok, negative = resolve failed.
+.globl _kernel_debug_runto_status
+_kernel_debug_runto_status:
+    adrp x0, debug_runto_status@page
+    add x0, x0, debug_runto_status@pageoff
+    ldr x0, [x0]
+    ret
+
+// void kernel_debug_force_disarm(void)
+// Host: clear armed / busy / break-asap / bp_go / runto (stuck chrome after fault).
+// Does not THROW; safe when evaluate has already returned.
+.globl _kernel_debug_force_disarm
+_kernel_debug_force_disarm:
+    adrp x0, debug_armed@page
+    add  x0, x0, debug_armed@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_busy@page
+    add  x0, x0, debug_busy@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_bp_go@page
+    add  x0, x0, debug_bp_go@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_runto_ip@page
+    add  x0, x0, debug_runto_ip@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_floor@page
+    add  x0, x0, debug_floor@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_over@page
+    add  x0, x0, debug_over@pageoff
+    str  xzr, [x0]
+    adrp x0, debug_out@page
+    add  x0, x0, debug_out@pageoff
+    str  xzr, [x0]
+    ret
+
+// void kernel_debug_break_asap(void)
+// Host Break Now: set sticky seek flag unless already in _debug_pause.
+.globl _kernel_debug_break_asap
+_kernel_debug_break_asap:
+    adrp x0, debug_busy@page
+    add  x0, x0, debug_busy@pageoff
+    ldr  x1, [x0]
+    cbnz x1, 1f                     // already paused → no-op
+    mov  x1, #1
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    str  x1, [x0]
+1:
+    ret
+
+// void kernel_debug_break_min_set(uint64_t cfa)
+// Low-water for Break ASAP (DEBUGGER-END HERE value). 0 clears the floor.
+.globl _kernel_debug_break_min_set
+_kernel_debug_break_min_set:
+    adrp x1, debug_break_min_cfa@page
+    add  x1, x1, debug_break_min_cfa@pageoff
+    str  x0, [x1]
+    ret
+
+// uint64_t kernel_debug_break_min_cfa(void)
+.globl _kernel_debug_break_min_cfa
+_kernel_debug_break_min_cfa:
+    adrp x0, debug_break_min_cfa@page
+    add  x0, x0, debug_break_min_cfa@pageoff
+    ldr  x0, [x0]
+    ret
+
 // int kernel_debug_peek_name(char *buf, int buf_max)
 // Copy NUL-terminated peek token name from debug_name (counted). Returns length,
 // or 0 if empty / no room. debug_name[0]=u, chars follow (max 31).
@@ -18374,6 +18713,11 @@ debug_stack_anchor: .quad 0        // line_col after word/TYPE, before block cur
 debug_busy:     .quad 0            // set while _debug_pause runs
 debug_floor:    .quad 0            // RSP at DBG-ON; pause only if x23 < floor
 debug_bp_go:    .quad 0            // 1 = skip pause unless xt is in table
+debug_runto_ip: .quad 0            // absolute threaded cell IP to pause on (0 = off)
+debug_runto_off:.quad 0            // pending UTF-8 file offset from host Run to
+debug_runto_status: .quad 0        // 0 idle/pending, 1 ok, negative = fail
+debug_break_asap: .quad 0          // 1 = host Break Now; seek until min CFA then pause
+debug_break_min_cfa: .quad 0       // DEBUGGER-END HERE; 0 = no floor
 debug_bp_xts:   .skip 64           // 8 xt slots, 0 = empty
 debug_bp_en:    .skip 64           // 8 enable flags (0 = disabled, ≠0 = armed)
 debug_over:     .quad 0            // F6 over colon: skip pause while x23 < this RSP

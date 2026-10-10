@@ -59,6 +59,8 @@ FROMLIB S" Debugger/dbg-pause.fth" INCLUDED
 \ Editor/Hyper links (DEFERs) then token maps — no Editor required at load.
 FROMLIB S" Debugger/dbg-ed.fth" INCLUDED
 FROMLIB S" Debugger/dbg-map.fth" INCLUDED
+\ Run to Here (offset → IP); after dbg-map so DBG-MAP-* resolve.
+FROMLIB S" Debugger/debug-runto.fth" INCLUDED
 
 \ Phase 2 — full Forth pause UI (print / EKEY / step). Revert: 0 DBG-PAUSE-XT !
 \ Phase 3 — also arm key decode for asm fallback when PAUSE-XT is cleared.
@@ -97,3 +99,8 @@ PREVIOUS
 
 \ Leave ANS-style order for Autoload to finalize (ONLY FORTH ALSO DEFINITIONS).
 ONLY FORTH ALSO DEFINITIONS
+
+\ Low-water for Break ASAP: HERE after the debugger hub (not tied to Emitter).
+\ Break Now skips enclosing colons below this address (ACCEPT / debugger / …).
+HERE CONSTANT DEBUGGER-END
+DEBUGGER-END DBG-BREAK-MIN!

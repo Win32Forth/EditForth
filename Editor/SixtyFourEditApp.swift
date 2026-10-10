@@ -98,6 +98,11 @@ struct SixtyFourEditApp: App {
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
 
+                Button("Compare with Disk") {
+                    _ = workspace.compareSelectedWithDisk()
+                }
+                .disabled(!workspace.canCompareSelectedWithDisk)
+
                 Button("Close Tab") {
                     // Last tab → empty placeholder (New File / Open…), not auto-Untitled.
                     workspace.closeSelected()
@@ -150,7 +155,7 @@ struct SixtyFourEditApp: App {
                     workspace.toggleBrowseMode()
                 }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
-                .disabled(workspace.selectedTab == nil) // search tabs are not browse/edit
+                .disabled(workspace.selectedTab == nil) // search/diff tabs are not browse/edit
 
                 Divider()
 
@@ -213,6 +218,13 @@ struct SixtyFourEditApp: App {
                     )
                 }
                 .keyboardShortcut("\\", modifiers: [.command])
+
+                Button("Break Now") {
+                    forth.breakAsap()
+                }
+                .keyboardShortcut("y", modifiers: [.control, .command])
+                .disabled(!forth.isConnected)
+                .help("Pause at the next Forth instruction above DEBUGGER-END")
             }
 
             // Forth actions must live here: the console window is EditForth-owned, so the
