@@ -1,8 +1,26 @@
 # 64Forth development status
 
-**Current:** **2.2.0** (build **7**) — dual-app DMG + GitHub **v2.2.0**  
+**Current:** **2.2.1** (build **8**) — shipped  
 
 **Last updated:** 2026-10-10
+
+---
+
+## v2.2.1 — BYE console drop + Find/Replace options
+
+**Version strings:** marketing **2.2.1**, build **8** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.2.1** (`Releases/EditForth-2.2.1-macOS.dmg`). Replaces **v2.2.0**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.2.1 === Oct 10, 2026 10:41 AM ===
+```
+
+### Highlights
+
+- **BYE drops the console.** `BYE` no longer quits EditForth. Files stay open; the console is hidden, debugger state is cleared, and a Ping-launched companion is stopped. Reconnect shows the console again. Standalone 64Forth (no editor client) still exits on `BYE`.
+- **Find and Replace** uses a custom bar with **Match Case** and **Whole Word** (same Forth-ish word characters as Search in Folders), plus a live **N of M** match count between Find and Match Case.
+- The same find bar works in the source editor and in the Forth console (replace only when the buffer is editable).
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.2.0** / build **7** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.2.0** (`Releases/EditForth-2.2.0-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.1.0: Step Over after Break Now, dbg-map highlight (literals and `DO-CLOCK` control flow), paused F9, gutter breakpoint dots, caret RUN, idle F6 EMIT, Compare-with-Disk watch, GCLOCK keys during Run-to. 2.1.0 Break Now + Space stepped into colon calls; that is fixed here.
+Marketing **2.2.1** / build **8** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.2.1** (`Releases/EditForth-2.2.1-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.2.0: BYE drops the console (editor stays open); custom Find/Replace with Match Case, Whole Word, and N of M count (editor and Forth console). Earlier 2.2.0 debugger polish remains.
 
 ## Why a new project
 

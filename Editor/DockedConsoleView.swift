@@ -39,9 +39,13 @@ struct DockedConsoleView: NSViewRepresentable {
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticTextReplacementEnabled = false
         tv.isAutomaticSpellingCorrectionEnabled = false
-        tv.usesFindBar = true
+        // Custom FindReplaceBarView (Match Case + Whole Word); not NSTextFinder.
+        tv.usesFindBar = false
+        tv.isIncrementalSearchingEnabled = false
 
         scroll.documentView = tv
+        scroll.findBarPosition = .aboveContent
+        _ = scroll.ensureFindReplaceBar(for: tv)
         context.coordinator.attach(textView: tv, scrollView: scroll)
         context.coordinator.bootstrapIfNeeded()
         return scroll

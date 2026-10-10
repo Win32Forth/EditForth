@@ -2,9 +2,9 @@
 //  FindSupport.swift
 //  64Edit
 //
-//  TextEdit-style find / replace bar for EditorNSTextView / ConsoleNSTextView.
-//  SwiftUI's default Edit→Find often never reaches an embedded NSTextView,
-//  so menu items call performTextFinderAction on the focused (or preferred) view.
+//  Custom find / replace bar (Match Case + Whole Word) for EditorNSTextView /
+//  console text views. Menu items drive FindReplaceBarView on the focused
+//  (or preferred) scroll view.
 //
 
 import AppKit
@@ -19,15 +19,59 @@ enum FindSupport {
         pendingSearchEditor = tv
     }
 
-    /// Run a text-finder action on the focused source/console text view.
+    /// Run a find/replace action on the focused source/console text view.
     static func perform(_ action: NSTextFinder.Action) {
         guard let tv = focusedTextView() ?? preferredTextView() else { return }
-        if tv.window?.firstResponder !== tv {
+        guard let scroll = tv.enclosingScrollView else { return }
+        if tv.window?.firstResponder !== tv,
+           scroll.findReplaceBar == nil || scroll.isFindBarVisible != true {
             tv.window?.makeFirstResponder(tv)
         }
-        let item = NSMenuItem()
-        item.tag = action.rawValue
-        tv.performTextFinderAction(item)
+
+        let bar = scroll.ensureFindReplaceBar(for: tv)
+
+        switch action {
+        case .showFindInterface:
+            bar.show(replace: false, in: scroll, focus: true)
+        case .showReplaceInterface:
+            bar.show(replace: true, in: scroll, focus: true)
+        case .hideFindInterface:
+            bar.hide(from: scroll)
+        case .nextMatch:
+            if scroll.isFindBarVisible != true {
+                bar.show(replace: bar.isShowingReplace, in: scroll, focus: false)
+            }
+            bar.findNext(nil)
+        case .previousMatch:
+            if scroll.isFindBarVisible != true {
+                bar.show(replace: bar.isShowingReplace, in: scroll, focus: false)
+            }
+            bar.findPrevious(nil)
+        case .setSearchString:
+            bar.setSearchStringFromSelection()
+            if scroll.isFindBarVisible != true {
+                bar.show(replace: false, in: scroll, focus: false)
+            }
+        case .replace:
+            if scroll.isFindBarVisible != true {
+                bar.show(replace: true, in: scroll, focus: false)
+            } else if !bar.isShowingReplace {
+                bar.show(replace: true, in: scroll, focus: false)
+            }
+            bar.replaceSelection(nil)
+        case .replaceAndFind:
+            if scroll.isFindBarVisible != true || !bar.isShowingReplace {
+                bar.show(replace: true, in: scroll, focus: false)
+            }
+            bar.replaceAndFind(nil)
+        case .replaceAll:
+            if scroll.isFindBarVisible != true || !bar.isShowingReplace {
+                bar.show(replace: true, in: scroll, focus: false)
+            }
+            bar.replaceAll(nil)
+        default:
+            break
+        }
     }
 
     /// VIEW miss fallback: put `needle` on the find pasteboard, select the first
@@ -44,23 +88,31 @@ enum FindSupport {
             ?? (focusedTextView() as? EditorNSTextView)
             ?? visibleEditorTextView()
 
-        guard let tv, let window = tv.window ?? NSApp.keyWindow else { return }
+        guard let tv, let window = tv.window ?? NSApp.keyWindow,
+              let scroll = tv.enclosingScrollView
+        else { return }
         window.makeFirstResponder(tv)
 
         let pb = NSPasteboard(name: .find)
         pb.clearContents()
         pb.setString(text, forType: .string)
 
+        let bar = scroll.ensureFindReplaceBar(for: tv)
+        bar.findString = text
+        // Exact token for VIEW miss (case-sensitive, whole word).
+        bar.matchCase = true
+        bar.wholeWord = true
+
         let ns = tv.string as NSString
-        let found = ns.range(of: text, options: [], range: NSRange(location: 0, length: ns.length))
-        if found.location != NSNotFound {
+        if let found = TextMatch.findNext(
+            in: ns, needle: text, matchCase: true, wholeWord: true,
+            from: 0, wrap: false
+        ) {
             tv.setSelectedRange(found)
             tv.scrollRangeToVisible(found)
         }
-
-        let show = NSMenuItem()
-        show.tag = NSTextFinder.Action.showFindInterface.rawValue
-        tv.performTextFinderAction(show)
+        // Show after selecting so the count field reads "1 of N".
+        bar.show(replace: false, in: scroll, focus: true)
     }
 
     /// First on-screen, hittable editor (skips opacity-0 keep-alive panes in a ZStack).
@@ -98,10 +150,15 @@ enum FindSupport {
         guard let window = NSApp.keyWindow,
               let fr = window.firstResponder as? NSView
         else { return nil }
+        // Find field inside our bar → owner text view.
+        if let bar = findReplaceBar(containing: fr), let tv = bar.targetTextView {
+            return tv
+        }
         var view: NSView? = fr
         while let v = view {
             if let tv = v as? EditorNSTextView { return tv }
             if let tv = v as? ConsoleNSTextView { return tv }
+            if let tv = v as? DockedConsoleTextView { return tv }
             view = v.superview
         }
         return nil
@@ -118,7 +175,8 @@ enum FindSupport {
         }
         let editor = firstVisibleEditor(in: root)
             ?? firstSubview(ofType: EditorNSTextView.self, in: root)
-        let console = firstSubview(ofType: ConsoleNSTextView.self, in: root)
+        let console = firstSubview(ofType: DockedConsoleTextView.self, in: root)
+            ?? firstSubview(ofType: ConsoleNSTextView.self, in: root)
         if let editor, findBarVisible(for: editor) { return editor }
         if let console, findBarVisible(for: console) { return console }
         return editor ?? console
@@ -130,6 +188,9 @@ enum FindSupport {
 
     /// Walk from the find-bar field up to its enclosing scroll view's document.
     private static func textViewOwningFindBar(containing view: NSView) -> NSTextView? {
+        if let bar = findReplaceBar(containing: view) {
+            return bar.targetTextView
+        }
         var current: NSView? = view
         while let cur = current {
             if let scroll = cur as? NSScrollView,
@@ -137,6 +198,15 @@ enum FindSupport {
                let tv = scroll.documentView as? NSTextView {
                 return tv
             }
+            current = cur.superview
+        }
+        return nil
+    }
+
+    private static func findReplaceBar(containing view: NSView) -> FindReplaceBarView? {
+        var current: NSView? = view
+        while let cur = current {
+            if let bar = cur as? FindReplaceBarView { return bar }
             current = cur.superview
         }
         return nil

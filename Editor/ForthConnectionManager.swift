@@ -141,6 +141,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var launchedForthURL: URL?
     /// Retained so Process deinit does not SIGTERM the companion.
     private var companionProcess: Process?
+    /// BYE asked us to drop the console. The sock close that follows must not
+    /// treat that as an error or unhide the console. Next connect shows it again.
+    private var forthQuitExpected = false
+    private var showConsoleOnNextConnect = false
 
     override init() {
         let docked: Bool = {
@@ -341,6 +345,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         fd = cfd
         isConnected = true
         companionLaunchInFlight = false
+        if showConsoleOnNextConnect {
+            showConsoleOnNextConnect = false
+            consoleHidden = false
+        }
         isForthDocked = preferDocked && !consoleHidden
         lastError = nil
         // Defer: sock connect often lands during a SwiftUI update from ping().
@@ -528,6 +536,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         fd = -1
         isConnected = false
         isDebugSessionArmed = false
+        isDebugPaused = false
         debugLocation = nil
         breakpointEntries = []
         if closeUndockedWindow {
@@ -792,13 +801,21 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         let n = Darwin.read(fd, &buf, buf.count)
         if n <= 0 {
             DispatchQueue.main.async {
+                let expected = self.forthQuitExpected
+                self.forthQuitExpected = false
                 self.isConnected = false
-                self.consoleHidden = false
-                self.isForthDocked = self.preferDocked
                 self.isDebugSessionArmed = false
+                self.isDebugPaused = false
                 self.debugLocation = nil
                 self.breakpointEntries = []
-                self.lastError = "64Forth connection closed"
+                if expected {
+                    // BYE already hid the console. Do not pop it back or show an error.
+                    self.lastError = nil
+                } else {
+                    self.consoleHidden = false
+                    self.isForthDocked = self.preferDocked
+                    self.lastError = "64Forth connection closed"
+                }
                 ForthConsoleWindowController.shared.closeQuietly()
             }
             readSource?.cancel()
@@ -934,11 +951,21 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         case .cwdChanged(let path):
             rememberWorkingDirectory(path)
         case .requestQuit:
-            // BYE from companion: same path as Cmd-Q (dirty Save sheets, then
-            // terminateLaunchedCompanion via AppDelegate).
+            // BYE: drop the console and clear the debugger. Leave editor files open.
+            // The companion VM has already exited; stop that process so Ping can start fresh.
             lastError = nil
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.terminate(nil)
+            forthQuitExpected = true
+            showConsoleOnNextConnect = true
+            isDebugSessionArmed = false
+            isDebugPaused = false
+            debugLocation = nil
+            breakpointEntries = []
+            appendConsole("\nBYE — Forth quit. Editor stays open.\n")
+            consoleHidden = true
+            isForthDocked = false
+            ForthConsoleWindowController.shared.closeQuietly()
+            disconnectSock(closeUndockedWindow: true)
+            terminateLaunchedCompanion()
         }
     }
 

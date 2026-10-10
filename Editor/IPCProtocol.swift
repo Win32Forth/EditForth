@@ -91,8 +91,9 @@ enum ForthResponse: Codable, Equatable {
     case requestChdirOpen(startDirectory: String)
     /// Companion logical working directory changed (CHDIR / boot / connect).
     case cwdChanged(path: String)
-    /// BYE from the companion — EditForth should quit (dirty Save sheets first),
-    /// then terminate the companion. Companion must not exit on its own.
+    /// BYE from the companion. EditForth drops the console, clears the debugger,
+    /// and stops a Ping-launched companion. Editor files stay open.
+    /// Companion must not exit on its own.
     case requestQuit
 }
 

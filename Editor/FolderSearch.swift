@@ -160,28 +160,6 @@ enum FolderSearch {
         )
     }
 
-    /// Forth-ish name characters so Whole Word treats CLOCK-BOX as one word.
-    private static let wordChars = CharacterSet.alphanumerics.union(
-        CharacterSet(charactersIn: "_-?!'.+*/<>=@$")
-    )
-
-    private static func isWordChar(_ ch: Character) -> Bool {
-        ch.unicodeScalars.allSatisfy { wordChars.contains($0) }
-    }
-
-    /// True when `range` in `line` is a whole-word hit.
-    private static func isWholeWordMatch(in line: String, range: Range<String.Index>) -> Bool {
-        if range.lowerBound > line.startIndex {
-            let before = line[line.index(before: range.lowerBound)]
-            if isWordChar(before) { return false }
-        }
-        if range.upperBound < line.endIndex {
-            let after = line[range.upperBound]
-            if isWordChar(after) { return false }
-        }
-        return true
-    }
-
     private static func scanFile(
         text: String,
         fileURL: URL,
@@ -260,7 +238,7 @@ enum FolderSearch {
         var searchFrom = line.startIndex
         while let range = line.range(of: needle, options: options, range: searchFrom..<line.endIndex) {
             searchFrom = range.upperBound
-            if wholeWord && !isWholeWordMatch(in: line, range: range) {
+            if wholeWord && !TextMatch.isWholeWordMatch(in: line, range: range) {
                 continue
             }
             let col = line.distance(from: line.startIndex, to: range.lowerBound) + 1

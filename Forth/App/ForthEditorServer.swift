@@ -7,6 +7,9 @@
 
 import Foundation
 import CoreGraphics
+#if os(macOS)
+import AppKit
+#endif
 
 final class ForthEditorServer {
     static let shared = ForthEditorServer()
@@ -372,10 +375,15 @@ final class ForthEditorServer {
                         self.broadcastOkPrompt()
                         response = .consoleOutput(text: "")
                     } else if st == 1 {
-                        // BYE — ask EditForth to quit (dirty review); do not
-                        // report status=1 as an error or exit the companion here.
+                        // BYE — editor drops the console and stops this companion.
+                        // Do not report status=1 as an error or exit here.
                         self.broadcast(.requestQuit)
                         response = .consoleOutput(text: "")
+                        // After the sock line is written, exit. EditForth has dropped
+                        // the console. Covers a companion that was not started by Ping.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            NSApplication.shared.terminate(nil)
+                        }
                     } else {
                         response = .error(message: "status=\(st)")
                     }

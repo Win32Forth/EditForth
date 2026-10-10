@@ -84,8 +84,9 @@ struct EditorTextView: NSViewRepresentable {
         tv.delegate = context.coordinator
         tv.isRichText = false
         tv.allowsUndo = true
-        tv.usesFindBar = true
-        tv.isIncrementalSearchingEnabled = true
+        // Custom FindReplaceBarView (Match Case + Whole Word); not NSTextFinder.
+        tv.usesFindBar = false
+        tv.isIncrementalSearchingEnabled = false
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticTextReplacementEnabled = false
@@ -99,6 +100,7 @@ struct EditorTextView: NSViewRepresentable {
         tv.isVerticallyResizable = true
 
         scroll.documentView = tv
+        _ = scroll.ensureFindReplaceBar(for: tv)
         Self.applyWrapPolicy(
             to: tv,
             scroll: scroll,

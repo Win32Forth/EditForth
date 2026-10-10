@@ -139,17 +139,17 @@ The 2.2.0 DMG includes this working tree: kernel rebuild, `DBG-MAP-SPAN-RESOLVE`
 
 ## Still open
 
-### 1.10 Two copies of `forth.s` — **Open** (P3)
+### 1.10 Two copies of the kernel sources — **Not worth a change**
 
-`Forth/Kernel/forth.s` is the source of truth. `Forth/Resources/Library/Sources/forth.s` is updated by hand in the same change. The release script does not copy it. A build phase that copies Kernel → Resources would remove the mistake.
+`Forth/Kernel/` is what you edit. The 64Forth **Copy Library** build phase copies `forth.s`, `kernel_api.h`, the boot `.inc` files, and the kernel `.fth` files into `Forth/Resources/Library/Sources/` and then into the app. A debug or release build of the companion does that. `release.sh` does not copy them itself. `Library/Sources/README.txt` lives only in Sources.
 
 ### 3.1 GRAPHICS window is not the console — **Limit**
 
 Dock and undock move the Forth console only. GCLOCK and other App Output windows stay separate. Esc in the graphics window quits that app. q / Stop in the debugger aborts the session. The windows are not merged.
 
-### 3.2 Quitting Forth does not quit EditForth — **Open** (P3)
+### 3.2 BYE drops the console — **Fixed**
 
-Quitting the editor stops a Ping-launched companion. `BYE` from Forth does not close the editor. Desired: drop the console and clear “debugging,” and leave other files open. Do not quit the editor from Forth.
+`BYE` used to send `requestQuit`, and EditForth called `NSApp.terminate` (same as Cmd-Q). Now the editor stays open with its files. The console is hidden, the debugger is cleared, and a Ping-launched companion is stopped so the VM is not left dead on `edit.sock`. The next successful connect shows the console again. Standalone 64Forth (no editor client) still quits on `BYE`.
 
 ### 3.3 Standalone 64Forth is still 1.5.4 — **Open** (P3)
 

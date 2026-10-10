@@ -34,8 +34,9 @@ struct ConsoleTranscriptView: NSViewRepresentable {
         tv.isSelectable = true
         tv.isRichText = false
         tv.allowsUndo = false
-        tv.usesFindBar = true
-        tv.isIncrementalSearchingEnabled = true
+        // Custom FindReplaceBarView (Match Case + Whole Word); not NSTextFinder.
+        tv.usesFindBar = false
+        tv.isIncrementalSearchingEnabled = false
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticTextReplacementEnabled = false
@@ -58,6 +59,7 @@ struct ConsoleTranscriptView: NSViewRepresentable {
         tv.string = Self.joined(lines)
 
         scroll.documentView = tv
+        _ = scroll.ensureFindReplaceBar(for: tv)
         context.coordinator.textView = tv
         context.coordinator.lastRefreshSeq = refreshSeq
         context.coordinator.installCommandClick(on: tv)
