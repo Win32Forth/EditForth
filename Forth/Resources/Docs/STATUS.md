@@ -2,6 +2,8 @@
 
 **Current:** **2.2.1** (build **8**) — shipped  
 
+**Working tree (unreleased):** **Ask Forth** — View → Ask Forth (⌥⌘A); local Ollama; Library RAG; `64Forth --agent` Eval / Fix from Agent. See `ROADMAP.md` §5.
+
 **Last updated:** 2026-10-10
 
 ---

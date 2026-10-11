@@ -1,9 +1,9 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.2.0** / build **7** ships the fixes below. **2.1.0** (tag **v2.1.0**, commit `b941544`) did not include them.  
+**Baseline:** **2.2.1** / build **8** is current. Debugger fixes below shipped in **2.2.0**; BYE console-drop and Find/Replace options in **2.2.1**.  
 **Updated:** 2026-10-10.
 
-**Scope:** EditForth editor + companion 64Forth in this repo. Standalone Win32Forth/64Forth (1.5.4) is a separate product and has not received these changes.
+**Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
 
 ## Status key
 
@@ -12,6 +12,7 @@
 | **Fixed** | In the working tree. Solution is what shipped in source, not a proposal. |
 | **Open** | Not done. |
 | **Limit** | Behaves this way on purpose. |
+| **Won't do** | Deliberately not pursued. |
 
 ---
 
@@ -151,9 +152,11 @@ Dock and undock move the Forth console only. GCLOCK and other App Output windows
 
 `BYE` used to send `requestQuit`, and EditForth called `NSApp.terminate` (same as Cmd-Q). Now the editor stays open with its files. The console is hidden, the debugger is cleared, and a Ping-launched companion is stopped so the VM is not left dead on `edit.sock`. The next successful connect shows the console again. Standalone 64Forth (no editor client) still quits on `BYE`.
 
-### 3.3 Standalone 64Forth is still 1.5.4 — **Open** (P3)
+### 3.3 Standalone 64Forth is still 1.5.4 — **Won't do**
 
-These debugger and editor fixes are EditForth-only. Backport is a separate cherry-pick of `forth.s`, `kernel_api.h`, and `Library/Debugger` into the standalone tree. Do not do that from this repo silently.
+Standalone Win32Forth/64Forth (**1.5.4**) and 64Edit do not get these debugger/editor fixes. A cherry-pick of `forth.s`, `kernel_api.h`, and `Library/Debugger` into the old tree is wasted dual maintenance.
+
+**Decision:** Keep EditForth (and its in-tree companion) as the living line. Archive the standalone **64Forth** / **64Edit** GitHub repos when ready and leave **v1.5.4** as history. If a future “64Forth + some other editor” is needed, start from EditForth and extract the companion rather than revive the old 64Forth project.
 
 ### 4.1 Release script stops before git — **Limit**
 
@@ -167,8 +170,35 @@ Break Now cannot stop inside a `CODE` word that never returns to ITC `NEXT`. See
 
 ## Out of scope
 
-- Replacing `edit.sock` with NSXPC.
-- Listing / xref UI and TCOM / SIMARM64 highlighting.
-- Retiring old SZ-EDITOR stubs beyond what dbg-map already bypasses.
-- Interactive sample runs inside `release.sh`.
-- Making Run to Here stop on a definition header.
+### Replacing `edit.sock` with NSXPC
+
+EditForth and companion 64Forth talk over the Unix domain socket  
+`~/Library/Application Support/64Forth/edit.sock` (JSON `EditorRequest` / `ForthResponse`). That path already carries console I/O, panels, debugger, and BYE. **NSXPC** would change the transport to Apple’s typed XPC APIs (`ForthEngineXPC` is only a sketch in `IPCProtocol.swift`). Payloads would still be `Data`/JSON. Large rewrite, little user-visible gain — not planned.
+
+### Listing / xref UI and TCOM / SIMARM64 highlighting
+
+No EditForth panels for Forth **listings** (SEE-style decompile) or **xref** browsers. Kernel console words (`SEE`, `REF` / `XREF` / …) stay as they are. No TCOM-dialect syntax mode and no SIMARM64/`TDBG` debug wash in the editor; ITC debug highlight is what EditForth has. Those IDE extras were deferred on purpose.
+
+### Retiring old SZ-EDITOR stubs beyond what dbg-map already bypasses
+
+**SZ-EDITOR** (in-app facility grid editor) is gone; editing is EditForth / was 64Edit. Leftover stubs remain: `DBG-ED-*` DEFERs that once bound to `SZ-*`, Hyper `HYPER-*-XT` slots that stay 0, facility/host comments and key-injection paths, stale docs.
+
+**Already bypassed:** `dbg-map.fth` / `DBG-MAP-BIND` slurps source, resolves spans, and publishes them over `edit.sock` — no SZ-EDITOR required for debug highlight or Run to Here.
+
+**Out of scope:** a cleanup pass to delete or rename all remaining SZ wiring. High churn / break risk for little user-visible gain. Leave the stubs.
+
+### Interactive sample runs inside `release.sh`
+
+`prep` already does **non-interactive** checks: ANS-VALIDATE, Hayes, dbg-span, and VED64 **emit-smoke** (`EMIT-AUTO-FILE` → `VED64.app` + clean log). That proves Emitter packaging, not that GCLOCK/DOODLE/TETRA windows behave under a real GUI.
+
+**Out of scope:** driving interactive Sample apps (launch, keys/clicks, window assertions) from `release.sh`. Needs a logged-in desktop, automation, and flaky timing — poor fit for a batch release script. Spot-check samples by hand when needed. ROADMAP keeps full interactive Sample runs deferred.
+
+### Making Run to Here stop on a definition header
+
+**Run to Here** arms one threaded cell (`debug_runto_ip`) — a **call site** inside a colon body. A `: name` header is not a threaded cell, so it cannot be a runto target.
+
+**Already done (1.4):** clicking a header prints  
+`runto: not a call site (click the use inside a definition, not the : header)`  
+instead of a vague map miss. Run to does **not** become `BREAK` on the word’s xt.
+
+**Out of scope:** redefining header clicks as “stop when this word runs” (entry/BREAK/first-cell). That is a different feature; use Break / gutter / BPGO for word-level stops.

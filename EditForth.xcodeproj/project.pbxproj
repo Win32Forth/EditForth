@@ -30,6 +30,8 @@
 		FA6AA0DF301916D30007C369 /* 64Forth.jpg in Resources */ = {isa = PBXBuildFile; fileRef = FA6AA0DE301916D30007C369 /* 64Forth.jpg */; };
 		FA90443230754DD000E7E1AF /* ROADMAP.md in Resources */ = {isa = PBXBuildFile; fileRef = FA90443130754DD000E7E1AF /* ROADMAP.md */; };
 		FAA0106A307A79A0002BBE52 /* ISSUES.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA01069307A79A0002BBE52 /* ISSUES.md */; };
+		FAA010E9307AA940002BBE52 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA010E8307AA940002BBE52 /* README.md */; };
+		FAA010EA307AA940002BBE52 /* DESIGN.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA010E7307AA940002BBE52 /* DESIGN.md */; };
 		FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85D7306D82790035B509 /* IPCProtocol.swift */; };
 		FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85DB306D832B0035B509 /* ForthEngine.swift */; };
 		FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */; };
@@ -83,6 +85,8 @@
 		FA6AA0DE301916D30007C369 /* 64Forth.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = 64Forth.jpg; sourceTree = "<group>"; };
 		FA90443130754DD000E7E1AF /* ROADMAP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ROADMAP.md; sourceTree = "<group>"; };
 		FAA01069307A79A0002BBE52 /* ISSUES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ISSUES.md; sourceTree = "<group>"; };
+		FAA010E7307AA940002BBE52 /* DESIGN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DESIGN.md; sourceTree = "<group>"; };
+		FAA010E8307AA940002BBE52 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		FADE85D7306D82790035B509 /* IPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCProtocol.swift; sourceTree = "<group>"; };
 		FADE85DB306D832B0035B509 /* ForthEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEngine.swift; sourceTree = "<group>"; };
 		FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEditorServer.swift; sourceTree = "<group>"; };
@@ -210,6 +214,8 @@
 		EFED17010000000100000005 = {
 			isa = PBXGroup;
 			children = (
+				FAA010E7307AA940002BBE52 /* DESIGN.md */,
+				FAA010E8307AA940002BBE52 /* README.md */,
 				FAA01069307A79A0002BBE52 /* ISSUES.md */,
 				FA90443130754DD000E7E1AF /* ROADMAP.md */,
 				EFED17010000000100000003 /* Editor */,
@@ -321,6 +327,8 @@
 		EFED17010000000100000012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				FAA010E9307AA940002BBE52 /* README.md in Resources */,
+				FAA010EA307AA940002BBE52 /* DESIGN.md in Resources */,
 				FAA0106A307A79A0002BBE52 /* ISSUES.md in Resources */,
 				FA90443230754DD000E7E1AF /* ROADMAP.md in Resources */,
 			);

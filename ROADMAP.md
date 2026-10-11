@@ -90,7 +90,11 @@ Emitter works well but is noisy on the console.
 
 ---
 
-## 5. Suggested order of attack
+## 5. Ask Forth (local AI) — **in tree (post-2.2.1)**
+
+Trailing inspector (**View → Ask Forth**, ⌥⌘A). Offline **Ollama** via `LLMClient` / `OllamaClient` (default model `gemma4:e4b`). Flow: Capture Context → Ask → **Eval Reply/Prompt** (`64Forth --agent`) → **Fix from Agent**. Optional **Library context** (keyword RAG over a chosen folder; **Library…** sets path, max snippets, context lines, max characters). Resizable panel width and chat/agent split. Not a cloud/SpaceXAI integration; MLX swap can replace Ollama later behind `LLMClient`.
+
+## 6. Suggested order of attack
 
 1. Emitter quiet log (small, high leverage while emitting often).
 2. EditForth FLOAD-current button + function key (pick key).

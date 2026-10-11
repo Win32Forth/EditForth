@@ -14,6 +14,8 @@ struct SixtyFourEditApp: App {
     @StateObject private var forth = ForthConnectionManager()
     @AppStorage("showForthChrome") private var showForthChrome = true
     @AppStorage("showLineNumbers") private var showLineNumbers = true
+    /// View → Ask Forth — local Ollama assistant inspector.
+    @AppStorage("showAIAssistant") private var showAIAssistant = false
     /// `off` | `window` | `column` — View → Wrap at Column.
     @AppStorage("editorWrapMode") private var wrapMode = "off"
     /// Preset / Other… value when `wrapMode == "column"`.
@@ -161,6 +163,8 @@ struct SixtyFourEditApp: App {
 
                 Toggle("Show Forth Console", isOn: $showForthChrome)
                 Toggle("Show Line Numbers", isOn: $showLineNumbers)
+                Toggle("Ask Forth", isOn: $showAIAssistant)
+                    .keyboardShortcut("a", modifiers: [.command, .option])
 
                 Divider()
 

@@ -34,10 +34,19 @@ struct ContentView: View {
     @AppStorage("editorSplitFraction") private var splitFraction = 0.5
     @State private var liveSplitFraction: CGFloat?
     @State private var splitDragStartFraction: CGFloat?
+    /// View → Ask Forth — trailing AI assistant inspector (local Ollama).
+    @AppStorage("showAIAssistant") private var showAIAssistant = false
+    /// Persisted Ask Forth panel width (points).
+    @AppStorage("aiPanelWidth") private var storedAIPanelWidth = 340.0
+    @State private var aiPanelWidth = 340.0
+    @State private var aiWidthDragStart: CGFloat?
+    @StateObject private var aiAssistant = AIAssistantModel()
 
     private static let consoleMinHeight: CGFloat = 88
     private static let editorMinHeight: CGFloat = 120
     private static let splitMinPaneWidth: CGFloat = 160
+    private static let aiPanelMinWidth: CGFloat = 260
+    private static let aiPanelMaxWidth: CGFloat = 640
 
     var body: some View {
         GeometryReader { geo in
@@ -46,28 +55,53 @@ struct ContentView: View {
                 geo.size.height - Self.editorMinHeight - ConsoleSplitter.height
             )
             let clampedConsole = min(max(consoleHeight, Self.consoleMinHeight), maxConsole)
+            let aiMaxW = min(
+                Self.aiPanelMaxWidth,
+                max(Self.aiPanelMinWidth, geo.size.width * 0.55)
+            )
+            let clampedAIWidth = min(max(aiPanelWidth, Self.aiPanelMinWidth), aiMaxW)
 
             VStack(spacing: 0) {
                 tabBar
 
-                // Keep every editor pane mounted so tab switches do not rebuild
-                // NSTextView (text was already in memory; tear-down caused the lag).
-                if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty && workspace.diffTabs.isEmpty {
-                    emptyEditorPlaceholder
+                HStack(spacing: 0) {
+                    editorArea
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let search = workspace.selectedSearchTab {
-                    // Search results use the full editor area (split stays latent).
-                    SearchResultsView(session: search, workspace: workspace)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let diff = workspace.selectedDiffTab {
-                    // Diff hunks use the full editor area (split stays latent).
-                    BufferDiskDiffView(session: diff, workspace: workspace)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if workspace.isEditorSplit, workspace.splitSecondaryTab != nil {
-                    splitEditorArea
-                } else {
-                    fileEditorStack(visibleTabID: workspace.selectedTabID, paneID: "main")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if showAIAssistant {
+                        EditorHSplitter(
+                            onDrag: { translationX in
+                                let base = aiWidthDragStart ?? clampedAIWidth
+                                if aiWidthDragStart == nil { aiWidthDragStart = clampedAIWidth }
+                                // Splitter is left of the panel: drag left grows Ask Forth.
+                                let next = min(
+                                    max(base - translationX, Self.aiPanelMinWidth),
+                                    aiMaxW
+                                )
+                                aiPanelWidth = next
+                            },
+                            onEnd: {
+                                aiWidthDragStart = nil
+                                storedAIPanelWidth = Double(aiPanelWidth)
+                            }
+                        )
+                        .accessibilityLabel("Resize Ask Forth")
+
+                        AIAssistantPanel(model: aiAssistant)
+                            .frame(width: clampedAIWidth)
+                            .frame(maxHeight: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear {
+                    aiPanelWidth = max(storedAIPanelWidth, Self.aiPanelMinWidth)
+                }
+                .onChange(of: geo.size.width) { _, _ in
+                    let cap = min(Self.aiPanelMaxWidth, max(Self.aiPanelMinWidth, geo.size.width * 0.55))
+                    if aiPanelWidth > cap {
+                        aiPanelWidth = cap
+                        storedAIPanelWidth = Double(cap)
+                    }
                 }
 
                 // Keep the docked console mounted while chrome is "hidden" so Show
@@ -365,6 +399,30 @@ struct ContentView: View {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor))
                 .frame(height: 1)
+        }
+    }
+
+    /// Center editor stack (empty / search / diff / split / file).
+    @ViewBuilder
+    private var editorArea: some View {
+        // Keep every editor pane mounted so tab switches do not rebuild
+        // NSTextView (text was already in memory; tear-down caused the lag).
+        if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty && workspace.diffTabs.isEmpty {
+            emptyEditorPlaceholder
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let search = workspace.selectedSearchTab {
+            // Search results use the full editor area (split stays latent).
+            SearchResultsView(session: search, workspace: workspace)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let diff = workspace.selectedDiffTab {
+            // Diff hunks use the full editor area (split stays latent).
+            BufferDiskDiffView(session: diff, workspace: workspace)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if workspace.isEditorSplit, workspace.splitSecondaryTab != nil {
+            splitEditorArea
+        } else {
+            fileEditorStack(visibleTabID: workspace.selectedTabID, paneID: "main")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
