@@ -16,6 +16,7 @@ final class AIAssistantModel: ObservableObject {
     static let defaultModel = "gemma4:e4b"
     static let libraryRAGKey = "aiAssistantLibraryRAG"
     static let urlFetchKey = "aiAssistantURLFetch"
+    static let webSearchKey = "aiAssistantWebSearch"
     static let showAgentTranscriptKey = "aiAssistantShowAgentTranscript"
 
     @Published var prompt: String = ""
@@ -28,6 +29,8 @@ final class AIAssistantModel: ObservableObject {
     @Published var includeLibraryContext: Bool
     /// When true, fetch http(s) URLs found in the Prompt and add page text to the LLM context.
     @Published var fetchURLsInPrompt: Bool
+    /// When true, run an opt-in DuckDuckGo Lite web search and add hit snippets to the LLM context.
+    @Published var includeWebSearch: Bool
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
     @Published var modelName: String
@@ -57,6 +60,8 @@ final class AIAssistantModel: ObservableObject {
         } else {
             self.fetchURLsInPrompt = UserDefaults.standard.bool(forKey: Self.urlFetchKey)
         }
+        // Default off (privacy / network).
+        self.includeWebSearch = UserDefaults.standard.bool(forKey: Self.webSearchKey)
         self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
     }
 
@@ -76,6 +81,10 @@ final class AIAssistantModel: ObservableObject {
 
     func persistURLFetch() {
         UserDefaults.standard.set(fetchURLsInPrompt, forKey: Self.urlFetchKey)
+    }
+
+    func persistWebSearch() {
+        UserDefaults.standard.set(includeWebSearch, forKey: Self.webSearchKey)
     }
 
     func persistShowAgentTranscript() {
@@ -173,6 +182,7 @@ final class AIAssistantModel: ObservableObject {
         persistModelName()
         persistLibraryRAG()
         persistURLFetch()
+        persistWebSearch()
         isBusy = true
         status = busyStatus
         reply = ""
@@ -181,6 +191,7 @@ final class AIAssistantModel: ObservableObject {
         let client = self.client
         let useRAG = includeLibraryContext
         let useURLFetch = fetchURLsInPrompt
+        let useWebSearch = includeWebSearch
         let urlSource = prompt
 
         Task {
@@ -252,6 +263,23 @@ final class AIAssistantModel: ObservableObject {
                         }
                     }
                 }
+            }
+
+            if useWebSearch {
+                await MainActor.run {
+                    self.status = "Searching the web…"
+                }
+                let search = await AskForthWebSearch.search(prompt: urlSource)
+                if !search.isEmpty {
+                    let block = search.contextBlock(maxChars: AskForthWebSearch.maxContextChars)
+                    if !block.isEmpty {
+                        contextPrefix += block + "\n\n"
+                    }
+                    await MainActor.run {
+                        self.appendWebSearchAudit(search, in: workspace)
+                    }
+                }
+                contextNote += search.statusNote
             }
 
             if useRAG {
@@ -467,6 +495,22 @@ final class AIAssistantModel: ObservableObject {
             return docs
         }
         return FileManager.default.homeDirectoryForCurrentUser
+    }
+
+    /// Insert `\ Web search: …` audit lines before the current stream body, then bump the body start.
+    private func appendWebSearchAudit(_ search: AskForthWebSearchResult, in workspace: WorkspaceModel) {
+        guard let tab = resolveAskOutputTab(in: workspace),
+              let start = askStreamBodyStart else { return }
+        let comments = search.auditCommentLines()
+        guard !comments.isEmpty else { return }
+        let block = comments.joined(separator: "\n") + "\n\n"
+        let ns = tab.text as NSString
+        let safeStart = min(max(0, start), ns.length)
+        let prefix = ns.substring(to: safeStart)
+        let suffix = ns.substring(from: safeStart)
+        tab.text = prefix + block + suffix
+        tab.isDirty = true
+        askStreamBodyStart = safeStart + (block as NSString).length
     }
 
     private static func askFileHeader(prompt: String) -> String {

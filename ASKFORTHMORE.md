@@ -39,9 +39,11 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 - Show fetch status in the Ask status line (`Fetched 2 URLs…` / errors).
 - Do not execute scripts; strip HTML to text (same spirit as Library `.txt` Reference).
 
-### 1.2 Opt-in web search for Ask / Agent Enhance Reply
+### 1.2 Opt-in web search for Ask / Agent Enhance Reply — **done (working tree)**
 
 **Idea:** Checkbox **Include web search**. Derive a search query from the Prompt (or use it verbatim), call a search provider (Brave / Bing / DuckDuckGo-style API), take the top few snippets + titles + URLs, and add them beside Library context.
+
+**Implemented:** `AskForthWebSearch.swift` — DuckDuckGo **Lite** POST (no API key). Panel toggle **Include web search** (default **off**, `UserDefaults` `aiAssistantWebSearch`). Status `· Search N hit(s)`. AskForth file gets `\ Web search: …` audit comment lines. Caps: 5 hits, ~8k context chars.
 
 **Why useful**
 
@@ -50,10 +52,10 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 **Design notes**
 
-- Default **off** (privacy + network + possible API key).
-- Prefer a provider that works with a user-supplied key stored in Keychain, or a keyless scraping-free API if one stays stable.
+- Default **off** (privacy + network).
+- Keyless DuckDuckGo Lite for v1; a Keychain Brave/Bing key remains a possible later backend if Lite rate-limits or challenges.
 - Cap snippets hard (same order of magnitude as Library `maxChars`).
-- Optionally list the hit URLs in the AskForth file as `\ Web: …` comments for auditability.
+- List hit URLs in the AskForth file as `\ Web search: …` comments for auditability.
 
 ### 1.3 Forth-standard.org helper (narrow, on-brand) — **done (working tree)**
 
@@ -89,9 +91,9 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 ### Suggested build order
 
-1. **URL fetch** (§1.1)  
-2. **forth-standard.org boost** (§1.3) reusing that fetcher  
-3. **Opt-in web search** (§1.2)  
+1. **URL fetch** (§1.1) — done  
+2. **forth-standard.org boost** (§1.3) — done  
+3. **Opt-in web search** (§1.2) — done  
 4. **Tool-calling** (§1.4) only if 1–3 still feel limited  
 
 Cloud tags such as `gemma4:31b-cloud` may *feel* better informed; that is **not** the same as EditForth-controlled, visible web context.

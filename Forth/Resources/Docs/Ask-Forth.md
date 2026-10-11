@@ -23,9 +23,10 @@ ollama pull gemma4:e4b
 2. Type a question in **Prompt**, or select editor text and click **Capture Selected to Prompt**.  
 3. Optionally leave **Include Library context** on (default folder **`~/Documents/EditForth/Library/Sample`**; **Library…** to change).  
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
-5. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
-6. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
-7. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
+5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
+6. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
+7. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
+8. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
 
 Typical pattern: a broad Ask (“Make me a small database”) often produces a full but flawed draft; **Agent Enhance Reply** usually yields a much better second section in the same file.
 
@@ -52,6 +53,16 @@ When enabled (default), Ask and Agent Enhance Reply:
 2. **Auto-boost from forth-standard.org** when the Prompt looks like a word lookup — e.g. `` `OPEN-FILE` ``, “what does DUP do”, or a short prompt that names a standard word. EditForth resolves words via `Library/Reference/Forth-2012-word-urls.json` and fetches the live standard page (up to three words).
 
 Status notes look like `· Web 1 page(s) · Standard DUP`. Turn the toggle off to stay fully offline aside from Ollama itself.
+
+## Include web search
+
+Default **off** (extra network use). When on, Ask and Agent Enhance Reply:
+
+1. Derive a short query from the Prompt (URLs stripped, whitespace collapsed).  
+2. POST to DuckDuckGo Lite, parse the top hits (title, URL, snippet), and inject a capped block into the model context.  
+3. Write `\ Web search: …` comment lines into the AskForth file for auditability.
+
+Status notes look like `· Search 5 hit(s)`. If DuckDuckGo challenges or returns nothing, Ask continues without search context (`· Search: …`). No API key. A Keychain-backed Brave/Bing backend can come later if Lite becomes unreliable.
 
 ## Web browser tab
 

@@ -130,6 +130,13 @@ struct AIAssistantPanel: View {
                     model.persistURLFetch()
                 }
 
+            Toggle("Include web search", isOn: $model.includeWebSearch)
+                .font(.caption)
+                .help("Opt-in: search the web (DuckDuckGo Lite, no API key) using the Prompt text and add top hit titles, URLs, and snippets to Ask / Agent Enhance Reply. Default off.")
+                .onChange(of: model.includeWebSearch) { _, _ in
+                    model.persistWebSearch()
+                }
+
             Button("Capture Selected to Prompt") {
                 model.captureSelectedToPrompt(from: workspace)
             }

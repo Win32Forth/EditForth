@@ -1,8 +1,25 @@
 # 64Forth development status
 
-**Current:** **2.3.2** (build **11**) — shipped  
+**Current:** **2.3.3** (build **12**) — working tree (unreleased)  
 
 **Last updated:** 2026-10-11
+
+---
+
+## v2.3.3 — Ask Forth web search (unreleased)
+
+**Version strings:** marketing **2.3.3**, build **12** (EditForth + companion 64Forth lockstep). Not yet shipped as a DMG/tag; last public release remains **v2.3.2**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.3 === Oct 11, 2026 6:00 PM ===
+```
+
+### Highlights (working tree)
+
+- **Include web search** — opt-in (default off) DuckDuckGo Lite search from the Prompt; injects hit titles / URLs / snippets into Ask / Agent Enhance Reply; `\ Web search:` audit lines in `AskForth-N.fth`.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning: `ASKFORTHMORE.md` §1.2.
 
 ---
 

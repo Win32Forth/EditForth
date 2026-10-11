@@ -92,7 +92,7 @@ Emitter works well but is noisy on the console.
 
 ## 5. Ask Forth (local AI) — **shipped 2.3.0; polished 2.3.1; web/Reference in 2.3.2**
 
-Trailing inspector (**View → Ask Forth**, ⌥⌘A). Offline **Ollama** via `LLMClient` / `OllamaClient` (default `gemma4:e4b`). Flow: **Capture Selected to Prompt** → **Ask** → stream into **`AskForth-N.fth`** (80-column wrap) → **Agent Enhance Reply** (headless `--agent` with Autoload, then append **Agent Enhanced Reply**). Library RAG defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012). **Fetch URLs in Prompt** + forth-standard.org boost; **View → Open Web Page…** (⇧⌘L) for in-editor browsing. Live load via status **INCLUDE**. User doc: `Forth/Resources/Docs/Ask-Forth.md`. More ideas: `ASKFORTHMORE.md`.
+Trailing inspector (**View → Ask Forth**, ⌥⌘A). Offline **Ollama** via `LLMClient` / `OllamaClient` (default `gemma4:e4b`). Flow: **Capture Selected to Prompt** → **Ask** → stream into **`AskForth-N.fth`** (80-column wrap) → **Agent Enhance Reply** (headless `--agent` with Autoload, then append **Agent Enhanced Reply**). Library RAG defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012). **Fetch URLs in Prompt** + forth-standard.org boost; opt-in **Include web search** (DuckDuckGo Lite); **View → Open Web Page…** (⇧⌘L) for in-editor browsing. Live load via status **INCLUDE**. User doc: `Forth/Resources/Docs/Ask-Forth.md`. More ideas: `ASKFORTHMORE.md`.
 
 ## 6. Suggested order of attack
 
