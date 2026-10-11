@@ -10,7 +10,11 @@ Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64For
 
 ## Ask Forth (local AI) 
 
-**About Ask Forth** The term Ask Forth was coined by Grok AI, when I asked about adding AI support to EditForth. I am a paying subscriber of Grok, and I therefore own any code or new Term Grok produces. The term Ask Forth and AskForth sounded like new and unused terms to me, and terms that another company might want to snatch up to use for their product, so I did some research, and found no company on the internet had been using the terms Ask Forth or AskForth. Therefore, since the software I write on my own, like EditForth is always placed in the public domain, I also publicly commit the term Ask Forth, and AskForth to copyright 2026 Thomas Zimmer, and is hereby released for free use by anyone, as long as the term is used for the furtherance of the Forth computer language, whether private or commercial. I don't particularly like having to do this, but as far as I know there is no other way to protect such a term and prevent it from being locked away by some other company. 
+**About Ask Forth** **About Ask Forth** The term Ask Forth was coined by Grok AI, when I asked about adding AI support to EditForth. I am a paying subscriber of Grok, and I therefore own any code or new Term Grok produces for me. The term Ask Forth and AskForth sounded like new and unused terms to me, and terms that another company might want to snatch up to use for their product, so I did some research, and found no company on the internet that had been using the terms Ask Forth or AskForth. Therefore, since the software I write on my own, like EditForth is always placed in the public domain, I also publicly commit the term Ask Forth, and AskForth to copyright 2026 Thomas Zimmer, and they are hereby released for free use by anyone, as long as the use of the term is for the advancement of the Forth computer language, whether that use is private or commercial. 
+
+I don't particularly like having to do this, but as far as I know there is no other way to protect such a term and prevent it from being locked away by some other company. 
+
+If you don't agree with me, and can provide sufficient evidence that Ask Forth or AskForth are already being used by your company, I will happily release my copyright. 
 
 **View → Ask Forth** (⌥⌘A) opens a trailing panel that talks to a local **[Ollama](https://ollama.com)** model. You must install Ollama and pull a model before Ask or Agent Enhance Reply will return answers:
 
