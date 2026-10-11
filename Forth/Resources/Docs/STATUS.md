@@ -1,10 +1,29 @@
 # 64Forth development status
 
-**Current:** **2.2.1** (build **8**) — shipped  
-
-**Working tree (unreleased):** **Ask Forth** — View → Ask Forth (⌥⌘A); local Ollama; Library RAG; `64Forth --agent` Eval / Fix from Agent. See `ROADMAP.md` §5.
+**Current:** **2.3.0** (build **9**) — shipped  
 
 **Last updated:** 2026-10-10
+
+---
+
+## v2.3.0 — Ask Forth (local AI)
+
+**Version strings:** marketing **2.3.0**, build **9** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.0** (`Releases/EditForth-2.3.0-macOS.dmg`). Replaces **v2.2.1**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.0 === Oct 10, 2026 8:56 PM ===
+```
+
+### Highlights
+
+- **Ask Forth** — **View → Ask Forth** (⌥⌘A): trailing inspector for local LLM help. Capture Context, Ask, Copy Reply, **Insert into Editor**, **Eval Reply** / **Eval Prompt** (`64Forth --agent`), and **Fix from Agent**.
+- **Ollama required.** Install [Ollama](https://ollama.com), pull a model (default **`gemma4:e4b`**), and leave the app running. Without Ollama and a model, Ask / Fix report the model unreachable. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+- **Models tried:** `gemma4:e4b` (default, snappy); `gemma4:12b` (stronger answers, heavy memory); `gemma4:31b-cloud` (fast via Ollama cloud — not fully local).
+- **Library context (RAG):** optional keyword snippets from a chosen Library folder (not the whole tree). Example: point at `Library/Sample` and ask “Make me a clock” — the model may pull pieces from `GCLOCK.FTH` / clock samples into a draft that is close but usually needs Fix / hand edits.
+- Typical loop: start EditForth (untitled buffer) → Ask Forth → **Insert into Editor** → read / Eval / Fix.
+- Panel width and chat/agent split are resizable. Backend seam: `LLMClient` / `OllamaClient` (MLX can swap later).
 
 ---
 

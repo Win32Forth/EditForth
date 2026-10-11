@@ -90,9 +90,9 @@ Emitter works well but is noisy on the console.
 
 ---
 
-## 5. Ask Forth (local AI) — **in tree (post-2.2.1)**
+## 5. Ask Forth (local AI) — **shipped in 2.3.0**
 
-Trailing inspector (**View → Ask Forth**, ⌥⌘A). Offline **Ollama** via `LLMClient` / `OllamaClient` (default model `gemma4:e4b`). Flow: Capture Context → Ask → **Eval Reply/Prompt** (`64Forth --agent`) → **Fix from Agent**. Optional **Library context** (keyword RAG over a chosen folder; **Library…** sets path, max snippets, context lines, max characters). Resizable panel width and chat/agent split. Not a cloud/SpaceXAI integration; MLX swap can replace Ollama later behind `LLMClient`.
+Trailing inspector (**View → Ask Forth**, ⌥⌘A). Offline **Ollama** via `LLMClient` / `OllamaClient` (default model `gemma4:e4b`; install Ollama and `ollama pull gemma4:e4b` first). Flow: Capture Context → Ask → **Insert into Editor** / **Eval Reply/Prompt** (`64Forth --agent`) → **Fix from Agent**. Optional **Library context** (keyword RAG over a chosen folder; **Library…** sets path, max snippets, context lines, max characters). Resizable panel width and chat/agent split. User doc: `Forth/Resources/Docs/Ask-Forth.md`. Not a cloud/SpaceXAI integration; MLX swap can replace Ollama later behind `LLMClient`.
 
 ## 6. Suggested order of attack
 
