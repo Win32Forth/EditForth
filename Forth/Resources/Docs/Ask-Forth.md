@@ -24,9 +24,10 @@ ollama pull gemma4:e4b
 3. Optionally leave **Include Library context** on (default folder **`~/Documents/EditForth/Library/Sample`**; **Library…** to change).  
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
 5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
-6. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
-7. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
-8. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
+6. Optionally turn on **Tool agent** (default **off**). The model may call `web_search`, `fetch_url`, or `library_search` before answering (Ollama tools; needs a tools-capable model such as `gemma4:e4b`). Slower; use **Show Agent Transcript** to see tool steps. When Tool agent is on, automatic URL fetch / web search are skipped.  
+7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
+8. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
+9. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
 
 Typical pattern: a broad Ask (“Make me a small database”) often produces a full but flawed draft; **Agent Enhance Reply** usually yields a much better second section in the same file.
 
@@ -63,6 +64,18 @@ Default **off** (extra network use). When on, Ask and Agent Enhance Reply:
 3. Write `\ Web search: …` comment lines into the AskForth file for auditability.
 
 Status notes look like `· Search 5 hit(s)`. If DuckDuckGo challenges or returns nothing, Ask continues without search context (`· Search: …`). No API key. A Keychain-backed Brave/Bing backend can come later if Lite becomes unreliable.
+
+## Tool agent
+
+Default **off**. When on, Ask and Agent Enhance Reply run an Ollama **tool loop** (up to four rounds):
+
+| Tool | What it does |
+|------|----------------|
+| `web_search` | DuckDuckGo Lite search → titles / URLs / snippets |
+| `fetch_url` | Fetch one http(s) page → plain text excerpt |
+| `library_search` | Score Library (+ Reference) `.fth` / `.txt` excerpts |
+
+Status notes look like `· Tools 2 call(s)/2 round(s)`. The AskForth file gets `\ Tool agent:` audit lines. Turn on **Show Agent Transcript** to read `→ tool(…)` / `← …` steps. Automatic **Fetch URLs** / **Include web search** are disabled while Tool agent is on (the model calls those tools itself). Passive **Include Library context** still runs when enabled.
 
 ## Web browser tab
 

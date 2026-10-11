@@ -17,6 +17,7 @@ final class AIAssistantModel: ObservableObject {
     static let libraryRAGKey = "aiAssistantLibraryRAG"
     static let urlFetchKey = "aiAssistantURLFetch"
     static let webSearchKey = "aiAssistantWebSearch"
+    static let toolAgentKey = "aiAssistantToolAgent"
     static let showAgentTranscriptKey = "aiAssistantShowAgentTranscript"
 
     @Published var prompt: String = ""
@@ -31,6 +32,8 @@ final class AIAssistantModel: ObservableObject {
     @Published var fetchURLsInPrompt: Bool
     /// When true, run an opt-in DuckDuckGo Lite web search and add hit snippets to the LLM context.
     @Published var includeWebSearch: Bool
+    /// When true, Ask / Enhance use an Ollama tool loop (web_search / fetch_url / library_search).
+    @Published var useToolAgent: Bool
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
     @Published var modelName: String
@@ -62,6 +65,8 @@ final class AIAssistantModel: ObservableObject {
         }
         // Default off (privacy / network).
         self.includeWebSearch = UserDefaults.standard.bool(forKey: Self.webSearchKey)
+        // Default off (slower; model-driven browsing).
+        self.useToolAgent = UserDefaults.standard.bool(forKey: Self.toolAgentKey)
         self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
     }
 
@@ -85,6 +90,10 @@ final class AIAssistantModel: ObservableObject {
 
     func persistWebSearch() {
         UserDefaults.standard.set(includeWebSearch, forKey: Self.webSearchKey)
+    }
+
+    func persistToolAgent() {
+        UserDefaults.standard.set(useToolAgent, forKey: Self.toolAgentKey)
     }
 
     func persistShowAgentTranscript() {
@@ -183,6 +192,7 @@ final class AIAssistantModel: ObservableObject {
         persistLibraryRAG()
         persistURLFetch()
         persistWebSearch()
+        persistToolAgent()
         isBusy = true
         status = busyStatus
         reply = ""
@@ -192,6 +202,7 @@ final class AIAssistantModel: ObservableObject {
         let useRAG = includeLibraryContext
         let useURLFetch = fetchURLsInPrompt
         let useWebSearch = includeWebSearch
+        let useTools = useToolAgent
         let urlSource = prompt
 
         Task {
@@ -237,51 +248,55 @@ final class AIAssistantModel: ObservableObject {
             var contextPrefix = ""
             var contextNote = ""
 
-            if useURLFetch {
-                let promptURLs = AskForthURLFetch.extractURLs(from: urlSource)
-                let standardURLs = AskForthStandardBoost.standardURLs(for: urlSource)
-                if !promptURLs.isEmpty || !standardURLs.isEmpty {
+            // Tool agent decides when to browse/search; skip automatic URL/web pre-fetch.
+            if !useTools {
+                if useURLFetch {
+                    let promptURLs = AskForthURLFetch.extractURLs(from: urlSource)
+                    let standardURLs = AskForthStandardBoost.standardURLs(for: urlSource)
+                    if !promptURLs.isEmpty || !standardURLs.isEmpty {
+                        await MainActor.run {
+                            self.status = standardURLs.isEmpty ? "Fetching URLs…" : "Fetching standard / URLs…"
+                        }
+                        var web = await AskForthURLFetch.fetchExcerpts(urls: promptURLs)
+                        if !standardURLs.isEmpty {
+                            let boost = await AskForthURLFetch.fetchExcerpts(urls: standardURLs)
+                            web = AskForthURLFetch.merge(web, boost)
+                        }
+                        if !web.isEmpty {
+                            let block = web.contextBlock(maxChars: 16_000)
+                            if !block.isEmpty {
+                                contextPrefix += block + "\n\n"
+                            }
+                        }
+                        contextNote += web.statusNote
+                        if !standardURLs.isEmpty {
+                            let names = AskForthStandardBoost.candidateWords(in: urlSource).prefix(3).joined(separator: ", ")
+                            if !names.isEmpty {
+                                contextNote += " · Standard \(names)"
+                            }
+                        }
+                    }
+                }
+
+                if useWebSearch {
                     await MainActor.run {
-                        self.status = standardURLs.isEmpty ? "Fetching URLs…" : "Fetching standard / URLs…"
+                        self.status = "Searching the web…"
                     }
-                    var web = await AskForthURLFetch.fetchExcerpts(urls: promptURLs)
-                    if !standardURLs.isEmpty {
-                        let boost = await AskForthURLFetch.fetchExcerpts(urls: standardURLs)
-                        web = AskForthURLFetch.merge(web, boost)
-                    }
-                    if !web.isEmpty {
-                        let block = web.contextBlock(maxChars: 16_000)
+                    let search = await AskForthWebSearch.search(prompt: urlSource)
+                    if !search.isEmpty {
+                        let block = search.contextBlock(maxChars: AskForthWebSearch.maxContextChars)
                         if !block.isEmpty {
                             contextPrefix += block + "\n\n"
                         }
-                    }
-                    contextNote += web.statusNote
-                    if !standardURLs.isEmpty {
-                        let names = AskForthStandardBoost.candidateWords(in: urlSource).prefix(3).joined(separator: ", ")
-                        if !names.isEmpty {
-                            contextNote += " · Standard \(names)"
+                        await MainActor.run {
+                            self.appendWebSearchAudit(search, in: workspace)
                         }
                     }
+                    contextNote += search.statusNote
                 }
             }
 
-            if useWebSearch {
-                await MainActor.run {
-                    self.status = "Searching the web…"
-                }
-                let search = await AskForthWebSearch.search(prompt: urlSource)
-                if !search.isEmpty {
-                    let block = search.contextBlock(maxChars: AskForthWebSearch.maxContextChars)
-                    if !block.isEmpty {
-                        contextPrefix += block + "\n\n"
-                    }
-                    await MainActor.run {
-                        self.appendWebSearchAudit(search, in: workspace)
-                    }
-                }
-                contextNote += search.statusNote
-            }
-
+            // Passive Library RAG still helps when Tool agent is on; tools can deepen it.
             if useRAG {
                 await MainActor.run {
                     self.status = "Searching Library…"
@@ -311,21 +326,50 @@ final class AIAssistantModel: ObservableObject {
 
             await MainActor.run {
                 if let name = self.askOutputFileName {
-                    self.status = "Streaming into \(name)…"
+                    self.status = useTools ? "Tool agent → \(name)…" : "Streaming into \(name)…"
                 } else {
                     self.status = busyStatus
                 }
             }
 
             do {
-                let text = try await client.completeStreaming(
-                    system: system,
-                    user: finalUser,
-                    model: model
-                ) { delta in
+                let text: String
+                if useTools {
+                    let result = try await AskForthToolAgent.run(
+                        client: client,
+                        system: system,
+                        user: finalUser,
+                        model: model,
+                        onStatus: { note in
+                            self.status = note
+                        },
+                        onDelta: { delta in
+                            await MainActor.run {
+                                self.reply += delta
+                                self.writeWrappedStreamBody(self.reply, in: workspace)
+                            }
+                        }
+                    )
+                    text = result.answer
                     await MainActor.run {
-                        self.reply += delta
-                        self.writeWrappedStreamBody(self.reply, in: workspace)
+                        if !result.transcript.isEmpty {
+                            let prior = self.agentTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let block = "Tool agent\n" + result.transcript
+                            self.agentTranscript = prior.isEmpty ? block : prior + "\n\n" + block
+                        }
+                        self.appendToolAgentAudit(result, in: workspace)
+                        contextNote += " · Tools \(result.toolCallCount) call(s)/\(result.rounds) round(s)"
+                    }
+                } else {
+                    text = try await client.completeStreaming(
+                        system: system,
+                        user: finalUser,
+                        model: model
+                    ) { delta in
+                        await MainActor.run {
+                            self.reply += delta
+                            self.writeWrappedStreamBody(self.reply, in: workspace)
+                        }
                     }
                 }
                 await MainActor.run {
@@ -499,9 +543,19 @@ final class AIAssistantModel: ObservableObject {
 
     /// Insert `\ Web search: …` audit lines before the current stream body, then bump the body start.
     private func appendWebSearchAudit(_ search: AskForthWebSearchResult, in workspace: WorkspaceModel) {
+        appendAskFileAuditComments(search.auditCommentLines(), in: workspace)
+    }
+
+    private func appendToolAgentAudit(_ result: AskForthToolAgent.RunResult, in workspace: WorkspaceModel) {
+        appendAskFileAuditComments(
+            AskForthToolAgent.auditCommentLines(transcript: result.transcript, toolCallCount: result.toolCallCount),
+            in: workspace
+        )
+    }
+
+    private func appendAskFileAuditComments(_ comments: [String], in workspace: WorkspaceModel) {
         guard let tab = resolveAskOutputTab(in: workspace),
               let start = askStreamBodyStart else { return }
-        let comments = search.auditCommentLines()
         guard !comments.isEmpty else { return }
         let block = comments.joined(separator: "\n") + "\n\n"
         let ns = tab.text as NSString

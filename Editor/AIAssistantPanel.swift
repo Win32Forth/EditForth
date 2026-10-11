@@ -132,9 +132,17 @@ struct AIAssistantPanel: View {
 
             Toggle("Include web search", isOn: $model.includeWebSearch)
                 .font(.caption)
-                .help("Opt-in: search the web (DuckDuckGo Lite, no API key) using the Prompt text and add top hit titles, URLs, and snippets to Ask / Agent Enhance Reply. Default off.")
+                .help("Opt-in: search the web (DuckDuckGo Lite, no API key) using the Prompt text and add top hit titles, URLs, and snippets to Ask / Agent Enhance Reply. Default off. Ignored when Tool agent is on (the model calls web_search itself).")
                 .onChange(of: model.includeWebSearch) { _, _ in
                     model.persistWebSearch()
+                }
+                .disabled(model.useToolAgent)
+
+            Toggle("Tool agent", isOn: $model.useToolAgent)
+                .font(.caption)
+                .help("Opt-in: Ollama tool loop — the model may call web_search, fetch_url, or library_search before answering. Slower. Default off. Requires a tools-capable model (e.g. gemma4:e4b). Turn on Show Agent Transcript to see tool steps.")
+                .onChange(of: model.useToolAgent) { _, _ in
+                    model.persistToolAgent()
                 }
 
             Button("Capture Selected to Prompt") {

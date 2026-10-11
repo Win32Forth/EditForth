@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.3** / build **12** for both targets (EditForth + companion 64Forth). Working tree **2.3.3** (unreleased); last shipped DMG/tag **v2.3.2** (`Releases/EditForth-2.3.2-macOS.dmg`). First public release was **v2.0.0**. Tree since 2.3.2: opt-in **Include web search** (DuckDuckGo Lite). Shipped in 2.3.2: **Library/Reference**, **Fetch URLs in Prompt**, forth-standard.org boost, **Web** tabs. Requires Ollama + a pulled model (default `gemma4:e4b`). How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+Marketing **2.3.3** / build **12** for both targets (EditForth + companion 64Forth). Working tree **2.3.3** (unreleased); last shipped DMG/tag **v2.3.2** (`Releases/EditForth-2.3.2-macOS.dmg`). First public release was **v2.0.0**. Tree since 2.3.2: opt-in **Include web search** (DuckDuckGo Lite) and **Tool agent** (Ollama `web_search` / `fetch_url` / `library_search`). Shipped in 2.3.2: **Library/Reference**, **Fetch URLs in Prompt**, forth-standard.org boost, **Web** tabs. Requires Ollama + a pulled model (default `gemma4:e4b`). How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ## Why a new project
 

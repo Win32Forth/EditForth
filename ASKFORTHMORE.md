@@ -75,26 +75,28 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 - Fail soft if the page 404s; Library Reference remains the fallback.
 - Can share the same HTML→text pipeline as §1.1.
 
-### 1.4 Full tool-calling agent (later)
+### 1.4 Full tool-calling agent — **done (working tree)**
 
 **Idea:** Ollama tool loop where the model may call `search`, `fetch_url`, or `library_search`, see results, then answer.
+
+**Implemented:** Panel toggle **Tool agent** (default off, `aiAssistantToolAgent`). `AskForthToolAgent.swift` + `LLMClient.chat(… tools:)` / `OllamaClient` tool encoding. Tools: `web_search`, `fetch_url`, `library_search`. Max 4 rounds. Status `· Tools N call(s)/R round(s)`. Tool steps land in the Agent Transcript box and as `\ Tool agent:` comments in the AskForth file. When Tool agent is on, automatic Fetch URLs / Include web search are skipped (model drives those). Passiveive Library RAG still runs if enabled. Requires a tools-capable Ollama model (e.g. `gemma4:e4b`).
 
 **Why useful**
 
 - Most flexible; model decides when browsing helps.
 
-**Why later**
+**Notes**
 
-- Slower, harder to debug, easier to wander and burn tokens.
-- Needs clear UI for “tools used” (transcript of fetches).
-- Build after §1.1–1.3 prove the fetch/search plumbing.
+- Slower than plain Ask; turn on **Show Agent Transcript** to debug tool steps.
+- Soft-fail: if the model never calls tools, you still get a normal answer.
 
 ### Suggested build order
 
 1. **URL fetch** (§1.1) — done  
 2. **forth-standard.org boost** (§1.3) — done  
 3. **Opt-in web search** (§1.2) — done  
-4. **Tool-calling** (§1.4) only if 1–3 still feel limited  
+4. **Tool-calling** (§1.4) — done  
+
 
 Cloud tags such as `gemma4:31b-cloud` may *feel* better informed; that is **not** the same as EditForth-controlled, visible web context.
 

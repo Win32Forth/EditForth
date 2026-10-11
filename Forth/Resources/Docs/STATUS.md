@@ -19,7 +19,8 @@
 ### Highlights (working tree)
 
 - **Include web search** — opt-in (default off) DuckDuckGo Lite search from the Prompt; injects hit titles / URLs / snippets into Ask / Agent Enhance Reply; `\ Web search:` audit lines in `AskForth-N.fth`.
-- How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning: `ASKFORTHMORE.md` §1.2.
+- **Tool agent** — opt-in (default off) Ollama tool loop (`web_search`, `fetch_url`, `library_search`); transcript + `\ Tool agent:` audit lines. Needs a tools-capable model (e.g. `gemma4:e4b`).
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning: `ASKFORTHMORE.md` §1.2–1.4.
 
 ---
 
