@@ -2,8 +2,8 @@
 //  AIAssistantModel.swift
 //  EditForth
 //
-//  Ask-Forth panel state: selection/context → local LLM → reply,
-//  then optional headless 64Forth --agent eval of prompt or reply.
+//  Ask-Forth panel state: prompt → local LLM → AskForth-N.fth in the editor,
+//  then optional headless 64Forth --agent eval and Fix-from-Agent append.
 //
 
 import Foundation
@@ -14,20 +14,28 @@ import Combine
 final class AIAssistantModel: ObservableObject {
     static let defaultModelKey = "aiAssistantModel"
     static let defaultModel = "gemma4:e4b"
-    static let autoloadKey = "aiAssistantAgentAutoload"
     static let libraryRAGKey = "aiAssistantLibraryRAG"
+    static let showAgentTranscriptKey = "aiAssistantShowAgentTranscript"
 
     @Published var prompt: String = ""
+    /// Latest model segment (current Ask or Fix body) — used by Eval Reply and Agent Fix.
     @Published var reply: String = ""
     @Published var agentTranscript: String = ""
     @Published var status: String = ""
     @Published var isBusy = false
-    @Published var includeSelection = true
-    /// When true, agent runs AutoLoad + MAIN before -e/-f (slower; Library words available).
-    @Published var agentAutoload: Bool
     /// When true, Ask / Fix retrieve Library .fth excerpts into the prompt.
     @Published var includeLibraryContext: Bool
+    /// When true, show the headless --agent transcript box.
+    @Published var showAgentTranscript: Bool
     @Published var modelName: String
+
+    /// Tab / path that receives streamed Ask / Fix output.
+    private(set) var askOutputTabID: UUID?
+    private(set) var askOutputFileURL: URL?
+    /// UTF-16 offset in the AskForth tab where the current streamed body starts (wrap target).
+    private var askStreamBodyStart: Int?
+
+    private static let askFileWrapWidth = 80
 
     private let client: LLMClient
 
@@ -36,47 +44,44 @@ final class AIAssistantModel: ObservableObject {
         let stored = UserDefaults.standard.string(forKey: Self.defaultModelKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         self.modelName = (stored?.isEmpty == false) ? stored! : Self.defaultModel
-        self.agentAutoload = UserDefaults.standard.bool(forKey: Self.autoloadKey)
         if UserDefaults.standard.object(forKey: Self.libraryRAGKey) == nil {
             self.includeLibraryContext = true
         } else {
             self.includeLibraryContext = UserDefaults.standard.bool(forKey: Self.libraryRAGKey)
         }
+        self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
     }
 
     var providerLabel: String { client.providerName }
 
-    func persistModelName() {
-        UserDefaults.standard.set(modelName, forKey: Self.defaultModelKey)
+    var askOutputFileName: String? {
+        askOutputFileURL?.lastPathComponent
     }
 
-    func persistAutoload() {
-        UserDefaults.standard.set(agentAutoload, forKey: Self.autoloadKey)
+    func persistModelName() {
+        UserDefaults.standard.set(modelName, forKey: Self.defaultModelKey)
     }
 
     func persistLibraryRAG() {
         UserDefaults.standard.set(includeLibraryContext, forKey: Self.libraryRAGKey)
     }
 
-    /// Refresh the prompt box from the active editor selection / caret context.
-    func captureContext(from workspace: WorkspaceModel) {
+    func persistShowAgentTranscript() {
+        UserDefaults.standard.set(showAgentTranscript, forKey: Self.showAgentTranscriptKey)
+    }
+
+    /// Copy the editor selection into the Prompt box.
+    func captureSelectedToPrompt(from workspace: WorkspaceModel) {
         guard let tab = workspace.selectedTab else {
             status = "No file tab selected."
             return
         }
-        let sel = tab.selectedText()
-        if includeSelection, let sel, !sel.isEmpty {
-            prompt = sel
-            status = "Using selection (\(sel.count) characters)."
-        } else if let token = tab.forthTokenAtCaret(), !token.isEmpty {
-            prompt = token
-            status = "Using token under caret."
-        } else {
-            // A small window around the caret so Ask still has something to work with.
-            let window = tab.contextWindow(around: tab.selection, radiusLines: 12)
-            prompt = window
-            status = window.isEmpty ? "Editor is empty." : "Using lines around the caret."
+        guard let sel = tab.selectedText(), !sel.isEmpty else {
+            status = "Select text in the editor first."
+            return
         }
+        prompt = sel
+        status = "Using selection (\(sel.count) characters)."
     }
 
     func ask(workspace: WorkspaceModel) {
@@ -85,32 +90,33 @@ final class AIAssistantModel: ObservableObject {
             status = "Enter a question or capture editor context first."
             return
         }
-        let fileHint = workspace.selectedTab?.fileURL?.lastPathComponent
+        // New question: drop the previous Eval transcript so Show Agent Transcript is not stale.
+        agentTranscript = ""
         runCompletion(
-            system: Self.systemPrompt(fileName: fileHint),
+            workspace: workspace,
+            system: Self.systemPrompt(fileName: nil),
             user: userPrompt,
             ragQuery: userPrompt,
+            destination: .newAskFile(prompt: userPrompt),
             busyStatus: "Asking \(client.providerName) (\(modelName))…",
-            clearReply: true,
             doneStatus: "Done."
         )
     }
 
-    /// Send prior reply + agent transcript back to the model for a corrected Forth answer.
-    func askFixFromAgent(workspace: WorkspaceModel) {
+    /// Send prior reply + agent transcript back to the model; append Fix into the Ask file.
+    private func askFixFromAgent(workspace: WorkspaceModel) {
         let transcript = agentTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else {
-            status = "Run Eval Reply or Eval Prompt first."
+            status = "Agent produced no transcript to fix from."
             return
         }
         let priorReply = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         let priorPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !priorReply.isEmpty || !priorPrompt.isEmpty else {
-            status = "Need a prompt or reply to fix."
+            status = "Need a prompt or prior Ask reply to fix."
             return
         }
 
-        let fileHint = workspace.selectedTab?.fileURL?.lastPathComponent
         var parts: [String] = [
             "The previous Forth answer was evaluated with a headless 64Forth --agent process.",
             "Fix the Forth so it works on EditForth / 64Forth (ANS-style ITC). Prefer a single ```forth fenced block with the corrected source. Briefly note what you changed."
@@ -124,22 +130,30 @@ final class AIAssistantModel: ObservableObject {
         parts.append("Agent transcript (exit status is in the status line if shown):\n\(transcript)")
 
         let ragQuery = [priorPrompt, priorReply, transcript].joined(separator: "\n")
+        let fileHint = askOutputFileName ?? workspace.selectedTab?.fileURL?.lastPathComponent
         runCompletion(
+            workspace: workspace,
             system: Self.systemPrompt(fileName: fileHint) + "\nYou are correcting Forth that failed or needs improvement after a real kernel eval. Prefer Library context words when they match.",
             user: parts.joined(separator: "\n\n"),
             ragQuery: ragQuery,
-            busyStatus: "Asking \(client.providerName) to fix from agent…",
-            clearReply: true,
-            doneStatus: "Fix suggestion ready — Eval Reply to re-test."
+            destination: .appendFix,
+            busyStatus: "Asking \(client.providerName) to enhance reply…",
+            doneStatus: "Agent Enhanced Reply appended."
         )
     }
 
+    private enum StreamDestination {
+        case newAskFile(prompt: String)
+        case appendFix
+    }
+
     private func runCompletion(
+        workspace: WorkspaceModel,
         system: String,
         user: String,
         ragQuery: String,
+        destination: StreamDestination,
         busyStatus: String,
-        clearReply: Bool,
         doneStatus: String
     ) {
         guard !isBusy else { return }
@@ -148,7 +162,7 @@ final class AIAssistantModel: ObservableObject {
         persistLibraryRAG()
         isBusy = true
         status = busyStatus
-        if clearReply { reply = "" }
+        reply = ""
 
         let model = modelName
         let client = self.client
@@ -163,6 +177,36 @@ final class AIAssistantModel: ObservableObject {
                 }
                 return
             }
+
+            // Prepare editor destination before streaming.
+            let prepared: Bool = await MainActor.run {
+                switch destination {
+                case .newAskFile(let askPrompt):
+                    let header = Self.askFileHeader(prompt: askPrompt)
+                    guard let tab = workspace.createAskForthFile(initialText: header) else {
+                        self.isBusy = false
+                        self.status = "Could not create AskForth file."
+                        return false
+                    }
+                    self.askOutputTabID = tab.id
+                    self.askOutputFileURL = tab.fileURL
+                    self.askStreamBodyStart = (tab.text as NSString).length
+                    self.status = "Streaming into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
+                    return true
+                case .appendFix:
+                    guard let tab = self.resolveAskOutputTab(in: workspace) else {
+                        self.isBusy = false
+                        self.status = "No AskForth file to append — Ask first."
+                        return false
+                    }
+                    workspace.selectedTabID = tab.id
+                    tab.appendStreamingText("\n\nAgent Enhanced Reply\n\n")
+                    self.askStreamBodyStart = (tab.text as NSString).length
+                    self.status = "Streaming Agent Enhanced Reply into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
+                    return true
+                }
+            }
+            guard prepared else { return }
 
             var finalUser = user
             var ragNote = ""
@@ -183,90 +227,154 @@ final class AIAssistantModel: ObservableObject {
                     ragNote = " · Library: no hits"
                 }
                 await MainActor.run {
-                    self.status = busyStatus
+                    if let name = self.askOutputFileName {
+                        self.status = "Streaming into \(name)…"
+                    } else {
+                        self.status = busyStatus
+                    }
                 }
             }
 
             do {
-                let text = try await client.complete(
+                let text = try await client.completeStreaming(
                     system: system,
                     user: finalUser,
                     model: model
-                )
+                ) { delta in
+                    await MainActor.run {
+                        self.reply += delta
+                        self.writeWrappedStreamBody(self.reply, in: workspace)
+                    }
+                }
                 await MainActor.run {
-                    self.reply = text
+                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        self.reply = trimmed
+                    }
+                    self.writeWrappedStreamBody(self.reply, in: workspace)
+                    if let tab = self.resolveAskOutputTab(in: workspace) {
+                        _ = workspace.saveTab(tab)
+                    }
+                    self.askStreamBodyStart = nil
                     self.isBusy = false
-                    self.status = doneStatus + ragNote
+                    let fileNote = self.askOutputFileName.map { " · \($0)" } ?? ""
+                    self.status = doneStatus + fileNote + ragNote
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.status = error.localizedDescription
+                    if !self.reply.isEmpty {
+                        self.writeWrappedStreamBody(self.reply, in: workspace)
+                    }
+                    if let tab = self.resolveAskOutputTab(in: workspace) {
+                        _ = workspace.saveTab(tab)
+                    }
+                    self.askStreamBodyStart = nil
                 }
             }
         }
     }
 
-    func copyReply() {
-        guard !reply.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(reply, forType: .string)
-        status = "Reply copied."
+    /// Replace the current streamed body in the AskForth tab with `body` wrapped at 80 columns.
+    /// Keeps `reply` unwrapped for Eval; only the file/editor buffer is wrapped.
+    private func writeWrappedStreamBody(_ body: String, in workspace: WorkspaceModel) {
+        guard let tab = resolveAskOutputTab(in: workspace),
+              let start = askStreamBodyStart else { return }
+        let ns = tab.text as NSString
+        let safeStart = min(max(0, start), ns.length)
+        let prefix = ns.substring(to: safeStart)
+        let wrapped = Self.wrapToWidth(body, width: Self.askFileWrapWidth)
+        tab.text = prefix + wrapped
+        tab.isDirty = true
+        let end = (tab.text as NSString).length
+        tab.selection = NSRange(location: end, length: 0)
     }
 
-    /// Insert or replace in the selected editable tab.
-    func insertReply(into workspace: WorkspaceModel) {
-        guard let tab = workspace.selectedTab else {
-            status = "No file tab selected."
-            return
+    /// Word-wrap each existing line to `width` columns (hard-break only if a word is longer).
+    private static func wrapToWidth(_ text: String, width: Int) -> String {
+        guard width > 0 else { return text }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        var out: [String] = []
+        out.reserveCapacity(lines.count)
+        for line in lines {
+            out.append(contentsOf: wrapSingleLine(String(line), width: width))
         }
-        guard !tab.isViewMode else {
-            status = "Buffer is in Browse Mode — Allow Editing to insert."
-            return
-        }
-        let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            status = "Nothing to insert."
-            return
-        }
-        tab.replaceSelection(with: text)
-        status = "Inserted into editor."
+        return out.joined(separator: "\n")
     }
 
-    /// Eval Forth extracted from the model reply via a fresh `64Forth --agent` process.
-    func evalReply(workspace: WorkspaceModel) {
+    private static func wrapSingleLine(_ line: String, width: Int) -> [String] {
+        if line.isEmpty { return [""] }
+        if line.count <= width { return [line] }
+
+        var result: [String] = []
+        var remaining = Substring(line)
+        while remaining.count > width {
+            let end = remaining.index(remaining.startIndex, offsetBy: width)
+            let window = remaining[..<end]
+            if let space = window.lastIndex(of: " "), space > remaining.startIndex {
+                result.append(String(remaining[..<space]))
+                remaining = remaining[remaining.index(after: space)...]
+            } else {
+                result.append(String(window))
+                remaining = remaining[end...]
+            }
+        }
+        result.append(String(remaining))
+        return result
+    }
+
+    private func resolveAskOutputTab(in workspace: WorkspaceModel) -> EditorTab? {
+        if let id = askOutputTabID, let tab = workspace.tab(id: id) {
+            return tab
+        }
+        if let url = askOutputFileURL {
+            let tab = workspace.openURL(url, viewMode: false, line: nil)
+            askOutputTabID = tab?.id
+            return tab
+        }
+        return nil
+    }
+
+    /// Headless eval of the latest Ask/Fix segment, then Fix from Agent (append improved answer).
+    func evalReplyAndAgentFix(workspace: WorkspaceModel) {
         let source = ForthAgentRunner.extractForthSource(from: reply)
-        runAgent(source: source, workspace: workspace, label: "reply")
+        runAgent(source: source, workspace: workspace, label: "reply") { [weak self] ok in
+            guard let self, ok else { return }
+            self.askFixFromAgent(workspace: workspace)
+        }
     }
 
-    /// Eval the prompt box as Forth (useful for hand-typed snippets).
-    func evalPrompt(workspace: WorkspaceModel) {
-        let source = ForthAgentRunner.extractForthSource(from: prompt)
-        runAgent(source: source, workspace: workspace, label: "prompt")
-    }
-
-    private func runAgent(source: String, workspace: WorkspaceModel, label: String) {
+    /// Run `64Forth --agent` with Autoload always on. `onFinished(true)` when a transcript was captured.
+    private func runAgent(
+        source: String,
+        workspace: WorkspaceModel,
+        label: String,
+        onFinished: ((Bool) -> Void)? = nil
+    ) {
         let code = source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
             status = "No Forth source in \(label) to evaluate."
+            onFinished?(false)
             return
         }
-        guard !isBusy else { return }
+        guard !isBusy else {
+            onFinished?(false)
+            return
+        }
 
-        persistAutoload()
         isBusy = true
         agentTranscript = ""
         status = "Running 64Forth --agent on \(label)…"
 
         let cwd = agentWorkingDirectory(workspace: workspace)
-        let autoload = agentAutoload
 
         Task {
             do {
                 let result = try await ForthAgentRunner.evaluate(
                     source: code,
                     cwd: cwd,
-                    autoload: autoload
+                    autoload: true
                 )
                 await MainActor.run {
                     self.agentTranscript = result.transcript.isEmpty
@@ -274,32 +382,47 @@ final class AIAssistantModel: ObservableObject {
                         : result.transcript
                     self.isBusy = false
                     if result.exitCode == 0 {
-                        self.status = "Agent OK (exit 0)."
+                        self.status = "Agent OK (exit 0) — enhancing…"
                     } else {
-                        self.status = "Agent finished with exit \(result.exitCode)."
+                        self.status = "Agent exit \(result.exitCode) — enhancing…"
                     }
+                    onFinished?(true)
                 }
             } catch {
                 await MainActor.run {
                     self.isBusy = false
                     self.agentTranscript = ""
                     self.status = error.localizedDescription
+                    onFinished?(false)
                 }
             }
         }
     }
 
     private func agentWorkingDirectory(workspace: WorkspaceModel) -> URL {
+        if let url = askOutputFileURL?.deletingLastPathComponent(),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
         if let dir = workspace.selectedTab?.fileURL?.deletingLastPathComponent(),
            FileManager.default.fileExists(atPath: dir.path) {
             return dir
         }
-        let docs = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/EditForth", isDirectory: true)
+        let docs = ForthMenuSupport.userTreeURL
         if FileManager.default.fileExists(atPath: docs.path) {
             return docs
         }
         return FileManager.default.homeDirectoryForCurrentUser
+    }
+
+    private static func askFileHeader(prompt: String) -> String {
+        var lines = ["\\ Ask Forth", "\\"]
+        for raw in prompt.split(separator: "\n", omittingEmptySubsequences: false) {
+            lines.append("\\ \(raw)")
+        }
+        lines.append("")
+        lines.append("")
+        return lines.joined(separator: "\n")
     }
 
     private static func systemPrompt(fileName: String?) -> String {
@@ -338,7 +461,6 @@ extension EditorTab {
         var lineContentsEnd = 0
         ns.getLineStart(&lineStart, end: &lineEnd, contentsEnd: &lineContentsEnd, for: NSRange(location: caret, length: 0))
 
-        // Walk up/down by newline count.
         var start = lineStart
         var up = 0
         while up < radiusLines, start > 0 {

@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.0** / build **9** is current. Ask Forth (Ollama + Library RAG + agent Eval/Fix) shipped in **2.3.0**; BYE console-drop and Find/Replace in **2.2.1**; debugger polish in **2.2.0**.  
+**Baseline:** **2.3.1** / build **10** is current. Ask Forth polish (AskForth-N.fth, Agent Enhance Reply) in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
 **Updated:** 2026-10-10.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).

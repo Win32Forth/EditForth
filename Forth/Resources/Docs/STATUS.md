@@ -1,8 +1,27 @@
 # 64Forth development status
 
-**Current:** **2.3.0** (build **9**) — shipped  
+**Current:** **2.3.1** (build **10**) — shipped  
 
 **Last updated:** 2026-10-10
+
+---
+
+## v2.3.1 — Ask Forth polish
+
+**Version strings:** marketing **2.3.1**, build **10** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.1** (`Releases/EditForth-2.3.1-macOS.dmg`). Replaces **v2.3.0**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.1 === Oct 10, 2026 11:23 PM ===
+```
+
+### Highlights
+
+- **Ask streams into `AskForth-N.fth`** under `~/Documents/EditForth` (no Reply box). Body text is word-wrapped at **80 columns**.
+- **Agent Enhance Reply** — one click: headless `64Forth --agent` with Autoload, then append an **Agent Enhanced Reply** section to the same file. Live load via status **INCLUDE** after hand-edit.
+- Library RAG defaults to **`Library/Sample`**. Streaming Ollama replies. Compact help panels; **Capture Selected to Prompt**; **Ask** beside the status row.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ---
 
@@ -18,12 +37,8 @@
 
 ### Highlights
 
-- **Ask Forth** — **View → Ask Forth** (⌥⌘A): trailing inspector for local LLM help. Capture Context, Ask, Copy Reply, **Insert into Editor**, **Eval Reply** / **Eval Prompt** (`64Forth --agent`), and **Fix from Agent**.
-- **Ollama required.** Install [Ollama](https://ollama.com), pull a model (default **`gemma4:e4b`**), and leave the app running. Without Ollama and a model, Ask / Fix report the model unreachable. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
-- **Models tried:** `gemma4:e4b` (default, snappy); `gemma4:12b` (stronger answers, heavy memory); `gemma4:31b-cloud` (fast via Ollama cloud — not fully local).
-- **Library context (RAG):** optional keyword snippets from a chosen Library folder (not the whole tree). Example: point at `Library/Sample` and ask “Make me a clock” — the model may pull pieces from `GCLOCK.FTH` / clock samples into a draft that is close but usually needs Fix / hand edits.
-- Typical loop: start EditForth (untitled buffer) → Ask Forth → **Insert into Editor** → read / Eval / Fix.
-- Panel width and chat/agent split are resizable. Backend seam: `LLMClient` / `OllamaClient` (MLX can swap later).
+- **Ask Forth** first ship — **View → Ask Forth** (⌥⌘A), local Ollama, Library RAG, `--agent` eval / Fix. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+- Models: `gemma4:e4b` (default); also `gemma4:12b`, `gemma4:31b-cloud`.
 
 ---
 

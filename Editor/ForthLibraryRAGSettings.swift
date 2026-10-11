@@ -14,10 +14,10 @@ struct ForthLibraryRAGSettings: Equatable, Sendable {
     static let contextLinesKey = "aiAssistantLibraryContextLines"
     static let maxCharsKey = "aiAssistantLibraryMaxChars"
 
-    /// Default search root.
+    /// Default search root: Sample (clocks, GRAPHICS demos). Library… can point elsewhere.
     static var defaultFolderPath: String {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/EditForth/Library", isDirectory: true)
+            .appendingPathComponent("Documents/EditForth/Library/Sample", isDirectory: true)
             .path
     }
 

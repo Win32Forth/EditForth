@@ -2,8 +2,8 @@
 //  AIAssistantPanel.swift
 //  EditForth
 //
-//  Trailing Ask-Forth inspector: local Ollama chat with editor context.
-//  Bordered Prompt / Reply / Agent boxes; horizontal splitter above the agent area.
+//  Trailing Ask-Forth inspector: local Ollama chat; replies stream into
+//  AskForth-N.fth in the editor. Agent transcript is optional / collapsed.
 //
 
 import SwiftUI
@@ -13,69 +13,60 @@ struct AIAssistantPanel: View {
     @ObservedObject var model: AIAssistantModel
     @EnvironmentObject private var workspace: WorkspaceModel
 
-    /// Height of the agent block (transcript + controls below the horizontal splitter).
-    @AppStorage("aiAgentPaneHeight") private var storedAgentHeight = 200.0
-    @State private var agentHeight = 200.0
-    @State private var agentDragStart: CGFloat?
+    /// Prompt TextEditor height only — agent pane fills whatever is left below the splitter.
+    @AppStorage("aiPromptEditorHeight") private var storedPromptHeight = 40.0
+    @State private var promptHeight = 40.0
+    @State private var promptDragStart: CGFloat?
     @State private var showLibrarySettings = false
 
-    private static let agentMinHeight: CGFloat = 120
-    private static let chatMinHeight: CGFloat = 160
+    /// About two lines of monospaced body text.
+    private static let promptMinHeight: CGFloat = 36
+    private static let promptMaxHeight: CGFloat = 180
+    private static let promptDefaultHeight: CGFloat = 40
 
     var body: some View {
-        GeometryReader { geo in
-            let splitterH = AIAssistantVSplitter.height
-            let maxAgent = max(
-                Self.agentMinHeight,
-                geo.size.height - Self.chatMinHeight - splitterH - 8
-            )
-            let clampedAgent = min(max(agentHeight, Self.agentMinHeight), maxAgent)
+        VStack(alignment: .leading, spacing: 0) {
+            chatSection
+                .frame(maxWidth: .infinity, alignment: .topLeading)
 
-            VStack(alignment: .leading, spacing: 0) {
-                chatSection
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-                AIAssistantVSplitter(
-                    onDrag: { translationY in
-                        let base = agentDragStart ?? clampedAgent
-                        if agentDragStart == nil { agentDragStart = clampedAgent }
-                        // Drag up (negative Y) grows the agent pane.
-                        let next = min(
-                            max(base - translationY, Self.agentMinHeight),
-                            maxAgent
-                        )
-                        agentHeight = next
-                    },
-                    onEnd: {
-                        agentDragStart = nil
-                        storedAgentHeight = agentHeight
-                    }
-                )
-
-                agentSection
-                    .frame(height: clampedAgent)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .onAppear {
-                agentHeight = max(storedAgentHeight, Self.agentMinHeight)
-            }
-            .onChange(of: geo.size.height) { _, _ in
-                if agentHeight > maxAgent {
-                    agentHeight = maxAgent
-                    storedAgentHeight = Double(maxAgent)
+            AIAssistantVSplitter(
+                onDrag: { translationY in
+                    // Drag down grows the prompt; drag up shrinks it (agent takes the rest).
+                    let base = promptDragStart ?? promptHeight
+                    if promptDragStart == nil { promptDragStart = promptHeight }
+                    promptHeight = min(
+                        max(base + translationY, Self.promptMinHeight),
+                        Self.promptMaxHeight
+                    )
+                },
+                onEnd: {
+                    promptDragStart = nil
+                    storedPromptHeight = Double(promptHeight)
                 }
+            )
+
+            agentSection
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear {
+            // Older builds stored ~80; clamp down to a two-line default when still large.
+            let stored = storedPromptHeight
+            let initial = stored > 60 ? Self.promptDefaultHeight : stored
+            promptHeight = min(max(initial, Self.promptMinHeight), Self.promptMaxHeight)
+            if stored != Double(promptHeight) {
+                storedPromptHeight = Double(promptHeight)
             }
-            .sheet(isPresented: $showLibrarySettings) {
-                LibraryRAGSettingsSheet()
-            }
+        }
+        .sheet(isPresented: $showLibrarySettings) {
+            LibraryRAGSettingsSheet()
         }
     }
 
-    // MARK: - Chat (prompt / reply)
+    // MARK: - Chat (prompt only — reply lives in AskForth-N.fth)
 
     private var chatSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -88,10 +79,13 @@ struct AIAssistantPanel: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("Local Ollama · Capture or type a question · Ask · Eval on 64Forth --agent · Fix from Agent to revise. Library… chooses the search folder and snippet limits.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            askForthHelpPanel(
+                """
+                Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
+
+                The Model entered here must be an Ollama compatible model that you have already downloaded and selected for use in the Ollama app for a conversation. Cloud based Models compatible with Ollama can also be used.
+                """
+            )
 
             HStack(spacing: 6) {
                 Text("Model")
@@ -102,9 +96,6 @@ struct AIAssistantPanel: View {
                     .font(.system(.caption, design: .monospaced))
                     .onSubmit { model.persistModelName() }
             }
-
-            Toggle("Prefer selection / caret context", isOn: $model.includeSelection)
-                .font(.caption)
 
             HStack(spacing: 8) {
                 Toggle("Include Library context", isOn: $model.includeLibraryContext)
@@ -120,19 +111,10 @@ struct AIAssistantPanel: View {
                 .help("Folder path, snippet count, context lines, and max characters")
             }
 
-            HStack(spacing: 8) {
-                Button("Capture Context") {
-                    model.captureContext(from: workspace)
-                }
-                .disabled(model.isBusy)
-
-                Button(model.isBusy ? "Asking…" : "Ask") {
-                    model.ask(workspace: workspace)
-                }
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(model.isBusy || model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.borderedProminent)
+            Button("Capture Selected to Prompt") {
+                model.captureSelectedToPrompt(from: workspace)
             }
+            .disabled(model.isBusy)
 
             Text("Prompt")
                 .font(.caption)
@@ -141,90 +123,108 @@ struct AIAssistantPanel: View {
                 .font(.system(.body, design: .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(6)
-                .frame(minHeight: 88, idealHeight: 110, maxHeight: 140)
+                .frame(height: promptHeight)
                 .askForthBoxChrome()
 
-            Text("Reply")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ScrollView {
-                Text(model.reply.isEmpty ? " " : model.reply)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            .padding(6)
-            .askForthBoxChrome()
-            .frame(maxHeight: .infinity)
-
-            HStack(spacing: 8) {
-                Button("Copy Reply") {
-                    model.copyReply()
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let name = model.askOutputFileName {
+                        Text("Output: \(name)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(model.status.isEmpty ? " " : model.status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .disabled(model.reply.isEmpty)
-
-                Button("Insert into Editor") {
-                    model.insertReply(into: workspace)
+                Button(askButtonTitle) {
+                    model.ask(workspace: workspace)
                 }
-                .disabled(model.reply.isEmpty || workspace.selectedTab == nil)
-
-                Spacer()
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(model.isBusy || model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.borderedProminent)
             }
-
-            Text(model.status)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
         }
+    }
+
+    /// About 2½ lines of caption2 (one line shorter than the prior ~3½); scroll for the rest.
+    private static let helpPanelHeight: CGFloat = 42
+
+    private func askForthHelpPanel(_ text: String) -> some View {
+        ScrollView {
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(4)
+        }
+        .frame(height: Self.helpPanelHeight)
+        .askForthBoxChrome()
+    }
+
+    private var askButtonTitle: String {
+        if !model.isBusy { return "Ask" }
+        if model.reply.isEmpty { return "Asking…" }
+        return "Streaming…"
+    }
+
+    private var enhanceButtonTitle: String {
+        guard model.isBusy else { return "Agent Enhance Reply" }
+        let s = model.status.lowercased()
+        if s.contains("enhanc") { return "Enhancing…" }
+        if s.contains("agent") { return "Evaluating…" }
+        return "Enhancing…"
     }
 
     // MARK: - Agent
 
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("64Forth agent")
+            Text("64Forth Agent")
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
-            Toggle("Autoload Library before eval", isOn: $model.agentAutoload)
-                .font(.caption)
-                .onChange(of: model.agentAutoload) { _, _ in
-                    model.persistAutoload()
-                }
+            askForthHelpPanel(
+                "Agent Enhance Reply asks the model to evaluate the Ask Forth transcript and to enhance its answer. The enhanced answer is appended to the AskForth-N.fth file with a header \"Agent Enhanced Reply\". Use INCLUDE in the status strip to load edited code into the live Forth console."
+            )
 
-            HStack(spacing: 8) {
-                Button("Eval Reply") {
-                    model.evalReply(workspace: workspace)
+            HStack(alignment: .center, spacing: 10) {
+                Button(enhanceButtonTitle) {
+                    model.evalReplyAndAgentFix(workspace: workspace)
                 }
                 .disabled(model.isBusy || model.reply.isEmpty)
-                .help("Run Forth from the reply (fenced block if present) via 64Forth --agent")
+                .help("Eval the latest Ask Forth reply via 64Forth --agent (Autoload on), then append an Agent Enhanced Reply section to the same file")
 
-                Button("Eval Prompt") {
-                    model.evalPrompt(workspace: workspace)
-                }
-                .disabled(model.isBusy || model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help("Run Forth from the prompt box via 64Forth --agent")
-
-                Button("Fix from Agent") {
-                    model.askFixFromAgent(workspace: workspace)
-                }
-                .disabled(model.isBusy || model.agentTranscript.isEmpty)
-                .help("Send the agent transcript and prior reply back to the model for a corrected answer")
+                Toggle("Show Agent Transcript", isOn: $model.showAgentTranscript)
+                    .font(.caption)
+                    .onChange(of: model.showAgentTranscript) { _, _ in
+                        model.persistShowAgentTranscript()
+                    }
             }
 
-            Text("Agent transcript")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ScrollView {
-                Text(model.agentTranscript.isEmpty ? " " : model.agentTranscript)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+            if model.showAgentTranscript {
+                Text("Agent transcript")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    Text(model.agentTranscript.isEmpty ? " " : model.agentTranscript)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .padding(6)
+                .askForthBoxChrome()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if !model.agentTranscript.isEmpty {
+                Text("Transcript ready (\(model.agentTranscript.count) chars) — turn on Show Agent Transcript to read it.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(6)
-            .askForthBoxChrome()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -240,7 +240,7 @@ private struct LibraryRAGSettingsSheet: View {
             Text("Library context")
                 .font(.title2.weight(.semibold))
 
-            Text("Ask Forth searches this folder for .fth excerpts matching your prompt. Only the top-scoring snippets are sent — not the whole tree.")
+            Text("Ask Forth searches this folder for .fth excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. Only the top-scoring snippets are sent — not the whole tree.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -345,7 +345,7 @@ private struct LibraryRAGSettingsSheet: View {
 // MARK: - Box chrome
 
 private extension View {
-    /// Visible border so Prompt / Reply / Agent boxes read as fields.
+    /// Visible border so Prompt / Agent boxes read as fields.
     func askForthBoxChrome() -> some View {
         self
             .background(Color(nsColor: .textBackgroundColor))
@@ -359,7 +359,7 @@ private extension View {
 
 // MARK: - Horizontal splitter (chat ↔ agent)
 
-/// Drag handle between Ask chat and 64Forth agent; drag up to grow the agent pane.
+/// Drag handle between Prompt and 64Forth agent; drag up to shrink the prompt (agent fills the rest).
 private struct AIAssistantVSplitter: View {
     static let height: CGFloat = 10
 
@@ -396,7 +396,7 @@ private struct AIAssistantVSplitter: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
-        .accessibilityLabel("Resize Ask Forth agent pane")
+        .accessibilityLabel("Resize Ask Forth prompt")
         .accessibilityAddTraits(.isButton)
     }
 }

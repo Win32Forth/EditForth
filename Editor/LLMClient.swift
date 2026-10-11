@@ -39,4 +39,29 @@ protocol LLMClient: Sendable {
 
     /// One-shot completion. `system` may be empty.
     func complete(system: String, user: String, model: String) async throws -> String
+
+    /// Stream completion tokens. Each `onDelta` call receives the next text fragment
+    /// (append to show a growing reply). Returns the full assembled reply.
+    func completeStreaming(
+        system: String,
+        user: String,
+        model: String,
+        onDelta: @escaping @Sendable (String) async -> Void
+    ) async throws -> String
+}
+
+extension LLMClient {
+    /// Default: one-shot `complete`, then a single delta with the full text.
+    func completeStreaming(
+        system: String,
+        user: String,
+        model: String,
+        onDelta: @escaping @Sendable (String) async -> Void
+    ) async throws -> String {
+        let text = try await complete(system: system, user: user, model: model)
+        if !text.isEmpty {
+            await onDelta(text)
+        }
+        return text
+    }
 }

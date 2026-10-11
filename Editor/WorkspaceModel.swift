@@ -65,6 +65,15 @@ final class EditorTab: Identifiable, ObservableObject {
         let idx = min(max(0, selection.location), ns.length)
         return EditorNSTextView.forthToken(at: idx, in: ns)
     }
+
+    /// Append streamed Ask Forth text and park the caret at the end.
+    func appendStreamingText(_ chunk: String) {
+        guard !chunk.isEmpty else { return }
+        text += chunk
+        isDirty = true
+        let end = (text as NSString).length
+        selection = NSRange(location: end, length: 0)
+    }
 }
 
 /// Owns the open-tab list and find-or-open for VIEW / EDIT / debugLocation.
@@ -264,6 +273,44 @@ final class WorkspaceModel: ObservableObject {
         insertTab(tab)
         selectedTabID = tab.id
         return tab
+    }
+
+    /// Create `~/Documents/EditForth/AskForth-N.fth` (next free N), write `initialText`, and open it.
+    @discardableResult
+    func createAskForthFile(initialText: String) -> EditorTab? {
+        let dir = ForthMenuSupport.userTreeURL
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            NSAlert(error: error).runModal()
+            return nil
+        }
+        let url = Self.nextAskForthURL(in: dir)
+        do {
+            try initialText.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            NSAlert(error: error).runModal()
+            return nil
+        }
+        return openURL(url, viewMode: false, line: nil)
+    }
+
+    /// Next unused `AskForth-N.fth` under `dir`.
+    static func nextAskForthURL(in dir: URL) -> URL {
+        var n = 1
+        while n < 100_000 {
+            let url = dir.appendingPathComponent("AskForth-\(n).fth", isDirectory: false)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+            n += 1
+        }
+        return dir.appendingPathComponent("AskForth-\(UUID().uuidString).fth", isDirectory: false)
+    }
+
+    /// Tab with `id` if it is still open.
+    func tab(id: UUID) -> EditorTab? {
+        tabs.first { $0.id == id }
     }
 
     // MARK: - Save

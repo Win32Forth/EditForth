@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.0** / build **9** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.0** (`Releases/EditForth-2.3.0-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.2.1: **Ask Forth** (View → Ask Forth, ⌥⌘A) — local Ollama assistant with Capture Context, Insert into Editor, Eval via `64Forth --agent`, Fix from Agent, and optional Library keyword RAG. Requires Ollama + a pulled model (default `gemma4:e4b`; also tried `gemma4:12b` and `gemma4:31b-cloud`). How-to: `Forth/Resources/Docs/Ask-Forth.md`. Prior 2.2.1: BYE drops the console; Find/Replace Match Case / Whole Word / N of M.
+Marketing **2.3.1** / build **10** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.1** (`Releases/EditForth-2.3.1-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.3.0: Ask Forth polish — stream into **`AskForth-N.fth`**, **Agent Enhance Reply**, Sample RAG default, 80-column wrap, compact panel. Requires Ollama + a pulled model (default `gemma4:e4b`). How-to: `Forth/Resources/Docs/Ask-Forth.md`. Prior 2.3.0 introduced Ask Forth; 2.2.1 BYE / Find-Replace.
 
 ## Why a new project
 
