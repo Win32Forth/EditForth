@@ -1,0 +1,1253 @@
+Forth 2012 Standard — implement
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: Reference Implementations
+
+< Portability guide
+
+Test Suite >
+
+Annex E: Reference Implementations
+
+E.1 Introduction
+
+In the most recent review of this document, proposals were encouraged
+to include a reference implementation where possible.  Where an
+implementation requires system specific knowledge it was documented.
+
+This appendix contains the reference implementations that have been
+accepted by the committee.  This is not a complete reference
+implementation nor do the committee recommend these implementations.
+They are supplied solely for the purpose of providing a detailed
+understanding of a definitions requirement.  System implementors are
+free to implement any operation in a manner that suits their system,
+but it must exhibit the same behavior as the reference implementation
+given here.
+
+E.6 The Core word set
+
+E.6.1.2050
+
+QUIT
+
+    : QUIT
+   ( empty the return stack and set the input source to the user input device )
+   POSTPONE [
+     REFILL
+   WHILE
+     ['] INTERPRET CATCH
+     CASE
+      0 OF STATE @ 0= IF
+    ." OK" THEN CR ENDOF
+     -1 OF ( Aborted ) ENDOF
+     -2 OF ( display message from ABORT" ) ENDOF
+     ( default ) DUP ." Exception # " .
+     ENDCASE
+   REPEAT BYE
+;
+
+This assumes the existence of a system-implementation word
+      INTERPRET that embodies the text interpreter semantics
+      described in 3.4 The Forth text interpreter.
+      Further discussion of the interpret loop can be found in
+      A.6.2.0945 COMPILE,.
+
+E.6.2.0698
+
+ACTION-OF
+
+    : ACTION-OF
+   STATE @ IF
+     POSTPONE ['] POSTPONE DEFER@
+   ELSE
+     ' DEFER@
+   THEN ; IMMEDIATE
+
+E.6.2.0825
+
+BUFFER:
+
+This implementation depends on children of CREATE
+      returning an aligned address.  Other memory location techniques
+      require implementation-specific knowledge of the underlying Forth
+      system.
+
+: BUFFER: \ u "<name>" – ; – addr
+\ Create a buffer of u address units whose address is returned at run time.
+   CREATE ALLOT
+;
+
+E.6.2.1173
+
+DEFER
+
+    : DEFER ( "name" -- )
+   CREATE ['] ABORT ,
+DOES> ( ... -- ... )
+   @ EXECUTE ;
+
+E.6.2.1175
+
+DEFER!
+
+    : DEFER! ( xt2 xt1 -- )
+   >BODY ! ;
+
+E.6.2.1177
+
+DEFER@
+
+    : DEFER@ ( xt1 -- xt2 )
+   >BODY @ ;
+
+E.6.2.1675
+
+HOLDS
+
+    : HOLDS ( addr u -- )
+   BEGIN DUP WHILE 1- 2DUP +
+    C@ HOLD REPEAT 2DROP ;
+
+E.6.2.1725
+
+IS
+
+    : IS
+   STATE @ IF
+     POSTPONE ['] POSTPONE DEFER!
+   ELSE
+     ' DEFER!
+   THEN ; IMMEDIATE
+
+E.6.2.2020
+
+PARSE-NAME
+
+    : isspace? ( c -- f )
+   BL 1+ U< ;
+
+    : isnotspace? ( c -- f )
+   isspace? 0= ;
+
+    : xt-skip ( addr1 n1 xt -- addr2 n2 )
+   \ skip all characters satisfying xt ( c -- f )
+   >R
+   BEGIN
+     DUP
+   WHILE
+     OVER C@ R@ EXECUTE
+   WHILE
+     1 /STRING
+   REPEAT THEN
+   R> DROP ;
+
+    : parse-name ( "name" -- c-addr u )
+   SOURCE >IN @ /STRING
+   ['] isspace? xt-skip OVER >R
+   ['] isnotspace? xt-skip ( end-word restlen r: start-word )
+   2DUP 1 MIN + SOURCE DROP - >IN !
+   DROP R> TUCK - ;
+
+E.8 The optioinal Double-Number word set
+
+E.8.6.2.0435
+
+2VALUE
+
+The implementation of TO to include 2VALUEs
+      requires detailed knowledge of the host implementation of
+      VALUE and TO, which is the main reason why
+      2VALUE should be standardized.  The order in which
+      the two cells are stored in memory is not specified in the
+      definition for 2VALUE but this reference implementation
+      has to assume one ordering — this is not intended to be
+      definitive.
+
+: 2VALUE ( x1 x2 -- )
+   CREATE , ,
+   DOES> 2@ ( -- x1 x2 )
+;
+
+      The corresponding implementation of TO disregards the
+      issue that TO must also work for integer VALUEs
+      and locals.
+
+: TO ( x1 x2 "<spaces>name" -- )
+   ' >BODY
+   STATE @ IF
+     POSTPONE 2LITERAL POSTPONE 2!
+   ELSE
+     2!
+   THEN
+; IMMEDIATE
+
+E.10 The optioinal Exception word set
+
+E.9.6.1.0875
+
+CATCH
+
+This sample implementation of CATCH uses the non-standard
+      words described below.  They or their equivalents are available in many
+      systems.  Other implementation strategies, including directly saving the
+      value of DEPTH, are possible if such words are not available.
+
+      SP@ ( -- addr )
+returns the address corresponding to the top of data stack.
+
+      SP! ( addr -- )
+sets the stack pointer to addr, thus restoring the stack
+      depth to the same depth that existed just before addr was
+      acquired by executing SP@.
+
+      RP@ ( -- addr )
+returns the address corresponding to the top of return stack.
+
+      RP! ( addr -- )
+sets the return stack pointer to addr, thus restoring the
+      return stack depth to the same depth that existed just before
+      addr was acquired by executing RP@.
+
+          VARIABLE HANDLER   0 HANDLER !   \ last exception handler
+
+           : CATCH   ( xt -- exception# | 0  \ return addr on stack
+
+             SP@ >R					            ( xt )       \ save data stack pointer
+
+             HANDLER @ >R		      ( xt )       \ and previous handler
+
+             RP@ HANDLER !			     ( xt )       \ set current handler
+
+             EXECUTE					           ( )	           \ execute returns if no THROW
+
+             R> HANDLER !	      ( )            \ restore previous handler
+
+             R> DROP		           ( )            \ discard saved stack ptr
+
+             	0								                ( 0 )        \ normal completion
+
+          ;
+
+In a multi-tasking system, the HANDLER variable should be in
+          the per-task variable area (i.e., a user variable).
+
+          This sample implementation does not explicitly handle the case in
+          which CATCH has never been called (i.e., the ABORT
+          behavior). One solution would be to execute a CATCH within
+          QUIT, so that there is always an "exception handler of last
+          resort" present, as shown in E.6.1.2050 QUIT.
+
+E.9.6.1.2275
+
+THROW
+
+    This is the counter part to E.9.6.1.0875 CATCH.
+
+       : THROW ( ??? exception# -- ??? exception# )
+
+          ?DUP IF				         ( exc# )		    \ 0 THROW is no-op
+
+            HANDLER @ RP!				  ( exc# )		    \ restore prev return stack
+
+            R> HANDLER !		   ( exc# )		    \ restore prev handler
+
+            R> SWAP >R	     ( saved-sp )	 \ exc# on return stack
+
+            SP! DROP R>		    ( exc# )		    \ restore stack
+
+            \ Return to the caller of CATCH because return
+
+            \ stack is restored to the state that existed
+
+            	\ when CATCH began execution
+
+          THEN
+
+      ;
+
+E.9.6.2.0670
+
+ABORT
+
+    : ABORT   -1 THROW   ;
+
+E.12 The optioinal Facility word set
+
+E.10.6.2.0135
+
++FIELD
+
+    Create a new field within a structure definition
+    of size n bytes.
+
+    : +FIELD  \ n <"name"> -- ; Exec: addr -- 'addr
+   CREATE OVER , +
+   DOES> @ +
+;
+
+E.10.6.2.0763
+
+BEGIN-STRUCTURE
+
+    Begin definition of a new structure. Use in the
+    form BEGIN-STRUCTURE <name>.  At run time
+    <name> returns the size of the structure.
+
+    : BEGIN-STRUCTURE  \ -- addr 0 ; -- size
+   CREATE
+     HERE 0  0 ,      \  mark stack, lay dummy
+   DOES> @             \ -- rec-len
+;
+
+E.10.6.2.1306.40
+
+EKEY>FKEY
+
+    The implementation is closely tied to the implementation
+    of EKEY and therefore unportable.
+
+E.10.6.2.1336
+
+END-STRUCTURE
+
+    Terminate definition of a structure.
+
+    : END-STRUCTURE  \ addr n --
+   SWAP ! ;          \ set len
+
+E.14 The optioinal File-Access word set
+
+E.11.6.2.1714
+
+INCLUDE
+
+    : INCLUDE ( i*x "name" -- j*x )
+   PARSE-NAME INCLUDED ;
+
+E.11.6.2.2144.10
+
+REQUIRE
+
+    : REQUIRE ( i*x "name" -- i*x )
+   PARSE-NAME REQUIRED ;
+
+E.11.6.2.2144.50
+
+REQUIRED
+
+This implementation does not implement the requirements with
+      regard to MARKER and FORGET (REQUIRED
+      only includes each file once, whether a marker was executed or
+      not), so it is not a correct implementation on systems that
+      support these words. It extends the definition of INCLUDED
+      to record the name of files which have been either included or
+      required previously. The names are recorded in a linked list
+      held in the included-names variable.
+
+: save-mem	( addr1 u -- addr2 u ) \ gforth
+\ copy a memory block into a newly allocated region in the heap
+   SWAP >R
+   DUP ALLOCATE THROW
+   SWAP 2DUP R> ROT ROT MOVE ;
+: name-add ( addr u listp -- )
+   >R save-mem ( addr1 u )
+   3 CELLS ALLOCATE THROW \ allocate list node
+   R@ @ OVER ! \ set next pointer
+   DUP R> ! \ store current node in list var
+   CELL+ 2! ;
+: name-present? ( addr u list -- f )
+   ROT ROT 2>R BEGIN ( list R: addr u )
+     DUP
+   WHILE
+     DUP CELL+ 2@ 2R@ COMPARE 0= IF
+      		DROP 2R> 2DROP TRUE EXIT
+    	THEN
+     @
+   REPEAT
+   ( DROP 0 ) 2R> 2DROP ;
+: name-join ( addr u list -- )
+   >R 2DUP R@ @ name-present? IF
+     R> DROP 2DROP
+   ELSE
+     R> name-add
+   THEN ;
+VARIABLE included-names 0 included-names !
+: included ( i*x addr u -- j*x )
+   2DUP included-names name-join
+   INCLUDED ;
+: REQUIRED ( i*x addr u -- i*x )
+   2DUP included-names @ name-present? 0= IF
+     included
+   ELSE
+     2DROP
+   THEN ;
+
+E.16 The optioinal Floating-Point word set
+
+E.12.6.2.1471
+
+F>S
+
+    : F>S ( r -- n )
+   F>D D>S
+;
+
+E.12.6.2.1627
+
+FTRUNC
+
+    : FTRUNC   ( r1 -- r2 )
+         FDUP F0= 0=
+   IF	   FDUP F0<
+   IF	   FNEGATE FLOOR FNEGATE
+   ELSE   FLOOR
+   THEN
+   THEN   ;
+
+E.12.6.2.1628
+
+FVALUE
+
+The implementation of FVALUE requires detailed
+      knowledge of the host implementation of VALUE and
+      TO.
+
+VARIABLE %var
+: TO 1 %var ! ;
+
+          : FVALUE ( F: r -- ) ( "<spaces>name" -- )
+   CREATE F,
+   DOES> %var @ IF F! ELSE F@ THEN
+         0 %var ! ;
+
+          : VALUE ( x "<spaces>name" -- )
+   CREATE ,
+   DOES> %var @ IF  ! ELSE  @ THEN
+         0 %var ! ;
+
+E.12.6.2.2175
+
+S>F
+
+    : S>F ( n -- r )
+   S>D D>F
+;
+
+E.18 The optioinal Locals word set
+
+E.13.6.2.1795
+
+LOCALS|
+
+    : LOCALS| ( "name...name |" -- )
+   BEGIN
+    BL WORD   COUNT OVER C@
+    [CHAR] | - OVER 1 - OR   WHILE
+    (LOCAL)
+   REPEAT 2DROP   0 0 (LOCAL)
+; IMMEDIATE
+
+E.13.6.2.2550
+
+{:
+
+    12345 CONSTANT undefined-value
+
+    : match-or-end? ( c-addr1 u1 c-addr2 u2 -- f )
+   2 PICK 0= >R COMPARE 0= R> OR ;
+
+    : scan-args
+   \ 0 c-addr1 u1 -- c-addr1 u1 ... c-addrn un n c-addrn+1 un+1
+   BEGIN
+    	2DUP S" |"    match-or-end? 0= WHILE
+    	2DUP S" --" match-or-end? 0= WHILE
+    	2DUP S" :}"  match-or-end? 0= WHILE
+    	ROT 1+ PARSE-NAME
+   AGAIN THEN THEN THEN ;
+
+    : scan-locals
+   \ n c-addr1 u1 -- c-addr1 u1 ... c-addrn un n c-addrn+1 un+1
+   2DUP S" |" COMPARE 0= 0= IF
+    	EXIT
+   THEN
+   2DROP PARSE-NAME
+   BEGIN
+    	2DUP S" --" match-or-end? 0= WHILE
+    	2DUP S" :}"  match-or-end? 0= WHILE
+    	ROT 1+ PARSE-NAME
+    	POSTPONE undefined-value
+   AGAIN THEN THEN ;
+
+    : scan-end ( c-addr1 u1 -- c-addr2 u2 )
+   BEGIN
+    	2DUP S" :}" match-or-end? 0= WHILE
+    	2DROP PARSE-NAME
+   REPEAT ;
+
+    : define-locals ( c-addr1 u1 ... c-addrn un n -- )
+   0 ?DO
+    	(LOCAL)
+   LOOP
+   0 0 (LOCAL) ;
+
+    : {: ( -- )
+   0 PARSE-NAME
+   scan-args scan-locals scan-end
+   2DROP define-locals
+; IMMEDIATE
+
+E.20 The optioinal Programming-Tools word set
+
+E.15.6.2.1908
+
+N>R
+
+    This implementation depends on the return address being on
+    the return stack.
+
+      : N>R           \ xn .. x1 N -- ; R: -- x1 .. xn n
+
+      \ Transfer N items and count to the return stack.
+
+         DUP                        \ xn .. x1 N N --
+
+         BEGIN
+
+            DUP
+
+         WHILE
+
+            ROT R> SWAP >R >R      \ xn .. N N -- ; R: .. x1 --
+
+            1-                      \ xn .. N 'N -- ; R: .. x1 --
+
+         REPEAT
+
+         DROP                       \ N -- ; R: x1 .. xn --
+
+         R> SWAP >R >R
+
+      ;
+
+E.15.6.2.1940
+
+NR>
+
+    This implementation depends on the return address being on
+    the return stack.
+
+      : NR> \ -- xn .. x1 N ; R: x1 .. xn N --
+
+      \ Pull N items and count off the return stack.
+
+         R> R> SWAP >R DUP
+
+         BEGIN
+
+            DUP
+
+         WHILE
+
+            R> R> SWAP >R -ROT
+
+            1-
+
+         REPEAT
+
+         DROP
+
+      ;
+
+E.15.6.2.2264
+
+SYNONYM
+
+The implementation of SYNONYM requires detailed knowledge
+      of the host implementation, which is one reason why it should be
+      standardized.  The implementation below is imperfect and specific
+      to VFX Forth, in particular HIDE, REVEAL and
+      IMMEDIATE? are non-standard words.
+
+: SYNONYM \ "newname" "oldname" --
+\ Create a new definition which redirects to an existing one.
+   CREATE IMMEDIATE
+     HIDE ' , REVEAL
+   DOES>
+     @  STATE @ 0= OVER IMMEDIATE? OR
+     IF EXECUTE ELSE COMPILE, THEN
+;
+
+E.15.6.2.2530.30
+
+[DEFINED]
+
+    : [DEFINED] BL WORD FIND NIP 0<> ; IMMEDIATE
+
+E.15.6.2.2531
+
+[ELSE]
+
+      : [ELSE] ( -- )
+
+          1 BEGIN																		                                         \ level
+
+             BEGIN   BL WORD COUNT   DUP   WHILE	                	\ level adr len
+
+               2DUP S" [IF]"  COMPARE 0= IF			                	\ level adr len
+
+                   2DROP 1+														                               		\ level'
+
+                ELSE																	                                      	\ level adr len
+
+                  2DUP S" [ELSE]" COMPARE 0= IF	           		\ level adr len
+
+                      2DROP 1- DUP IF 1+ THEN		             		\ level'
+
+                  ELSE																	                                    		\ level adr len
+
+                      S" [THEN]" COMPARE 0= IF				            		\ level
+
+                         1-																                               			\ level'
+
+                     THEN
+
+                   THEN
+
+                THEN ?DUP 0=   IF EXIT THEN		                 	\ level'
+
+             REPEAT 2DROP														                                 	\ level
+
+         REFILL 0= UNTIL													                                  \ level
+
+          DROP
+
+      ; IMMEDIATE
+
+E.15.6.2.2532
+
+[IF]
+
+    : [IF] ( flag -- )
+   0= IF POSTPONE [ELSE] THEN
+; IMMEDIATE
+
+E.15.6.2.2533
+
+[THEN]
+
+    : [THEN] ( -- ) ; IMMEDIATE
+
+E.15.6.2.2534
+
+[UNDEFINED]
+
+    : [UNDEFINED] BL WORD FIND NIP 0= ; IMMEDIATE
+
+E.22 The optioinal Search-Order word set
+
+E.16.6.1.1180
+
+DEFINITIONS
+
+    : discard ( x1 ... xn u -- ) \ Drop u+1 stack items
+   0 ?DO DROP LOOP
+;
+
+    : DEFINITIONS ( -- )
+   GET-ORDER SWAP  SET-CURRENT discard
+;
+
+E.16.6.1.1550
+
+FIND
+
+    Assuming #order and
+    context are defined as per E.16.6.1.1647 GET-ORDER.
+
+      : FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+
+         0 														                            	( c-addr 0 )
+
+         #order @ 0 ?DO
+
+            OVER COUNT							                	( c-addr 0 c-addr' u )
+
+            I CELLS context + @		       	( c-addr 0 c-addr' u wid )
+
+            SEARCH-WORDLIST								           	( c-addr 0; 0 | w 1 | q -1 )
+
+            ?DUP IF								                   	( c-addr 0; w 1 | w -1 )
+
+                  	2SWAP 2DROP LEAVE			  		( w 1 | w -1 )
+
+               THEN											                   	( c-addr 0 )
+
+            LOOP												                      	( c-addr 0 | w 1 | w -1 )
+
+         ;
+
+E.16.6.1.1647
+
+GET-ORDER
+
+    Here is a very simple search order implementation:
+
+    VARIABLE #order
+
+    CREATE context    16 ( wordlists ) CELLS ALLOT
+
+    : GET-ORDER ( -- wid1 ... widn n )
+   #order @ 0 ?DO
+     #order @ I - 1- CELLS context + @
+   LOOP
+   #order @
+;
+
+E.16.6.1.2197
+
+SET-ORDER
+
+    This is the complement of E.16.6.1.1647 GET-ORDER.
+
+    : SET-ORDER ( wid1 ... widn n -0 )
+   DUP -1 = IF
+     DROP <push system default word lists and n>
+   THEN
+   DUP #order !
+   0 ?DO   I CELLS context + !   LOOP
+;
+
+E.16.6.2.0715
+
+ALSO
+
+    : ALSO ( -- )
+   GET-ORDER OVER SWAP 1+ SET-ORDER
+;
+
+E.16.6.2.1590
+
+FORTH
+
+    : (wordlist) ( wid "<name>" – ; )
+   CREATE ,
+   DOES>
+     @  >R
+     GET-ORDER NIP
+     R> SWAP SET-ORDER
+;
+
+    FORTH-WORDLIST (wordlist) FORTH
+
+E.16.6.2.1965
+
+ONLY
+
+    : ONLY ( -- ) -1 SET-ORDER ;
+
+E.16.6.2.2037
+
+PREVIOUS
+
+    : PREVIOUS ( -- )
+    GET-ORDER NIP 1- SET-ORDER
+    ;
+
+E.24 The optioinal String word set
+
+E.17.6.2.2141
+
+REPLACES
+
+    DECIMAL
+
+    [UNDEFINED] place [IF]
+   : place    \  c-addr1 u c-addr2 --
+   \ Copy the string described by c-addr1 u as a counted
+   \ string at the memory address described by c-addr2.
+     2DUP 2>R
+     1 CHARS + SWAP MOVE
+     2R> C!
+   ;
+[THEN]
+
+    : "/COUNTED-STRING" S" /COUNTED-STRING" ;
+"/COUNTED-STRING" ENVIRONMENT? 0= [IF] 256 [THEN]
+CHARS CONSTANT string-max
+
+    WORDLIST CONSTANT wid-subst
+\ Wordlist ID of the wordlist used to hold substitution names and replacement text.
+
+    [DEFINED] VFXforth [IF] \ VFX Forth
+   : makeSubst	\ c-addr len -- c-addr
+   \ Given a name string create a substution and storage space.
+   \ Return the address of the buffer for the substitution text.
+   \ This word requires system specific knowledge of the host Forth.
+   \ Some systems may need to perform case conversion here.
+     GET-CURRENT >R wid-subst SET-CURRENT
+     ($create)                            \ like CREATE but takes c-addr/len
+     R> SET-CURRENT
+     HERE  string-max ALLOT  0 OVER C!	\ create buffer space
+   ;
+[THEN]
+
+    [DEFINED] (WID-CREATE) [IF] \ SwiftForth
+   : makeSubst \ c-addr len -- c-addr
+     wid-subst (WID-CREATE)            \ like CREATE but takes c-addr/len/wid
+     LAST @ >CREATE !
+     HERE  string-max ALLOT  0 OVER C! \ create buffer space
+   ;
+[THEN]
+
+    : findSubst \ c-addr len -- xt flag | 0
+\ Given a name string, find the substitution.
+\ Return xt and flag if found, or just zero if not found.
+\ Some systems may need to perform case conversion here.
+   wid-subst SEARCH-WORDLIST
+;
+
+    : REPLACES \ text tlen name nlen --
+\ Define the string text/tlen as the text to substitute for the substitution named name/nlen.
+\ If the substitution does not exist it is created.
+   2DUP findSubst IF
+     NIP NIP  EXECUTE    \ get buffer address
+   ELSE
+     makeSubst
+   THEN
+   place                  \ copy as counted string
+;
+
+E.17.6.2.2255
+
+SUBSTITUTE
+
+    Assuming E.17.6.2.2141 REPLACES has been defined.
+
+    [UNDEFINED] bounds [IF]
+   : bounds    \ addr len -- addr+len addr
+     OVER + SWAP
+   ;
+[THEN]
+
+    [UNDEFINED] -rot [IF]
+   : -rot    \ a b c -- c a b
+     ROT ROT
+   ;
+[THEN]
+
+    CHAR % CONSTANT delim
+        \ Character used as the substitution name delimiter.
+string-max BUFFER: Name
+     \ Holds substitution name as a counted string.
+VARIABLE DestLen
+              \ Maximum length of the destination buffer.
+2VARIABLE Dest
+                \ Holds destination string current length and address.
+VARIABLE SubstErr
+             \ Holds zero or an error code.
+
+    : addDest \ char --
+\ Add the character to the destination string.
+   Dest @ DestLen @ < IF
+     Dest 2@ + C!  1 CHARS Dest +!
+   ELSE
+     DROP -1 SubstErr !
+   THEN
+;
+
+    : formName \ c-addr len -- c-addr' len'
+\ Given a source string pointing at a leading delimiter, place the name string in the name buffer.
+   1 /STRING 2DUP delim scan >R DROP				  \ find length of residue
+   2DUP R> - DUP >R Name place        \ save name in buffer
+   R> 1 CHARS + /STRING						                \ step over name and trailing %
+;
+
+    : >dest \ c-addr len --
+\ Add a string to the output string.
+   bounds ?DO
+     I C@ addDest
+   1 CHARS +LOOP
+;
+
+    : processName \ -- flag
+\ Process the last substitution name. Return true if found, 0 if not found.
+   Name COUNT findSubst DUP >R IF
+     EXECUTE COUNT >dest
+   ELSE
+     delim addDest  Name COUNT >dest  delim addDest
+   THEN
+   R>
+;
+
+    : SUBSTITUTE \ src slen dest dlen -- dest dlen' n
+\ Expand the source string using substitutions.
+\ Note that this version is simplistic, performs no error checking,
+\ and requires a global buffer and global variables.
+   Destlen !  0 Dest 2!  0 -rot \ -- 0 src slen
+   0 SubstErr !
+   BEGIN
+     DUP 0 >
+   WHILE
+     OVER C@ delim <> IF									               \ character not %
+      	OVER C@ addDest  1 /STRING
+     ELSE
+      	OVER 1 CHARS + C@ delim = IF	   \ %% for one output %
+        		delim addDest  2 /STRING													      \ add one % to output
+      	ELSE
+        		formName processName IF
+          			ROT 1+ -rot														                   \ count substitutions
+        		THEN
+      	THEN
+     THEN
+   REPEAT
+   2DROP Dest 2@  ROT SubstErr @ IF
+    	DROP  SubstErr @
+   THEN
+;
+
+E.17.6.2.2375
+
+UNESCAPE
+
+    : UNESCAPE \ c-addr1 len1 c-addr2 -- c-addr2 len2
+\ Replace each '%' character in the input string c-addr1 len1 with two '%' characters.
+\ The output is represented by c-addr2 len2.
+\ If you pass a string through UNESCAPE and then SUBSTITUTE, you get the original string.
+   DUP 2SWAP  OVER + SWAP ?DO
+     I C@ [CHAR] % = IF
+       [CHAR] % OVER C! 1+
+     THEN
+     I C@ OVER C! 1+
+   LOOP
+   OVER -
+;
+
+E.25 The optional Extended-Character word set
+
+This reference implementation assumes the UTF-8 character encoding
+is being used.
+
+E.18.6.1.2486.50
+
+X-SIZE
+
+    : X-SIZE ( xc-addr u1 -- u2 )
+   0=         IF DROP 0 EXIT THEN
+   \ length of UTF-8 char starting at u8-addr (accesses only u8-addr)
+   C@
+   DUP $80 U< IF DROP 1 EXIT THEN
+   DUP $c0 U< IF -77 THROW   THEN
+   DUP $e0 U< IF DROP 2 EXIT THEN
+   DUP $f0 U< IF DROP 3 EXIT THEN
+   DUP $f8 U< IF DROP 4 EXIT THEN
+   DUP $fc U< IF DROP 5 EXIT THEN
+   DUP $fe U< IF DROP 6 EXIT THEN
+   -77 THROW ;
+
+E.18.6.1.2487.10
+
+XC!+
+
+    : XC!+ ( xchar xc-addr -- xc-addr' )
+   OVER $80 U< IF TUCK C! CHAR+ EXIT THEN \ special case ASCII
+   >R 0 SWAP $3F
+   BEGIN 2DUP U> WHILE
+     2/ >R DUP $3F AND $80 OR SWAP 6 RSHIFT R>
+   REPEAT $7F XOR 2* OR R>
+   BEGIN OVER $80 U< 0= WHILE TUCK C! CHAR+ REPEAT NIP
+;
+
+E.18.6.1.2487.15
+
+XC!+?
+
+    : XC!+? ( xchar xc-addr u -- xc-addr' u' flag )
+   >R OVER XC-SIZE R@ OVER U< IF ( xchar xc-addr1 len r: u1 )
+     \ not enough space
+     DROP NIP R> FALSE
+   ELSE
+     >R XC!+ R> R> SWAP - TRUE
+   THEN ;
+
+E.18.6.1.2487.20
+
+XC,
+
+    : XC, ( xchar -- ) HERE XC!+ DP ! ;
+
+E.18.6.1.2487.25
+
+XC-SIZE
+
+    : XC-SIZE ( xchar -- n )
+   DUP $80 U< IF DROP 1 EXIT THEN \ special case ASCII
+   $800  2 >R
+   BEGIN 2DUP U>= WHILE  5 LSHIFT R> 1+ >R DUP 0= UNTIL THEN
+   2DROP R>
+;
+
+E.18.6.1.2487.35
+
+XC@+
+
+    : XC@+ ( xc-addr -- xc-addr' u )
+   COUNT DUP $80 U< IF EXIT THEN  \ special case ASCII
+   $7F AND $40 >R
+   BEGIN DUP R@ AND WHILE R@ XOR
+     6 LSHIFT R> 5 LSHIFT >R >R COUNT
+     $3F AND R> OR
+   REPEAT R> DROP
+;
+
+E.18.6.1.2487.40
+
+XCHAR+
+
+    : XCHAR+ ( xc-addr -- xc-addr' )  XC@+ DROP ;
+
+E.18.6.1.2488.10
+
+XEMIT
+
+    : XEMIT ( xchar -- )
+   DUP $80 U< IF EMIT EXIT THEN \ special case ASCII
+   0 SWAP $3F
+   BEGIN 2DUP U> WHILE
+     2/ >R DUP $3F AND $80 OR SWAP 6 RSHIFT R>
+   REPEAT $7F XOR 2* OR
+   BEGIN DUP $80 U< 0= WHILE EMIT REPEAT DROP
+;
+
+E.18.6.1.2488.30
+
+XKEY
+
+    : XKEY ( -- xchar )
+   KEY DUP $80 U< IF EXIT THEN \ special case ASCII
+   $7F AND $40 >R
+   BEGIN DUP R@ AND WHILE R@ XOR
+     6 LSHIFT R> 5 LSHIFT >R >R KEY
+     $3F AND R> OR
+   REPEAT R> DROP ;
+
+E.18.6.2.0145
+
++X/STRING
+
+    : +X/STRING ( xc-addr1 u1 -- xc-addr2 u2 )
+   OVER DUP XCHAR+ SWAP - /STRING ;
+
+E.18.6.2.0175
+
+-TRAILING-GARBAGE
+
+    : -TRAILING-GARBAGE ( xc-addr u1 -- xc-addr u2 )
+   2DUP + DUP XCHAR- ( addr u1 end1 end2 )
+   2DUP DUP OVER OVER - X-SIZE + = IF \ last xchar ok
+     2DROP
+   ELSE
+     NIP NIP OVER -
+   THEN ;
+
+E.18.6.2.0895
+
+CHAR
+
+    : CHAR ( "name" -- xchar )
+    BL WORD COUNT DROP XC@+ NIP ;
+
+E.18.6.2.2486.70
+
+X-WIDTH
+
+    : X-WIDTH ( xc-addr u -- n )
+   0 ROT ROT OVER + SWAP ?DO
+     I XC@+ SWAP >R XC-WIDTH +
+   R> I - +LOOP ;
+
+E.18.6.2.2487.30
+
+XC-WIDTH
+
+    : wc, ( n low high -- )  1+ , , , ;
+
+    CREATE wc-table \ derived from wcwidth source code, for UCS32
+0  0300  0357 wc,    
+    0  035D  036F wc,    
+    0  0483  0486 wc,
+0  0488  0489 wc,    
+    0  0591  05A1 wc,    
+    0  05A3  05B9 wc,
+0  05BB  05BD wc,    
+    0  05BF  05BF wc,    
+    0  05C1  05C2 wc,
+0  05C4  05C4 wc,    
+    0  0600  0603 wc,    
+    0  0610  0615 wc,
+0  064B  0658 wc,    
+    0  0670  0670 wc,    
+    0  06D6  06E4 wc,
+0  06E7  06E8 wc,    
+    0  06EA  06ED wc,    
+    0  070F  070F wc,
+0  0711  0711 wc,    
+    0  0730  074A wc,    
+    0  07A6  07B0 wc,
+0  0901  0902 wc,    
+    0  093C  093C wc,    
+    0  0941  0948 wc,
+0  094D  094D wc,    
+    0  0951  0954 wc,    
+    0  0962  0963 wc,
+0  0981  0981 wc,    
+    0  09BC  09BC wc,    
+    0  09C1  09C4 wc,
+0  09CD  09CD wc,    
+    0  09E2  09E3 wc,    
+    0  0A01  0A02 wc,
+0  0A3C  0A3C wc,    
+    0  0A41  0A42 wc,    
+    0  0A47  0A48 wc,
+0  0A4B  0A4D wc,    
+    0  0A70  0A71 wc,    
+    0  0A81  0A82 wc,
+0  0ABC  0ABC wc,    
+    0  0AC1  0AC5 wc,    
+    0  0AC7  0AC8 wc,
+0  0ACD  0ACD wc,    
+    0  0AE2  0AE3 wc,    
+    0  0B01  0B01 wc,
+0  0B3C  0B3C wc,    
+    0  0B3F  0B3F wc,    
+    0  0B41  0B43 wc,
+0  0B4D  0B4D wc,    
+    0  0B56  0B56 wc,    
+    0  0B82  0B82 wc,
+0  0BC0  0BC0 wc,    
+    0  0BCD  0BCD wc,    
+    0  0C3E  0C40 wc,
+0  0C46  0C48 wc,    
+    0  0C4A  0C4D wc,    
+    0  0C55  0C56 wc,
+0  0CBC  0CBC wc,    
+    0  0CBF  0CBF wc,    
+    0  0CC6  0CC6 wc,
+0  0CCC  0CCD wc,    
+    0  0D41  0D43 wc,    
+    0  0D4D  0D4D wc,
+0  0DCA  0DCA wc,    
+    0  0DD2  0DD4 wc,    
+    0  0DD6  0DD6 wc,
+0  0E31  0E31 wc,    
+    0  0E34  0E3A wc,    
+    0  0E47  0E4E wc,
+0  0EB1  0EB1 wc,    
+    0  0EB4  0EB9 wc,    
+    0  0EBB  0EBC wc,
+0  0EC8  0ECD wc,    
+    0  0F18  0F19 wc,    
+    0  0F35  0F35 wc,
+0  0F37  0F37 wc,    
+    0  0F39  0F39 wc,    
+    0  0F71  0F7E wc,
+0  0F80  0F84 wc,    
+    0  0F86  0F87 wc,    
+    0  0F90  0F97 wc,
+0  0F99  0FBC wc,    
+    0  0FC6  0FC6 wc,    
+    0  102D  1030 wc,
+0  1032  1032 wc,    
+    0  1036  1037 wc,    
+    0  1039  1039 wc,
+0  1058  1059 wc,    
+    1  0000  1100 wc,    
+    2  1100  115f wc,
+0  1160  11FF wc,    
+    0  1712  1714 wc,    
+    0  1732  1734 wc,
+0  1752  1753 wc,    
+    0  1772  1773 wc,    
+    0  17B4  17B5 wc,
+0  17B7  17BD wc,    
+    0  17C6  17C6 wc,    
+    0  17C9  17D3 wc,
+0  17DD  17DD wc,    
+    0  180B  180D wc,    
+    0  18A9  18A9 wc,
+0  1920  1922 wc,    
+    0  1927  1928 wc,    
+    0  1932  1932 wc,
+0  1939  193B wc,    
+    0  200B  200F wc,    
+    0  202A  202E wc,
+0  2060  2063 wc,    
+    0  206A  206F wc,    
+    0  20D0  20EA wc,
+2  2329  232A wc,    
+    0  302A  302F wc,    
+    2  2E80  303E wc,
+0  3099  309A wc,    
+    2  3040  A4CF wc,    
+    2  AC00  D7A3 wc,
+2  F900  FAFF wc,    
+    0  FB1E  FB1E wc,    
+    0  FE00  FE0F wc,
+0  FE20  FE23 wc,    
+    2  FE30  FE6F wc,    
+    0  FEFF  FEFF wc,
+2  FF00  FF60 wc,    
+    2  FFE0  FFE6 wc,    
+    0  FFF9  FFFB wc,
+0 1D167 1D169 wc,    
+    0 1D173 1D182 wc,    
+    0 1D185 1D18B wc,
+0 1D1AA 1D1AD wc,    
+    2 20000 2FFFD wc,    
+    2 30000 3FFFD wc,
+0 E0001 E0001 wc,    
+    0 E0020 E007F wc,    
+    0 E0100 E01EF wc,
+HERE wc-table - CONSTANT #wc-table
+
+    \ inefficient table walk:
+
+    : XC-WIDTH ( xchar -- n )
+   wc-table #wc-table OVER + SWAP ?DO
+     DUP I 2@ WITHIN IF
+    DROP I 2 CELLS + @ UNLOOP EXIT THEN
+   3 CELLS +LOOP DROP 1 ;
+
+E.18.6.2.2487.45
+
+XCHAR-
+
+    : XCHAR- ( xc-addr -- xc-addr' )
+   BEGIN  1 CHARS - DUP C@ $C0 AND $80 <> UNTIL ;
+
+E.18.6.2.2488.20
+
+XHOLD
+
+    CREATE xholdbuf 8 ALLOT
+
+    : XHOLD ( xchar -- )
+    xholdbuf TUCK XC!+ OVER - HOLDS ;
+
+E.18.6.2.2495
+
+X\STRING-
+
+    : X\STRING- ( xc-addr u -- xc-addr u' )
+   OVER + XCHAR- OVER - ;
+
+E.18.6.2.2520
+
+[CHAR]
+
+    : [CHAR] ( "name" -- rt:xchar )
+   CHAR POSTPONE LITERAL ; IMMEDIATE
+
+< Portability guide
+
+Test Suite >

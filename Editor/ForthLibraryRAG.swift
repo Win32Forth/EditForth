@@ -68,10 +68,34 @@ enum ForthLibraryRAG {
         return nil
     }
 
+    /// `Library/Reference` (Forth-2012 text, etc.) is always searched in addition to the
+    /// configured folder, unless that folder is already the whole Library (enumerator covers it).
+    static func referenceSearchRoots(primaryRoot: URL) -> [URL] {
+        if primaryRoot.lastPathComponent == "Library" {
+            return []
+        }
+        var roots: [URL] = []
+        let fm = FileManager.default
+        func add(_ url: URL) {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return }
+            let std = url.standardizedFileURL
+            if std == primaryRoot.standardizedFileURL { return }
+            if roots.contains(where: { $0.standardizedFileURL == std }) { return }
+            roots.append(std)
+        }
+        add(primaryRoot.deletingLastPathComponent().appendingPathComponent("Reference", isDirectory: true))
+        add(ForthMenuSupport.userTreeURL.appendingPathComponent("Library/Reference", isDirectory: true))
+        if let app = SixtyFourForthLocator.locateApp() {
+            add(app.appendingPathComponent("Contents/Resources/Library/Reference", isDirectory: true))
+        }
+        return roots
+    }
+
     static func retrieve(
         for query: String,
         settings: ForthLibraryRAGSettings = .load(),
-        maxFileBytes: Int = 400_000
+        maxFileBytes: Int = 500_000
     ) -> ForthLibraryRAGResult {
         let tokens = significantTokens(in: query)
         guard !tokens.isEmpty else {
@@ -85,38 +109,30 @@ enum ForthLibraryRAG {
         let contextLines = settings.contextLines
 
         var scored: [(URL, Int, String)] = []  // url, score, relative
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return ForthLibraryRAGResult(snippets: [], rootPath: root.path, queryTokens: tokens)
+        collectScoredFiles(
+            under: root,
+            relativePrefix: "",
+            tokens: tokens,
+            maxFileBytes: maxFileBytes,
+            into: &scored
+        )
+        for refRoot in referenceSearchRoots(primaryRoot: root) {
+            collectScoredFiles(
+                under: refRoot,
+                relativePrefix: "Reference/",
+                tokens: tokens,
+                maxFileBytes: maxFileBytes,
+                into: &scored
+            )
         }
 
-        for case let url as URL in enumerator {
-            let name = url.lastPathComponent
-            if url.hasDirectoryPath {
-                if skipDirNames.contains(name) || name.hasSuffix(".app") {
-                    enumerator.skipDescendants()
-                }
-                continue
-            }
-            let ext = url.pathExtension.lowercased()
-            guard sourceExtensions.contains(ext) else { continue }
-            if name == "HYPER.NDX" || name.hasSuffix(".emit.log") { continue }
-
-            let vals = try? url.resourceValues(forKeys: [.fileSizeKey])
-            if let size = vals?.fileSize, size > maxFileBytes { continue }
-
-            guard let data = try? Data(contentsOf: url),
-                  let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
-            else { continue }
-
-            let score = scoreFile(text: text, tokens: tokens)
-            guard score > 0 else { continue }
-            let rel = url.path.replacingOccurrences(of: root.path + "/", with: "")
-            scored.append((url, score, rel))
+        // Dedupe by standardized path (Reference may appear twice via sibling + user tree).
+        var seen = Set<String>()
+        scored = scored.filter { item in
+            let key = item.0.standardizedFileURL.path
+            if seen.contains(key) { return false }
+            seen.insert(key)
+            return true
         }
 
         scored.sort { lhs, rhs in
@@ -139,11 +155,64 @@ enum ForthLibraryRAG {
             if snippets.count >= maxSnippets { break }
         }
 
+        let rootLabel: String
+        if referenceSearchRoots(primaryRoot: root).isEmpty {
+            rootLabel = root.path
+        } else {
+            rootLabel = root.path + " + Reference"
+        }
         return ForthLibraryRAGResult(
             snippets: snippets,
-            rootPath: root.path,
+            rootPath: rootLabel,
             queryTokens: tokens
         )
+    }
+
+    private static func collectScoredFiles(
+        under root: URL,
+        relativePrefix: String,
+        tokens: [String],
+        maxFileBytes: Int,
+        into scored: inout [(URL, Int, String)]
+    ) {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for case let url as URL in enumerator {
+            let name = url.lastPathComponent
+            if url.hasDirectoryPath {
+                if skipDirNames.contains(name) || name.hasSuffix(".app") {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            let ext = url.pathExtension.lowercased()
+            guard sourceExtensions.contains(ext) else { continue }
+            if name == "HYPER.NDX" || name.hasSuffix(".emit.log") { continue }
+
+            let vals = try? url.resourceValues(forKeys: [.fileSizeKey])
+            if let size = vals?.fileSize, size > maxFileBytes { continue }
+
+            guard let data = try? Data(contentsOf: url),
+                  let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+            else { continue }
+
+            let score = scoreFile(text: text, tokens: tokens)
+            guard score > 0 else { continue }
+            var rel = url.path.replacingOccurrences(of: root.path + "/", with: "")
+            if !relativePrefix.isEmpty {
+                if rel.hasPrefix("Reference/") {
+                    // already labeled
+                } else {
+                    rel = relativePrefix + rel
+                }
+            }
+            scored.append((url, score, rel))
+        }
     }
 
     // MARK: - Tokens / scoring

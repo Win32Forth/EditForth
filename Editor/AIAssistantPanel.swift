@@ -13,6 +13,9 @@ struct AIAssistantPanel: View {
     @ObservedObject var model: AIAssistantModel
     @EnvironmentObject private var workspace: WorkspaceModel
 
+    /// Same key as View → Ask Forth / tab-bar inspector button.
+    @AppStorage("showAIAssistant") private var showAIAssistant = false
+
     /// Prompt TextEditor height only — agent pane fills whatever is left below the splitter.
     @AppStorage("aiPromptEditorHeight") private var storedPromptHeight = 40.0
     @State private var promptHeight = 40.0
@@ -70,13 +73,22 @@ struct AIAssistantPanel: View {
 
     private var chatSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("Ask Forth")
                     .font(.headline)
                 Spacer()
                 Text(model.providerLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Button {
+                    showAIAssistant = false
+                } label: {
+                    Image(systemName: "sidebar.trailing")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.borderless)
+                .help("Hide Ask Forth (⌥⌘A)")
+                .accessibilityLabel("Hide Ask Forth")
             }
 
             askForthHelpPanel(
@@ -100,7 +112,7 @@ struct AIAssistantPanel: View {
             HStack(spacing: 8) {
                 Toggle("Include Library context", isOn: $model.includeLibraryContext)
                     .font(.caption)
-                    .help("Search the configured Library folder for matching .fth excerpts and add them to Ask / Fix")
+                    .help("Search the configured Library folder for matching .fth excerpts and add them to Ask / Enhance")
                     .onChange(of: model.includeLibraryContext) { _, _ in
                         model.persistLibraryRAG()
                     }
@@ -110,6 +122,13 @@ struct AIAssistantPanel: View {
                 .font(.caption)
                 .help("Folder path, snippet count, context lines, and max characters")
             }
+
+            Toggle("Fetch URLs in Prompt", isOn: $model.fetchURLsInPrompt)
+                .font(.caption)
+                .help("Fetch http(s) links in the Prompt, and auto-fetch forth-standard.org pages when the Prompt looks like a word lookup (`DUP`, “what does OPEN-FILE”)")
+                .onChange(of: model.fetchURLsInPrompt) { _, _ in
+                    model.persistURLFetch()
+                }
 
             Button("Capture Selected to Prompt") {
                 model.captureSelectedToPrompt(from: workspace)
@@ -240,7 +259,7 @@ private struct LibraryRAGSettingsSheet: View {
             Text("Library context")
                 .font(.title2.weight(.semibold))
 
-            Text("Ask Forth searches this folder for .fth excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. Only the top-scoring snippets are sent — not the whole tree.")
+            Text("Ask Forth searches this folder for .fth / .txt excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. Library/Reference (Forth 2012 Standard text) is always searched too. Only the top-scoring snippets are sent — not the whole tree.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

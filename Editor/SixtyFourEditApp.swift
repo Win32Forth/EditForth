@@ -163,8 +163,13 @@ struct SixtyFourEditApp: App {
 
                 Toggle("Show Forth Console", isOn: $showForthChrome)
                 Toggle("Show Line Numbers", isOn: $showLineNumbers)
-                Toggle("Ask Forth", isOn: $showAIAssistant)
+                Toggle(showAIAssistant ? "Hide Ask Forth" : "Show Ask Forth", isOn: $showAIAssistant)
                     .keyboardShortcut("a", modifiers: [.command, .option])
+
+                Button("Open Web Page…") {
+                    workspace.promptOpenWebPage()
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
 
                 Divider()
 

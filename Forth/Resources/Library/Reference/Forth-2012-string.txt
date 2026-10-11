@@ -1,0 +1,776 @@
+Forth 2012 Standard — string
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: The optional String word set
+
+< The optional Search-Order word set
+
+The optional Extended-Character word set >
+
+17 The optional String word set
+
+17.1 Introduction
+
+17.2 Additional terms and notation
+
+None.
+
+17.3 Additional usage requirements
+
+None.
+
+17.4 Additional documentation requirements
+
+17.4.1 System documentation
+
+17.4.1.1 Implementation-defined options
+
+ no additional options.
+
+17.4.1.2 Ambiguous conditions
+
+ The substitution cannot be created (REPLACES);
+
+ The name of a substitution contains the `%' delimiter character (REPLACES);
+
+ Result of a substitution is too long to fit into the given buffer (SUBSTITUTE and UNESCAPE);
+
+ Source and destination buffers for SUBSTITUTE are the same.
+
+17.4.1.3 Other system documentation
+
+ no additional options.
+
+17.4.2 Program documentation
+
+17.4.2.1 Environmental dependencies
+
+ no additional options.
+
+17.4.2.2 Other program documentation
+
+ no additional options.
+
+17.5 Compliance and labeling
+
+17.5.1 Forth-2012 systems
+
+The phrase "Providing the String word set" shall be appended to
+the label of any Standard System that provides all of the String
+word set.
+
+The phrase "Providing name(s) from the String Extensions
+word set" shall be appended to the label of any Standard System
+that provides portions of the String Extensions word set.
+
+The phrase "Providing the String Extensions word set" shall be
+appended to the label of any Standard System that provides all of
+the String and String Extensions word sets.
+
+17.5.2 Forth-2012 programs
+
+The phrase "Requiring the String word set" shall be appended to
+the label of Standard Programs that require the system to provide
+the String word set.
+
+The phrase "Requiring name(s) from the String Extensions
+word set" shall be appended to the label of Standard Programs that
+require the system to provide portions of the String Extensions
+word set.
+
+The phrase "Requiring the String Extensions word set" shall be
+appended to the label of Standard Programs that require the system
+to provide all of the String and String Extensions word sets.
+
+17.6 Glossary
+
+17.6.1 String words
+
+17.6.1.0170
+
+-TRAILING
+
+dash-trailing
+
+STRING
+
+ 
+
+ ( c-addr u1 -- c-addr u2 )
+
+      If u1 is greater than zero, u2 is equal to
+      u1 less the number of spaces at the end of the
+      character string specified by c-addr u1. If u1
+      is zero or the entire string consists of spaces, u2 is
+      zero.
+
+Testing
+
+      T{ :  s8 S" abc  " ; ->  }T
+T{ :  s9 S"      " ; ->  }T
+T{ : s10 S"    a " ; ->  }T
+
+      T{  s1 -TRAILING -> s1 }T		   \ "abcdefghijklmnopqrstuvwxyz"
+T{  s8 -TRAILING -> s8 2 - }T 			      \ "abc  "
+T{  s7 -TRAILING -> s7 }T					            \ " "
+T{  s9 -TRAILING -> s9 DROP 0 }T	   \ "     "
+T{ s10 -TRAILING -> s10 1- }T				       \ "   a "
+
+17.6.1.0245
+
+/STRING
+
+slash-string
+
+STRING
+
+ 
+
+ ( c-addr1 u1 n -- c-addr2 u2 )
+
+      Adjust the character string at c-addr1 by n
+      characters. The resulting character string, specified by
+      c-addr2 u2, begins at c-addr1 plus n
+      characters and is u1 minus n characters long.
+
+See
+
+ A.17.6.1.0245  /STRING.
+
+Rationale
+
+      /STRING is used to remove or add characters relative
+      to the current position in the character string. Positive values
+      of n will exclude characters from the string while
+      negative values of n will include characters to the
+      left of the string.
+
+      S" ABC" 2 /STRING 2DUP TYPE \ outputs "C"
+-1 /STRING TYPE \ outputs "BC"
+
+Testing
+
+      T{ s1  5 /STRING -> s1 SWAP 5 + SWAP 5 - }T
+T{ s1 10 /STRING -4 /STRING -> s1 6 /STRING }T
+T{ s1  0 /STRING -> s1 }T
+
+17.6.1.0780
+
+BLANK
+
+ 
+
+STRING
+
+ 
+
+ ( c-addr u -- )
+
+      If u is greater than zero, store the character value for
+      space in u consecutive character positions beginning at
+      c-addr.
+
+Testing
+
+: s13 S" aaaaa      a" ;						          \ Six spaces
+
+        T{ PAD 25 CHAR a FILL ->  }T					       \ Fill PAD with 25 'a's
+T{ PAD 5 CHARS + 6 BLANK ->  }T	   \ Put 6 spaced from character 5
+T{ PAD 12 s13 COMPARE -> 0 }T							      \ PAD Should now be same as s13
+
+17.6.1.0910
+
+CMOVE
+
+c-move
+
+STRING
+
+ 
+
+ ( c-addr1 c-addr2 u -- )
+
+      If u is greater than zero, copy u consecutive
+      characters from the data space starting at c-addr1 to
+      that starting at c-addr2, proceeding character-by-character
+      from lower addresses to higher addresses.
+
+See
+
+ 17.6.1.0920 CMOVE>, A.17.6.1.0910  CMOVE.
+
+Rationale
+
+      If c-addr2 lies within the source region (i.e., when
+      c-addr2 is not less than c-addr1 and
+      c-addr2 is less than the quantity c-addr1 u
+      CHARS +), memory propagation occurs.
+
+      Assume a character string at address
+      100: "ABCD". Then after
+
+100 DUP   CHAR+   3 CMOVE
+
+      the string at address 100 is "AAAA".
+
+      See A.6.1.1900 MOVE.
+
+17.6.1.0920
+
+CMOVE>
+
+c-move-up
+
+STRING
+
+ 
+
+ ( c-addr1 c-addr2 u -- )
+
+      If u is greater than zero, copy u consecutive
+      characters from the data space starting at c-addr1 to
+      that starting at c-addr2, proceeding character-by-character
+      from higher addresses to lower addresses.
+
+See
+
+ 17.6.1.0910 CMOVE, A.17.6.1.0920  CMOVE>.
+
+Rationale
+
+  -->
+      If c-addr1 lies within the destination region (i.e.,
+      when c-addr1 is greater than or equal to
+      c-addr2 and c-addr2 is less than the
+      quantity c-addr1 u CHARS
+      +), memory propagation	occurs.
+
+      Assume a character string at address
+      100: "ABCD". Then after
+
+100 DUP CHAR+ SWAP
+          3 CMOVE>
+
+      the string at address 100 is "DDDD".
+
+      See A.6.1.1900 MOVE.
+
+17.6.1.0935
+
+COMPARE
+
+ 
+
+STRING
+
+ 
+
+ ( c-addr1 u1 c-addr2 u2 -- n )
+
+      Compare the string specified by c-addr1 u1 to the
+      string specified by c-addr2 u2. The strings are
+      compared, beginning at the given addresses, character by
+      character, up to the length of the shorter string or until a
+      difference is found. If the two strings are identical, n
+      is zero. If the two strings are identical up to the length of
+      the shorter string, n is minus-one (-1) if u1
+      is less than u2 and one (1) otherwise. If the two
+      strings are not identical up to the length of the shorter string,
+      n is minus-one (-1) if the first non-matching character
+      in the string specified by c-addr1 u1 has a lesser
+      numeric value than the corresponding character in the string
+      specified by c-addr2 u2 and one (1) otherwise.
+
+Testing
+
+T{ s1        s1 COMPARE ->  0  }T
+T{ s1  PAD SWAP CMOVE   ->     }T    \ Copy s1 to PAD
+T{ s1  PAD OVER COMPARE ->  0  }T
+T{ s1     PAD 6 COMPARE ->  1  }T
+T{ PAD 10    s1 COMPARE -> -1  }T
+T{ s1     PAD 0 COMPARE ->  1  }T
+T{ PAD  0    s1 COMPARE -> -1  }T
+T{ s1        s6 COMPARE ->  1  }T
+T{ s6        s1 COMPARE -> -1  }T
+
+        : "abdde"  S" abdde"  ;
+: "abbde"  S" abbde"  ;
+: "abcdf"  S" abcdf"  ;
+: "abcdee" S" abcdee" ;
+
+        T{ s1 "abdde"  COMPARE -> -1 }T
+T{ s1 "abbde"  COMPARE ->  1 }T
+T{ s1 "abcdf"  COMPARE -> -1 }T
+T{ s1 "abcdee" COMPARE ->  1 }T
+
+        : s11 S" 0abc" ;
+: s12 S" 0aBc" ;
+
+        T{ s11 s12 COMPARE ->  1 }T
+T{ s12 s11 COMPARE -> -1 }T
+
+17.6.1.2191
+
+SEARCH
+
+ 
+
+STRING
+
+ 
+
+ ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+
+      Search the string specified by c-addr1 u1 for the
+      string specified by c-addr2 u2. If flag is
+      true, a match was found at c-addr3 with u3
+      characters remaining. If flag is false there was no
+      match and c-addr3 is c-addr1 and u3
+      is u1.
+
+Testing
+
+      T{ : s2 S" abc"   ; ->  }T
+T{ : s3 S" jklmn" ; ->  }T
+T{ : s4 S" z"     ; ->  }T
+T{ : s5 S" mnoq"  ; ->  }T
+T{ : s6 S" 12345" ; ->  }T
+T{ : s7 S" "      ; ->  }T
+
+      T{ s1 s2 SEARCH -> s1 <TRUE>  }T
+T{ s1 s3 SEARCH -> s1  9 /STRING <TRUE>  }T
+T{ s1 s4 SEARCH -> s1 25 /STRING <TRUE>  }T
+T{ s1 s5 SEARCH -> s1 <FALSE> }T
+T{ s1 s6 SEARCH -> s1 <FALSE> }T
+T{ s1 s7 SEARCH -> s1 <TRUE>  }T
+
+17.6.1.2212
+
+SLITERAL
+
+ 
+
+STRING
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( c-addr1 u -- )
+
+      Append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( -- c-addr2 u )
+
+      Return c-addr2 u describing a string consisting of
+      the characters specified by c-addr1 u during
+      compilation. A program shall not alter the returned string.
+
+See
+
+ A.17.6.1.2212  SLITERAL.
+
+Rationale
+
+      The current functionality of 6.1.2165 S" may be
+      provided by the following definition:
+
+: S" ( "ccc<quote>" -- )
+   [CHAR] " PARSE
+          POSTPONE SLITERAL
+; IMMEDIATE
+
+Testing
+
+      T{ : s14 [ s1 ] SLITERAL ; ->  }T
+T{ s1 s14 COMPARE -> 0 }T
+T{ s1 s14 ROT = ROT ROT = -> <TRUE> <FALSE> }T
+
+17.6.2 String extension words
+
+17.6.2.2141
+
+REPLACES
+
+ 
+
+STRING EXT
+
+X:substitute
+
+ 
+
+ ( c-addr1 u1 c-addr2 u2 -- )
+
+      Set the string c-addr1 u1 as the text to substitute for
+      the substitution named by c-addr2 u2.
+      If the substitution does not exist it is created.
+      The program may then reuse the buffer c-addr1 u1 without
+      affecting the definition of the substitution.
+
+      Ambiguous conditions occur as follows:
+
+      • The substitution cannot be created.
+
+      • The name of a substitution contains the `%' delimiter character.
+
+      REPLACES may allot data space and create a definition.  This breaks
+      the contiguity of the current region and is not allowed during compilation
+      of a colon definition
+
+See
+
+ 3.3.3.2 Contiguous regions,
+      3.4.5 Compilation,
+      17.6.2.2255 SUBSTITUTE.
+
+Implementation
+
+      DECIMAL
+
+      [UNDEFINED] place [IF]
+   : place    \  c-addr1 u c-addr2 --
+   \ Copy the string described by c-addr1 u as a counted
+   \ string at the memory address described by c-addr2.
+     2DUP 2>R
+     1 CHARS + SWAP MOVE
+     2R> C!
+   ;
+[THEN]
+
+      : "/COUNTED-STRING" S" /COUNTED-STRING" ;
+"/COUNTED-STRING" ENVIRONMENT? 0= [IF] 256 [THEN]
+CHARS CONSTANT string-max
+
+      WORDLIST CONSTANT wid-subst
+\ Wordlist ID of the wordlist used to hold substitution names and replacement text.
+
+      [DEFINED] VFXforth [IF] \ VFX Forth
+   : makeSubst	\ c-addr len -- c-addr
+   \ Given a name string create a substution and storage space.
+   \ Return the address of the buffer for the substitution text.
+   \ This word requires system specific knowledge of the host Forth.
+   \ Some systems may need to perform case conversion here.
+     GET-CURRENT >R wid-subst SET-CURRENT
+     ($create)                            \ like CREATE but takes c-addr/len
+     R> SET-CURRENT
+     HERE  string-max ALLOT  0 OVER C!	\ create buffer space
+   ;
+[THEN]
+
+      [DEFINED] (WID-CREATE) [IF] \ SwiftForth
+   : makeSubst \ c-addr len -- c-addr
+     wid-subst (WID-CREATE)            \ like CREATE but takes c-addr/len/wid
+     LAST @ >CREATE !
+     HERE  string-max ALLOT  0 OVER C! \ create buffer space
+   ;
+[THEN]
+
+      : findSubst \ c-addr len -- xt flag | 0
+\ Given a name string, find the substitution.
+\ Return xt and flag if found, or just zero if not found.
+\ Some systems may need to perform case conversion here.
+   wid-subst SEARCH-WORDLIST
+;
+
+      : REPLACES \ text tlen name nlen --
+\ Define the string text/tlen as the text to substitute for the substitution named name/nlen.
+\ If the substitution does not exist it is created.
+   2DUP findSubst IF
+     NIP NIP  EXECUTE    \ get buffer address
+   ELSE
+     makeSubst
+   THEN
+   place                  \ copy as counted string
+;
+
+17.6.2.2255
+
+SUBSTITUTE
+
+ 
+
+STRING EXT
+
+X:substitute
+
+ 
+
+ ( c-addr1 u1 c-addr2 u2 -- c-addr2 u3 n )
+
+      Perform substitution on the string c-addr1 u1 placing
+      the result at string c-addr2 u3, where u3 is
+      the length of the resulting string.
+      An error occurs if the resulting string will not fit into
+      c-addr2 u2 or if c-addr2 is the same as c-addr1.
+      The return value n is positive or 0 on success and indicates the
+      number of substitutions made.
+      A negative value for n indicates that an error occurred, leaving
+      c-addr2 u3 undefined.
+      Negative values of n are implementation defined except for
+      values in table 9.1 THROW code assignments.
+
+      Substitution occurs left to right from the start of c-addr1
+      in one pass and is non-recursive.
+
+      When text of a potential substitution name, surrounded by `%' (ASCII $25) delimiters
+      is encountered by SUBSTITUTE, the following occurs:
+
+      1) If the name is null, a single delimiter character is passed
+      to the output, i.e., %% is replaced by %.
+      The current number of substitutions is not changed.
+
+      2) If the text is a valid substitution name acceptable to
+      17.6.2.2141 REPLACES, the leading and trailing delimiter
+      characters and the enclosed substitution name are replaced by
+      the substitution text.  The current number of substitutions
+      is incremented.
+
+      3) If the text is not a valid substitution name, the name with
+      leading	and trailing delimiters is passed unchanged to the
+      output.  The current number of substitutions is not changed.
+
+      4) Parsing of the input string resumes after the trailing delimiter.
+
+      If after processing any pairs of delimiters, the residue of the input string contains
+      a single delimiter, the residue is passed unchanged to the output.
+
+See
+
+ 17.6.2.2141 REPLACES, 17.6.2.2375 UNESCAPE, A.17.6.2.2255  SUBSTITUTE.
+
+Rationale
+
+      Many applications need to be able to perform text substitution, for
+      example:
+
+        Your balance at <time> on <date> is <currencyvalue>.
+
+      Translation of a sentence or message from one language to another may
+      result in changes to the displayed parameter order.  The example, the
+      Afrikaans translation of this sentence requires a different order:
+
+        Jou balans op <date> om <time> is <currencyvalue>.
+
+      The words SUBSTITUTE and REPLACES provide for this
+      requirements by defining a text substitution facility.  For example,
+      we can provide an initial string in the form:
+
+        Your balance at %time% on %date% is %currencyvalue%.
+
+      The % is used as delimiters for the substitution name.  The
+      text "currencyvalue", "date" and "time"
+      are text substitutions, where the replacement text is defined by
+      REPLACES:
+
+          : date S" 15/Nov/2014" ;
+
+          : time S" 10:25" ;
+
+          date S" date" REPLACES
+
+          time  S" time" REPLACES
+
+	  The substitution name "date" is defined to be replaced with the string
+	  "10/Nov/2014" and "time" to be replaced with "10:25".
+	  Thus SUBSTITUTE would produce the string:
+
+		Your balance at 10:25 on 10/Nov/2014 is %currencyvalue%.
+
+	  As the substitution name "currencyvalue" has not been defined, it is
+	  left unchanged in the resulting string.
+
+	  The return value n is nonnegative on success and indicates the
+	  number of substitutions made.  In the above example, this would be two.
+	  A negative value indicates that an error occurred.
+	  As substitution is not recursive, the return value could be used to
+	  provide a recursive substitution.
+
+	  Implementation of SUBSTITUTE may be considered as being equivalent
+	  to a wordlist which is searched.  If the substitution name is found, the
+	  word is executed, returning a substitution string.
+	  Such words can be deferred or multiple wordlists can be used.
+	  The implementation techniques required are similar to those used by
+	  ENVIRONMENT?.
+	  There is no provision for changing the delimiter character, although a
+	  system may provide system-specific extensions.
+
+Implementation
+
+    Assuming E.17.6.2.2141 REPLACES has been defined.
+
+    [UNDEFINED] bounds [IF]
+   : bounds    \ addr len -- addr+len addr
+     OVER + SWAP
+   ;
+[THEN]
+
+    [UNDEFINED] -rot [IF]
+   : -rot    \ a b c -- c a b
+     ROT ROT
+   ;
+[THEN]
+
+    CHAR % CONSTANT delim
+        \ Character used as the substitution name delimiter.
+string-max BUFFER: Name
+     \ Holds substitution name as a counted string.
+VARIABLE DestLen
+              \ Maximum length of the destination buffer.
+2VARIABLE Dest
+                \ Holds destination string current length and address.
+VARIABLE SubstErr
+             \ Holds zero or an error code.
+
+    : addDest \ char --
+\ Add the character to the destination string.
+   Dest @ DestLen @ < IF
+     Dest 2@ + C!  1 CHARS Dest +!
+   ELSE
+     DROP -1 SubstErr !
+   THEN
+;
+
+    : formName \ c-addr len -- c-addr' len'
+\ Given a source string pointing at a leading delimiter, place the name string in the name buffer.
+   1 /STRING 2DUP delim scan >R DROP				  \ find length of residue
+   2DUP R> - DUP >R Name place        \ save name in buffer
+   R> 1 CHARS + /STRING						                \ step over name and trailing %
+;
+
+    : >dest \ c-addr len --
+\ Add a string to the output string.
+   bounds ?DO
+     I C@ addDest
+   1 CHARS +LOOP
+;
+
+    : processName \ -- flag
+\ Process the last substitution name. Return true if found, 0 if not found.
+   Name COUNT findSubst DUP >R IF
+     EXECUTE COUNT >dest
+   ELSE
+     delim addDest  Name COUNT >dest  delim addDest
+   THEN
+   R>
+;
+
+    : SUBSTITUTE \ src slen dest dlen -- dest dlen' n
+\ Expand the source string using substitutions.
+\ Note that this version is simplistic, performs no error checking,
+\ and requires a global buffer and global variables.
+   Destlen !  0 Dest 2!  0 -rot \ -- 0 src slen
+   0 SubstErr !
+   BEGIN
+     DUP 0 >
+   WHILE
+     OVER C@ delim <> IF									               \ character not %
+      	OVER C@ addDest  1 /STRING
+     ELSE
+      	OVER 1 CHARS + C@ delim = IF	   \ %% for one output %
+        		delim addDest  2 /STRING													      \ add one % to output
+      	ELSE
+        		formName processName IF
+          			ROT 1+ -rot														                   \ count substitutions
+        		THEN
+      	THEN
+     THEN
+   REPEAT
+   2DROP Dest 2@  ROT SubstErr @ IF
+    	DROP  SubstErr @
+   THEN
+;
+
+Testing
+
+30 CHARS BUFFER: subbuff \ Destination buffer
+
+      \ Define a few string constants
+: "hi"    S" hi"    ;
+: "wld"   S" wld"   ;
+: "hello" S" hello" ;
+: "world" S" world" ;
+
+      \ Define a few test strings
+: sub1 S" Start: %hi%,%wld%! :End" ;    \ Original string
+: sub2 S" Start: hello,world! :End" ;      \ First target string
+: sub3 S" Start: world,hello! :End" ;      \ Second target string
+
+      \ Define the hi and wld substitutions
+T{ "hello" "hi"  REPLACES ->  }T          \ Replace "%hi%"  with "hello"
+T{ "world" "wld" REPLACES ->  }T          \ Replace "%wld%" with "world"
+
+      \ "%hi%,%wld%" changed to "hello,world"
+T{ sub1 subbuff 30 SUBSTITUTE ROT ROT sub2 COMPARE -> 2 0 }T
+
+      \ Change the hi and wld substitutions
+T{ "world" "hi"  REPLACES ->  }T
+T{ "hello" "wld" REPLACES ->  }T
+
+      \ Now "%hi%,%wld%" should be changed to "world,hello"
+T{ sub1 subbuff 30 SUBSTITUTE ROT ROT sub3 COMPARE -> 2 0 }T
+
+      \ Where the subsitution name is not defined
+: sub4 S" aaa%bbb%ccc" ;
+T{ sub4 subbuff 30 SUBSTITUTE ROT ROT sub4 COMPARE -> 0 0 }T
+
+      \ Finally the % character itself
+: sub5 S" aaa%%bbb" ;
+: sub6 S" aaa%bbb" ;
+T{ sub5 subbuff 30 SUBSTITUTE ROT ROT sub6 COMPARE -> 0 0 }T
+
+17.6.2.2375
+
+UNESCAPE
+
+ 
+
+STRING EXT
+
+X:substitute
+
+ 
+
+ ( c-addr1 u1 c-addr2 -- c-addr2 u2 )
+
+      Replace each `%' character in the input string
+      c-addr1 u1 by two `%' characters.  The output
+      is represented by c-addr2 u2.  The buffer at c-addr2
+      shall be big enough to hold the unescaped string.  An ambiguous
+      condition occurs if the resulting string will not fit into the
+      destination buffer (c-addr2).
+
+See
+
+ 17.6.2.2255 SUBSTITUTE.
+
+Implementation
+
+      : UNESCAPE \ c-addr1 len1 c-addr2 -- c-addr2 len2
+\ Replace each '%' character in the input string c-addr1 len1 with two '%' characters.
+\ The output is represented by c-addr2 len2.
+\ If you pass a string through UNESCAPE and then SUBSTITUTE, you get the original string.
+   DUP 2SWAP  OVER + SWAP ?DO
+     I C@ [CHAR] % = IF
+       [CHAR] % OVER C! 1+
+     THEN
+     I C@ OVER C! 1+
+   LOOP
+   OVER -
+;
+
+Testing
+
+      Using subbuff, sub5 and sub6 from F.17.6.2.2255 SUBSTITUTE.
+
+      T{ sub6 subbuff UNESCAPE sub5 COMPARE -> 0 }T
+
+< The optional Search-Order word set
+
+The optional Extended-Character word set >

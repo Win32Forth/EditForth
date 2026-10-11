@@ -1,0 +1,1465 @@
+Forth 2012 Standard — file
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: The optional File-Access word set
+
+< The optional Facility word set
+
+The optional Floating-Point word set >
+
+11 The optional File-Access word set
+
+11.1 Introduction
+
+These words provide access to mass storage in the form of "files"
+under the following assumptions:
+
+ files are provided by a host operating system;
+
+ file names are represented as character strings;
+
+ the format of file names is determined by the host operating system;
+
+ an open file is identified by a single-cell file identifier (fileid);
+
+ file-state information (e.g., position, size) is managed by the host operating system;
+
+ file contents are accessed as a sequence of characters;
+
+ file read operations return an actual transfer count, which can differ from the requested transfer count.
+
+11.2 Additional terms
+
+file-access method:
+A permissible means of accessing a file, such as "read/write"
+or "read only".
+
+file position:
+The character offset from the start of the file.
+
+input file:
+The file, containing a sequence of lines, that is the input source.
+
+11.3 Additional usage requirements
+
+11.3.1 Data types
+
+Append table 11.1 to table 3.1.
+
+Table 11.1: Data types
+
+Symbol Data type Size on stack
+
+fam		file access method	1 cell
+
+fileid	file identifier		1 cell
+
+11.3.1.1 File identifiers
+
+File identifiers are implementation-dependent single-cell values
+that are passed to file operators to designate specific files.
+Opening a file assigns a file identifier, which remains valid
+until closed.
+
+11.3.1.3 File access methods (11.3.1.3)
+
+File access methods are implementation-defined single-cell
+values.
+
+11.3.1.4 File names
+
+A character string containing the name of the file. The file name
+may include an implementation-dependent path name. The format of
+file names is implementation defined.
+
+11.3.2 Blocks in files
+
+Blocks may, but need not, reside in files.
+When they do:
+
+ Block numbers may be mapped to one or more files by
+implementation-defined means. An ambiguous condition exists
+if a requested block number is not currently mapped;
+
+ An UPDATEd block that came from a file shall
+be transferred back to the same file.
+
+11.3.3 Input source
+
+The File-Access word set creates another input source for the text
+interpreter. When the input source is a text file, BLK
+shall contain zero, SOURCE-ID shall contain the fileid
+of that text file, and the input buffer shall contain one line of
+the text file.  During text interpretation from a text file, the
+value returned by FILE-POSITION for the fileid returned
+by SOURCE-ID is undefined.  A standard program
+shall not call REPOSITION-FILE on the fileid returned
+by SOURCE-ID.
+
+Input with INCLUDED, INCLUDE-FILE, LOAD
+and EVALUATE shall be nestable in any order to at least
+eight levels.
+
+A program that uses more than eight levels of input-file nesting has
+an environmental dependency. See:
+3.3.3.5 Input buffers,
+9 The optional Exception word set.
+
+11.3.4 Other transient regions
+
+The system provides transient buffers for S" and S\"
+strings. These buffers shall be no less than 80 characters in length, and
+there shall be at least two buffers. The system should be able to store
+two strings defined by sequential use of S" or S\".
+RAM-limited systems may have environmental restrictions on the number
+of buffers and their lifetimes.
+
+11.3.5 Parsing
+
+When parsing from a text file using a space delimiter, control
+characters shall be treated the same as the space character.
+
+Lines of at least 128 characters shall be supported. A program that
+requires lines of more than 128 characters has an environmental
+dependency.
+
+A program may reposition the parse area within the input buffer by
+manipulating the contents of >IN. More extensive
+repositioning can be accomplished using SAVE-INPUT and
+RESTORE-INPUT.
+
+See: 3.4.1 Parsing.
+
+11.4 Additional documentation requirements
+
+11.4.1 System documentation
+
+11.4.1.1 Implementation-defined options
+
+ file access methods used by
+11.6.1.0765 BIN,
+11.6.1.1010 CREATE-FILE,
+11.6.1.1970 OPEN-FILE,
+11.6.1.2054 R/O,
+11.6.1.2056 R/W and
+11.6.1.2425 W/O;
+
+ file exceptions;
+
+ file line terminator (11.6.1.2090 READ-LINE);
+
+ file name format (11.3.1.4 File names);
+
+ information returned by 11.6.2.1524 FILE-STATUS;
+
+ input file state after an exception
+(11.6.1.1717 INCLUDE-FILE,
+11.6.1.1718 INCLUDED);
+
+ maximum depth of file input nesting (11.3.3 Input source);
+
+ maximum size of input line (11.3.5 Parsing);
+
+ methods for mapping block ranges to files (11.3.2 Blocks in files);
+
+ number of string buffers provided (11.3.4 Other transient regions);
+
+ size of string buffer used by 11.3.4 Other transient regions.
+
+11.4.1.2 Ambiguous conditions
+
+ attempting to position a file outside its boundaries
+(11.6.1.2142 REPOSITION-FILE);
+
+ attempting to read from file positions not yet written
+(11.6.1.2080 READ-FILE,
+11.6.1.2090 READ-LINE);
+
+ fileid is invalid (11.6.1.1717 INCLUDE-FILE);
+
+ I/O exception reading or closing fileid
+(11.6.1.1717 INCLUDE-FILE,
+11.6.1.1718 INCLUDED);
+
+ named file cannot be opened (11.6.1.1718 INCLUDED);
+
+ requesting an unmapped block number (11.3.2 Blocks in files);
+
+ using 11.6.1.2218 SOURCE-ID when 7.6.1.0790 BLK is not zero;
+
+ a file is required while it is being REQUIRED
+(11.6.2.2144.50) or INCLUDED (11.6.1.1718);
+
+ a marker is defined outside and executed inside a file or
+vice versa, and the file is REQUIRED
+(11.6.2.2144.50) again;
+
+ the same file is required twice using different names
+(e.g., through symbolic links), or different files with the
+same name are provided to 11.6.2.2144.50 REQUIRED (by doing
+some renaming between the invocations of REQUIRED);
+
+ the stack effect of including with
+11.6.2.2144.50 REQUIRED the file is not ( i×x -- i×x ).
+
+11.4.1.3 Other system documentation
+
+ no additional requirements.
+
+11.4.2 Program documentation
+
+11.4.2.1 Environmental dependencies
+
+ requiring lines longer than 128 characters (11.3.5 Parsing);
+
+ using more than eight levels of input-file nesting (11.3.3 Input source).
+
+11.4.2.2 Other program documentation
+
+ no additional requirements.
+
+11.5 Compliance and labeling
+
+11.5.1 Forth-2012 systems
+
+The phrase "Providing the File Access word set" shall be appended
+to the label of any Standard System that provides all of the File
+Access word set.
+
+The phrase "Providing name(s) from the File Access Extensions
+word set" shall be appended to the label of any Standard System that
+provides portions of the File Access Extensions word set.
+
+The phrase "Providing the File Access Extensions word set" shall
+be appended to the label of any Standard System that provides all of
+the File Access and File Access Extensions word sets.
+
+11.5.2 Forth-2012 programs
+
+The phrase "Requiring the File Access word set" shall be appended
+to the label of Standard Programs that require the system to provide
+the File Access word set.
+
+The phrase "Requiring name(s) from the File Access Extensions
+word set" shall be appended to the label of Standard Programs that
+require the system to provide portions of the File Access Extensions
+word set.
+
+The phrase "Requiring the File Access Extensions word set" shall be
+appended to the label of Standard Programs that require the system to
+provide all of the File Access and File Access Extensions word sets.
+
+11.6 Glossary
+
+11.6.1 File Access words
+
+11.6.1.0080
+
+(
+
+paren
+
+FILE
+
+ 
+
+ ( "ccc<paren>" -- )
+
+      Extend the semantics of 6.1.0080 ( to include:
+
+      When parsing from a text file, if the end of the parse area is
+      reached before a right parenthesis is found, refill the input
+      buffer from the next line of the file, set >IN to
+      zero, and resume parsing, repeating this process until either a
+      right parenthesis is found or the end of the file is reached.
+
+Testing
+
+      T{ ( 1 2 3 
+      4 5 6 
+      7 8 9 ) 11 22 33 -> 11 22 33 }T
+
+4ex
+
+11.6.1.0765
+
+BIN
+
+ 
+
+FILE
+
+ 
+
+ ( fam1 -- fam2 )
+
+      Modify the implementation-defined file access method
+      fam1 to additionally select a
+      "binary", i.e., not line oriented, file access method,
+      giving access method fam2.
+
+See
+
+ 11.6.1.2054 R/O,
+      11.6.1.2056 R/W,
+      11.6.1.2425 W/O,
+      A.11.6.1.0765  BIN.
+
+Rationale
+
+      Some operating systems require that files be opened in a
+      different mode to access their contents as an unstructured
+      stream of binary data rather than as a sequence of lines.
+
+      The arguments to READ-FILE and WRITE-FILE are
+      arrays of character storage elements, each element consisting
+      of at least 8 bits. The committee intends that, in
+      BIN mode, the contents of these storage elements can be
+      written to a file and later read back without alteration.
+
+11.6.1.0900
+
+CLOSE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( fileid -- ior )
+
+      Close the file identified by fileid. ior is the
+      implementation-defined I/O result code.
+
+11.6.1.1010
+
+CREATE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u fam -- fileid ior )
+
+      Create the file named in the character string specified by
+      c-addr and u, and open it with file access method
+      fam. The meaning of values of fam is
+      implementation defined. If a file with the same name already
+      exists, recreate it as an empty file.
+
+      If the file was successfully created and opened, ior is
+      zero, fileid is its identifier, and the file has been
+      positioned to the start of the file.
+
+      Otherwise, ior is the implementation-defined I/O result
+      code and fileid is undefined.
+
+See
+
+ A.11.6.1.1010  CREATE-FILE.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      S" TEST.FTH" R/W
+      CREATE-FILE
+      ABORT" CREATE-FILE FAILED"
+      ;
+
+Testing
+
+: fn1 S" fatest1.txt" ;
+VARIABLE fid1
+
+        T{ fn1 R/W CREATE-FILE SWAP fid1 ! -> 0 }T
+T{ fid1 @ CLOSE-FILE -> 0 }T
+
+11.6.1.1190
+
+DELETE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u -- ior )
+
+      Delete the file named in the character string specified by
+      c-addr u. ior is the implementation-defined
+      I/O result code.
+
+Testing
+
+      T{ fn2 DELETE-FILE -> 0 }T
+T{ fn2 R/W BIN OPEN-FILE SWAP DROP -> 0 }T
+T{ fn2 DELETE-FILE -> 0 }T
+
+11.6.1.1520
+
+FILE-POSITION
+
+ 
+
+FILE
+
+ 
+
+ ( fileid -- ud ior )
+
+      ud is the current file position for the file identified
+      by fileid. ior is the implementation-defined I/O
+      result code. ud is undefined if ior is non-zero.
+
+11.6.1.1522
+
+FILE-SIZE
+
+ 
+
+FILE
+
+ 
+
+ ( fileid -- ud ior )
+
+      ud is the size, in characters, of the file identified by
+      fileid. ior is the implementation-defined I/O
+      result code. This operation does not affect the value returned
+      by
+      FILE-
+      POSITION.
+      ud is undefined if ior is non-zero.
+
+Testing
+
+: cbuf buf bsize 0 FILL ;
+: fn2 S" fatest2.txt" ;
+VARIABLE fid2
+: setpad PAD 50 0 DO I OVER C! CHAR+ LOOP DROP ;
+
+        setpad
+
+        Note: If anything else is defined
+        setpad must be called again as the pad may move
+
+        T{ fn2 R/W BIN CREATE-FILE SWAP fid2 ! -> 0 }T
+T{ PAD 50 fid2 @ WRITE-FILE fid2 @ FLUSH-FILE -> 0 0 }T
+T{ fid2 @ FILE-SIZE -> 50. 0 }T
+T{ 0. fid2 @ REPOSITION-FILE -> 0 }T
+T{ cbuf buf 29 fid2 @ READ-FILE -> 29 0 }T
+T{ PAD 29 buf 29 COMPARE -> 0 }T
+T{ PAD 30 buf 30 COMPARE -> 1 }T
+T{ cbuf buf 29 fid2 @ READ-FILE -> 21 0 }T
+T{ PAD 29 + 21 buf 21 COMPARE -> 0 }T
+T{ fid2 @ FILE-SIZE DROP fid2 @ FILE-POSITION DROP D= -> <TRUE> }T
+T{ buf 10 fid2 @ READ-FILE -> 0 0 }T
+T{ fid2 @ CLOSE-FILE -> 0 }T
+
+11.6.1.1717
+
+INCLUDE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( i×x fileid -- j×x )
+
+      Remove fileid from the stack. Save the current input
+      source specification, including the current value of
+      SOURCE-ID. Store fileid in SOURCE-ID.
+      Make the file specified by fileid the input source. Store
+      zero in BLK. Other stack effects are due to the
+      words included.
+
+      Repeat until end of file: read a line from the file, fill the
+      input buffer from the contents of that line, set >IN
+      to zero, and interpret.
+
+      Text interpretation begins at the file position where the next
+      file read would occur.
+
+      When the end of the file is reached, close the file and restore
+      the input source specification to its saved value.
+
+      An ambiguous condition exists if fileid is invalid, if
+      there is an I/O exception reading fileid, or if an I/O
+      exception occurs while closing fileid. When an ambiguous
+      condition exists, the status (open or closed) of any files that
+      were being interpreted is implementation-defined.
+
+See
+
+ 11.3.3 Input source,
+      A.11.6.1.1717  INCLUDE-FILE.
+
+Rationale
+
+      Here are two implementation alternatives for saving the input
+      source specification in the presence of text file input:
+
+      1) Save the file position (as returned by
+      FILE-POSITION) of the beginning of the line being
+      interpreted. To restore the input source specification,
+      seek to that position and re-read the line into the input
+      buffer.
+
+      2) Allocate a separate line buffer for each active text
+      input file, using that buffer as the input buffer. This
+      method avoids the "seek and reread" step, and allows the
+      use of "pseudo-files" such as pipes and other
+      sequential-access-only communication channels.
+
+11.6.1.1718
+
+INCLUDED
+
+ 
+
+FILE
+
+ 
+
+ ( i×x c-addr u -- j×x )
+
+      Remove c-addr u from the stack. Save the current input
+      source specification, including the current value of
+      SOURCE-ID. Open the file specified by c-addr u,
+      store the resulting fileid in SOURCE-ID, and make
+      it the input source. Store zero in BLK. Other
+      stack effects are due to the words included.
+
+      Repeat until end of file: read a line from the file, fill the
+      input buffer from the contents of that line, set >IN
+      to zero, and interpret.
+
+      Text interpretation begins at the start of the file.
+
+      When the end of the file is reached, close the file and restore
+      the input source specification to its saved value.
+
+      An ambiguous condition exists if the named file can not be
+      opened, if an I/O exception occurs reading the file, or if an
+      I/O exception occurs while closing the file. When an ambiguous
+      condition exists, the status (open or closed) of any files that
+      were being interpreted is implementation-defined.
+
+      INCLUDED may allocate memory in data space before it
+      starts interpreting the file.
+
+See
+
+ 11.6.1.1717 INCLUDE-FILE,
+      A.11.6.1.1718  INCLUDED.
+
+Rationale
+
+      Typical use:
+      ... S" filename" INCLUDED ...
+
+Testing
+
+      See F.11.6.2.2144.50 REQUIRED.
+
+11.6.1.1970
+
+OPEN-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u fam -- fileid ior )
+
+      Open the file named in the character string specified by
+      c-addr u, with file access method indicated by
+      fam. The meaning of values of fam is
+      implementation 	defined.
+
+      If the file is successfully opened, ior is zero,
+      fileid is its identifier, and the file has been
+      positioned to the start of the file.
+
+      Otherwise, ior is the implementation-defined I/O
+      result code and fileid is undefined.
+
+See
+
+ A.11.6.1.1970  OPEN-FILE.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      S"  TEST.FTH" R/W
+      OPEN-FILE  ABORT" OPEN-FILE FAILED"
+      ... ;
+
+11.6.1.2054
+
+R/O
+
+r-o
+
+FILE
+
+ 
+
+ ( -- fam )
+
+      fam is the implementation-defined value for selecting
+      the "read only" file access method.
+
+See
+
+ 11.6.1.1010 CREATE-FILE,
+      11.6.1.1970 OPEN-FILE.
+
+11.6.1.2056
+
+R/W
+
+r-w
+
+FILE
+
+ 
+
+ ( -- fam )
+
+      fam is the implementation-defined value for selecting
+      the "read/write" file access method.
+
+See
+
+ 11.6.1.1010 CREATE-FILE,
+      11.6.1.1970 OPEN-FILE.
+
+11.6.1.2080
+
+READ-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u1 fileid -- u2 ior )
+
+      Read u1 consecutive characters to c-addr from the
+      current position of the file identified by fileid.
+
+      If u1 characters are read without an exception, ior
+      is zero and u2 is equal to u1.
+
+      If the end of the file is reached before u1 characters are
+      read, ior is zero and u2 is the number of characters
+      actually read.
+
+      If the operation is initiated when the value returned by
+      FILE-POSITION is equal to the value returned by
+      FILE-SIZE for the file identified by fileid,
+      ior is zero and u2 is zero.
+
+      If an exception occurs, ior is the implementation-defined
+      I/O result code, and u2 is the number of characters
+      transferred to c-addr without an exception.
+
+      An ambiguous condition exists if the operation is initiated when
+      the value returned by FILE-POSITION is greater than the
+      value returned by FILE-SIZE for the file identified by
+      fileid, or if the requested operation attempts to read
+      portions of the file not written.
+
+      At the conclusion of the operation, FILE-POSITION returns
+      the next file position after the last character read.
+
+See
+
+ A.11.6.1.2080  READ-FILE.
+
+Rationale
+
+      A typical sequential file-processing algorithm might look like:
+
+            BEGIN					                       ( )
+
+                ... READ-FILE THROW
+                	 ( length )
+
+            ?DUP WHILE		                  ( length )
+
+                ...						                    	 ( )
+
+            REPEAT					                      ( )
+
+In this example, THROW is used to handle
+      exception conditions, which are reported as
+      non-zero values of the ior return value from
+      READ-FILE. End-of-file is reported as a zero value of
+      the "length" return value.
+
+11.6.1.2090
+
+READ-LINE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u1 fileid -- u2 flag ior )
+
+      Read the next line from the file specified by fileid into
+      memory at the address c-addr. At most u1 characters
+      are read. Up to two implementation-defined line-terminating
+      characters may be read into memory at the end of the line, but
+      are not included in the count u2. The line buffer provided
+      by c-addr should be at least u1+2 characters long.
+
+      If the operation succeeded, flag is true and ior
+      is zero. If a line terminator was received before u1
+      characters were read, then u2 is the number of characters,
+      not including the line terminator, actually read (0  u2
+       u1). When u1 = u2 the line
+      terminator has yet to be reached.
+
+      If the operation is initiated when the value returned by
+      FILE-POSITION is equal to the value returned by
+      FILE-SIZE for the file identified by fileid,
+      flag is false, ior is zero, and u2 is zero.
+      If ior is non-zero, an exception occurred during the
+      operation and ior is the implementation-defined I/O
+      result code.
+
+      An ambiguous condition exists if the operation is initiated when
+      the value returned by FILE-POSITION is greater than the
+      value returned by FILE-SIZE for the file identified by
+      fileid, or if the requested operation attempts to read
+      portions of the file not written.
+
+      At the conclusion of the operation, FILE-POSITION returns
+      the next file position after the last character read.
+
+See
+
+ A.11.6.1.2090  READ-LINE.
+
+Rationale
+
+      Implementations are allowed to store the line terminator in
+      the memory buffer in order to allow the use of line reading
+      functions provided by host operating systems, some of which
+      store the terminator. Without this provision, a transient
+      buffer might be needed. The two-character limitation is
+      sufficient for the vast majority of existing operating
+      systems. Implementations on host operating systems whose line
+      terminator sequence is longer than two characters may have to
+      take special action to prevent the storage of more than two
+      terminator characters.
+
+      Standard Programs may not depend on the presence of any such
+      terminator sequence in the buffer.
+
+      A typical line-oriented sequential file-processing algorithm
+      might look like:
+
+            BEGIN				                       ( )
+
+                ... READ-LINE THROW
+                	 ( length not-eof-flag )
+
+            WHILE 			                       ( length )
+
+                ...				                    	 ( )
+
+            REPEAT DROP	                 ( )
+
+READ-LINE needs a separate end-of-file flag because
+      empty (zero-length) lines are a routine occurrence, so a
+      zero-length line cannot be used to signify end-of-file.
+
+Testing
+
+200 CONSTANT bsize
+CREATE buf bsize ALLOT
+VARIABLE #chars
+
+        T{ fn1 R/O OPEN-FILE SWAP fid1 ! -> 0 }T
+T{ fid1 @ FILE-POSITION -> 0. 0 }T
+T{ buf 100 fid1 @ READ-LINE ROT DUP #chars ! ->
+    <TRUE> 0 line1 SWAP DROP }T
+T{ buf #chars @ line1 COMPARE -> 0 }T
+T{ fid1 @ CLOSE-FILE -> 0 }T
+
+11.6.1.2142
+
+REPOSITION-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( ud fileid -- ior )
+
+      Reposition the file identified by fileid to ud.
+      ior is the implementation-defined I/O result code. An
+      ambiguous condition exists if the file is positioned outside
+      the file boundaries.
+
+      At the conclusion of the operation, FILE-POSITION
+      returns the value ud.
+
+Testing
+
+: line2 S" Line 2 blah blah blah" ;
+: rl1 buf 100 fid1 @ READ-LINE ;
+2VARIABLE fp
+
+        T{ fn1 R/W OPEN-FILE SWAP fid1 ! -> 0 }T
+T{ fid1 @ FILE-SIZE DROP fid1 @ REPOSITION-FILE -> 0 }T
+T{ fid1 @ FILE-SIZE -> fid1 @ FILE-POSITION }T
+
+        T{ line2 fid1 @ WRITE-FILE -> 0 }T
+T{ 10. fid1 @ REPOSITION-FILE -> 0 }T
+T{ fid1 @ FILE-POSITION -> 10. 0 }T
+
+        T{ 0. fid1 @ REPOSITION-FILE -> 0 }T
+T{ rl1 -> line1 SWAP DROP <TRUE> 0 }T
+T{ rl1 -> ROT DUP #chars ! }T<TRUE> 0 line2 SWAP DROP
+T{ buf #chars @ line2 COMPARE -> 0 }T
+T{ rl1 -> 0 <FALSE> 0 }T
+
+        T{ fid1 @ FILE-POSITION ROT ROT fp 2! -> 0 }T
+T{ fp 2@ fid1 @ FILE-SIZE DROP D= -> <TRUE> }T
+T{ S" " fid1 @ WRITE-LINE -> 0 }T
+T{ S" " fid1 @ WRITE-LINE -> 0 }T
+T{ fp 2@ fid1 @ REPOSITION-FILE -> 0 }T
+T{ rl1 -> 0 <TRUE>  0 }T
+T{ rl1 -> 0 <TRUE>  0 }T
+T{ rl1 -> 0 <FALSE> 0 }T
+T{ fid1 @ CLOSE-FILE -> 0 }T
+
+11.6.1.2147
+
+RESIZE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( ud fileid -- ior )
+
+      Set the size of the file identified by fileid to
+      ud. ior is the implementation-defined I/O result
+      code.
+
+      If the resultant file is larger than the file before the
+      operation, the portion of the file added as a result of the
+      operation might not have been written.
+
+      At the conclusion of the operation, FILE-SIZE returns
+      the value ud and
+      FILE-
+      POSITION
+      returns an unspecified value.
+
+See
+
+ 11.6.1.2080 READ-FILE,
+      11.6.1.2090 READ-LINE.
+
+Testing
+
+      setpad
+T{ fn2 R/W BIN OPEN-FILE SWAP fid2 ! -> 0 }T
+T{ 37. fid2 @ RESIZE-FILE -> 0 }T
+T{ fid2 @ FILE-SIZE -> 37. 0 }T
+T{ 0. fid2 @ REPOSITION-FILE -> 0 }T
+T{ cbuf buf 100 fid2 @ READ-FILE -> 37 0 }T
+T{ PAD 37 buf 37 COMPARE -> 0 }T
+T{ PAD 38 buf 38 COMPARE -> 1 }T
+T{ 500. fid2 @ RESIZE-FILE -> 0 }T
+T{ fid2 @ FILE-SIZE -> 500. 0 }T
+T{ 0. fid2 @ REPOSITION-FILE -> 0 }T
+T{ cbuf buf 100 fid2 @ READ-FILE -> 100 0 }T
+T{ PAD 37 buf 37 COMPARE -> 0 }T
+T{ fid2 @ CLOSE-FILE -> 0 }T
+
+11.6.1.2165
+
+S"
+
+s-quote
+
+FILE
+
+ 
+
+ Extend the semantics of 6.1.2165 S" to be:
+
+Interpretation
+
+      ( "ccc<quote>" -- c-addr u )
+
+      Parse ccc delimited by " (double quote). Store
+      the resulting string in a transient buffer c-addr u.
+
+Compilation
+
+      ( "ccc<quote>" -- )
+
+      Parse ccc delimited by " (double quote). Append
+      the run-time semantics given below to the current definition.
+
+Run-time
+
+      ( -- c-addr u )
+
+      Return c-addr and u that describe a string
+      consisting of the characters ccc.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.0855 C",
+      6.1.2165 S",
+      11.3.4 Other transient regions,
+11.6.2.2266 S\",
+      A.11.3.4 Other transient regions,
+      A.11.6.1.2165  S".
+
+Rationale
+
+      Typical use:
+      ... S" ccc" ...
+
+      The interpretation semantics for S" are intended to
+      provide a simple mechanism for entering a string in the
+      interpretation state. Since an implementation may choose to
+      provide only one buffer for interpreted strings, an
+      interpreted string is subject to being overwritten by the
+      next execution of S" in interpretation state. It is
+      intended that no standard words other than S" should
+      in themselves cause the interpreted string to be overwritten.
+      However, since words such as EVALUATE,
+      LOAD, INCLUDE-FILE and
+      INCLUDED can result in the interpretation of arbitrary
+      text, possibly including instances of S", the
+      interpreted string may be invalidated by some uses of these
+      words.
+
+      When the possibility of overwriting a string can arise, it is
+      prudent to copy the string to a "safe" buffer allocated by
+      the application.
+
+Testing
+
+      T{ S" A String"2DROP ->  }T
+         \ There is no space between the " and 2DROP
+
+11.6.1.2218
+
+SOURCE-ID
+
+source-i-d
+
+FILE
+
+ 
+
+ ( -- 0  |  -1  |  fileid )
+
+      Extend 6.2.2218 SOURCE-ID to include text-file
+      input as follows:
+
+SOURCE-ID Input source
+
+fileid	Text file "fileid"
+
+-1		String (via EVALUATE)
+
+0		User input device
+
+      An ambiguous condition exists if SOURCE-ID is used when
+      BLK contains a non-zero value.
+
+Testing
+
+      T{ SOURCE-ID DUP -1 = SWAP 0= OR -> <FALSE> }T
+
+11.6.1.2425
+
+W/O
+
+w-o
+
+FILE
+
+ 
+
+ ( -- fam )
+
+      fam is the implementation-defined value for selecting
+      the "write only" file access method.
+
+See
+
+ 11.6.1.1010 CREATE-FILE,
+      11.6.1.1970 OPEN-FILE.
+
+11.6.1.2480
+
+WRITE-FILE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u fileid -- ior )
+
+      Write u characters from c-addr to the file
+      identified by fileid starting at its current position.
+      ior is the implementation-defined I/O result code.
+
+      At the conclusion of the operation, FILE-POSITION returns
+      the next file position after the last character written to the
+      file, and FILE-SIZE returns a value greater than or equal
+      to the value returned by FILE-POSITION.
+
+See
+
+ 11.6.1.2080 READ-FILE,
+      11.6.1.2090 READ-LINE.
+
+11.6.1.2485
+
+WRITE-LINE
+
+ 
+
+FILE
+
+ 
+
+ ( c-addr u fileid -- ior )
+
+      Write u characters from c-addr followed by the
+      implementation-dependent line terminator to the file identified
+      by fileid starting at its current position. ior is
+      the implementation-defined I/O result code.
+
+      At the conclusion of the operation, FILE-POSITION returns
+      the next file position after the last character written to the
+      file, and FILE-SIZE returns a value greater than or equal
+      to the value returned by FILE-POSITION.
+
+See
+
+ 11.6.1.2080 READ-FILE,
+      11.6.1.2090 READ-LINE.
+
+Testing
+
+: line1 S" Line 1" ;
+
+        T{ fn1 W/O OPEN-FILE SWAP fid1 ! -> 0 }T
+T{ line1 fid1 @ WRITE-LINE -> 0 }T
+T{ fid1 @ CLOSE-FILE -> 0 }T
+
+11.6.2 File-Access extension words
+
+11.6.2.1524
+
+FILE-STATUS
+
+ 
+
+FILE EXT
+
+ 
+
+ ( c-addr u -- x ior )
+
+      Return the status of the file identified by the character string
+      c-addr u. If the file exists, ior is zero;
+      otherwise ior is the implementation-defined I/O result
+      code. x contains implementation-defined information about
+      the file.
+
+11.6.2.1560
+
+FLUSH-FILE
+
+ 
+
+FILE EXT
+
+ 
+
+ ( fileid -- ior )
+
+      Attempt to force any buffered information written to the file
+      referred to by fileid to be written to mass storage, and
+      the size information for the file to be recorded in the storage
+      directory if changed. If the operation is successful, ior
+      is zero. Otherwise, it is an implementation-defined I/O result
+      code.
+
+11.6.2.1714
+
+INCLUDE
+
+ 
+
+FILE EXT
+
+X:required
+
+ 
+
+ ( i×x "name" -- j×x )
+
+      Skip leading white space and parse name delimited by a
+      white space character. Push the address and length of the
+      name on the stack and perform the function of
+      INCLUDED.
+
+See
+
+ 11.6.1.1718 INCLUDED,
+      A.11.6.2.1714  INCLUDE.
+
+Rationale
+
+      Typical use:
+
+        INCLUDE filename
+
+Implementation
+
+      : INCLUDE ( i*x "name" -- j*x )
+   PARSE-NAME INCLUDED ;
+
+Testing
+
+      See F.11.6.2.2144.50 REQUIRED.
+
+11.6.2.2125
+
+REFILL
+
+ 
+
+FILE EXT
+
+ 
+
+ ( -- flag )
+
+      Extend the execution semantics of 6.2.2125 REFILL
+      with the following:
+
+      When the input source is a text file, attempt to read the next
+      line from the text-input file. If successful, make the result
+      the current input buffer, set >IN to zero, and
+      return true. Otherwise return false.
+
+See
+
+ 6.2.2125 REFILL,
+      7.6.2.2125 REFILL.
+
+11.6.2.2130
+
+RENAME-FILE
+
+ 
+
+FILE EXT
+
+ 
+
+ ( c-addr1 u1 c-addr2 u2 -- ior )
+
+      Rename the file named by the character string c-addr1 u1
+      to the name in the character string c-addr2 u2.
+      ior is the implementation-defined I/O result code.
+
+Testing
+
+: fn3 S" fatest3.txt" ;
+: >end fid1 @ FILE-SIZE DROP fid1 @ REPOSITION-FILE ;
+
+        T{ fn3 DELETE-FILE DROP ->  }T
+T{ fn1 fn3 RENAME-FILE -> 0 }T
+\  Return value is undefined
+T{ fn1 FILE-STATUS SWAP DROP 0= -> <FALSE> }T
+T{ fn3 FILE-STATUS SWAP DROP 0= -> <TRUE>  }T
+T{ fn3 R/W OPEN-FILE SWAP fid1 ! -> 0 }T
+T{ >end -> 0 }T
+T{ S" Final line" fid1 @ WRITE-LINE -> 0 }T
+T{ fid1 @ FLUSH-FILE -> 0 }T    \ Can only test FLUSH-FILE doesn't fail
+T{ fid1 @ CLOSE-FILE -> 0 }T
+
+        \ Tidy the test folder
+T{ fn3 DELETE-FILE DROP ->  }T
+
+11.6.2.2144.10
+
+REQUIRE
+
+ 
+
+FILE EXT
+
+X:required
+
+ 
+
+ ( i×x "name" -- i×x )
+
+      Skip leading white space and parse name delimited by a
+      white space character. Push the address and length of the
+      name on the stack and perform the function of
+      REQUIRED.
+
+See
+
+ 11.6.2.2144.50 REQUIRED,
+      A.11.6.2.2144.10 REQUIRE.
+
+Rationale
+
+      Typical use:
+
+        REQUIRE filename
+
+Implementation
+
+      : REQUIRE ( i*x "name" -- i*x )
+   PARSE-NAME REQUIRED ;
+
+Testing
+
+      See F.11.6.2.2144.50 REQUIRED.
+
+11.6.2.2144.50
+
+REQUIRED
+
+ 
+
+FILE EXT
+
+X:required
+
+ 
+
+ ( i×x c-addr u -- i×x )
+
+      If the file specified by c-addr u has been INCLUDED
+      or REQUIRED already, but not between the definition and
+      execution of a marker (or equivalent usage of FORGET),
+      discard c-addr u; otherwise, perform the function of
+      INCLUDED.
+
+      An ambiguous condition exists if a file is REQUIRED while
+      it is being REQUIRED or INCLUDED.
+
+      An ambiguous condition exists, if a marker is defined outside and
+      executed inside a file or vice versa, and the file is
+      REQUIRED again.
+
+      An ambiguous condition exists if the same file is REQUIRED
+      twice using different names (e.g., through symbolic links), or
+      different files with the same name are REQUIRED (by doing
+      some renaming between the invocations of REQUIRED).
+
+      An ambiguous condition exists if the stack effect of including the
+      file is not ( i×x -- i×x ).
+
+See
+
+ A.11.6.2.2144.50 REQUIRED.
+
+Rationale
+
+      Typical use:
+
+        S" filename" REQUIRED
+
+Implementation
+
+This implementation does not implement the requirements with
+        regard to MARKER and FORGET (REQUIRED
+        only includes each file once, whether a marker was executed or
+        not), so it is not a correct implementation on systems that
+        support these words. It extends the definition of INCLUDED
+        to record the name of files which have been either included or
+        required previously. The names are recorded in a linked list
+        held in the included-names variable.
+
+: save-mem	( addr1 u -- addr2 u ) \ gforth
+
+\ copy a memory block into a newly allocated region in the heap
+
+   SWAP >R
+
+   DUP ALLOCATE THROW
+
+   SWAP 2DUP R> ROT ROT MOVE ;
+
+: name-add ( addr u listp -- )
+
+   >R save-mem ( addr1 u )
+
+   3 CELLS ALLOCATE THROW \ allocate list node
+
+   R@ @ OVER ! \ set next pointer
+
+   DUP R> ! \ store current node in list var
+
+   CELL+ 2! ;
+
+: name-present? ( addr u list -- f )
+
+   ROT ROT 2>R BEGIN ( list R: addr u )
+
+     DUP
+
+   WHILE
+
+     DUP CELL+ 2@ 2R@ COMPARE 0= IF
+
+      		DROP 2R> 2DROP TRUE EXIT
+
+    	THEN
+
+     @
+
+   REPEAT
+
+   ( DROP 0 ) 2R> 2DROP ;
+
+: name-join ( addr u list -- )
+
+   >R 2DUP R@ @ name-present? IF
+
+     R> DROP 2DROP
+
+   ELSE
+
+     R> name-add
+
+   THEN ;
+
+VARIABLE included-names 0 included-names !
+
+: included ( i*x addr u -- j*x )
+
+   2DUP included-names name-join
+
+   INCLUDED ;
+
+: REQUIRED ( i*x addr u -- i*x )
+
+   2DUP included-names @ name-present? 0= IF
+
+     included
+
+   ELSE
+
+     2DROP
+
+   THEN ;
+
+Testing
+
+      This test requires two additional files:
+      required-helper1.fs and
+      required-helper2.fs.
+      Both of which hold the text:
+
+        1+
+
+      As for the test themselves:
+
+      T{ 0 
+   S" required-helper1.fs" REQUIRED \ Increment TOS 
+   REQUIRE required-helper1.fs				\ Ignore - already loaded 
+   INCLUDE required-helper1.fs				\ Increment TOS 
+ -> 2 }T
+T{ 0 
+   INCLUDE required-helper2.fs				\ Increment TOS 
+   S" required-helper2.fs" REQUIRED \ Ignored - already loaded 
+   REQUIRE required-helper2.fs				\ Ignored - already loaded 
+   S" required-helper2.fs" INCLUDED	\ Increment TOS 
+ -> 2 }T
+
+11.6.2.2266
+
+S\"
+
+s-backslash-quote
+
+FILE EXT
+
+X:interpret-escape-s
+
+ 
+
+      Extend the semantics of 6.2.2266 S\" to be:
+
+Interpretation
+
+ ( "ccc<quote>" -- c-addr u )
+
+      Parse ccc delimited by " (double quote) according to the
+      translation rules given in 6.2.2266 S\".  Store the resulting string in a
+      transient buffer c-addr u.
+
+Compilation
+
+ ( "ccc<quote>" -- )
+
+      Parse ccc delimited by " (double quote) according to the
+      translation rules given in 6.2.2266 S\".  Append the run-time semantics
+      given below to the current definition.
+
+Run-time
+
+ ( -- c-addr u )
+
+      Return a string c-addr u describing the translation of ccc.
+      A program shall not alter the returned string.
+
+See
+
+ 6.2.2266 S\" 11.3.4 Other transient regions,
+      11.6.1.2165 S", A.11.3.4 Other transient regions.
+
+< The optional Facility word set
+
+The optional Floating-Point word set >

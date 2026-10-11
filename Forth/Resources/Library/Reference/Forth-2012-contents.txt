@@ -1,0 +1,137 @@
+Forth 2012 Standard — contents
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 2012: Contents
+
+< Title Page
+
+Foreword >
+
+ Contents
+ Foreword
+ Proposals Process
+ 200x Membership
+1Introduction
+1.1Purpose
+1.2Scope
+1.2.1Inclusions
+1.2.2Exclusions
+1.3Document organization
+1.3.1Word sets
+1.3.2Annexes
+1.4Future directions
+1.4.1New technology
+1.4.2Obsolescent features
+2Terms, notation, and references
+2.1Definitions of terms
+2.2Notation
+2.2.1Numeric notation
+2.2.2Stack notation
+2.2.3Parsed-text notation
+2.2.4Glossary notation
+2.2.5BNF notation
+2.3References
+3Usage requirements
+3.1Data types
+3.1.1Data-type relationships
+3.1.2Character types
+3.1.3Single-cell types
+3.1.4Cell-pair types
+3.1.5System types
+3.2The implementation environment
+3.2.1Numbers
+3.2.2Arithmetic
+3.2.3Stacks
+3.2.4Operator terminal
+3.2.5Mass storage
+3.2.6Environmental queries
+3.2.7Obsolescent Environmental Queries
+3.2.8Extension queries
+3.3The Forth dictionary
+3.3.1Name space
+3.3.2Code space
+3.3.3Data space
+3.4The Forth text interpreter
+3.4.1Parsing
+3.4.2Finding definition names
+3.4.3Semantics
+3.4.4Possible actions on an ambiguous condition
+3.4.5Compilation
+4Documentation requirements
+4.1System documentation
+4.1.1Implementation-defined options
+4.1.2Ambiguous conditions
+4.1.3Other system documentation
+4.2Program documentation
+4.2.1Environmental dependencies
+4.2.2Other program documentation
+5Compliance and labeling
+5.1Forth-2012 systems
+5.1.1System compliance
+5.1.2System labeling
+5.2Forth-2012 programs
+5.2.1Program compliance
+5.2.2Program labeling
+
+6Glossary
+6.1Core words
+6.2Core extension words
+7The optional Block word set
+8The optional Double-Number word set
+9The optional Exception word set
+10The optional Facility word set
+11The optional File-Access word set
+12The optional Floating-Point word set
+13The optional Locals word set
+14The optional Memory-Allocation word set
+15The optional Programming-Tools word set
+16The optional Search-Order word set
+17The optional String word set
+18The optional Extended-Character word set
+ARationale
+A.1Introduction
+A.2Terms and notation
+A.3Usage requirements
+A.4Documentation requirements
+A.5Compliance and labeling
+A.6Glossary
+A.7The optional Block word set
+A.8The optional Double-Number word set
+A.9The optional Exception word set
+A.10The optional Facility word set
+A.11The optional File-Access word set
+A.12The optional Floating-Point word set
+A.13The optional Locals word set
+A.14The optional Memory-Allocation word set
+A.15The optional Programming-Tools word set
+A.16The optional Search-Order word set
+A.17The optional String word set
+A.18The optional Extended-Character word set
+BBibliography
+CCompatibility analysis
+C.1FIG Forth (circa 1978)
+C.2Forth 79
+C.3Forth 83
+C.4ANS Forth (1994)
+C.5ISO Forth (1997)
+C.6Approach of this standard
+C.7Differences from Forth 94
+C.8Additional words
+DPortability guide
+D.1Introduction
+D.2Hardware peculiarities
+D.3Number representation
+D.4Forth system implementation
+D.5Summary
+EReference Implementations
+E.1Introduction
+FTest Suite
+F.1Introduction
+F.2Test Harness
+F.3Core Tests
+HAlphabetic list of words
+
+< Title Page
+
+Foreword >

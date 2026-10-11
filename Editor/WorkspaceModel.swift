@@ -83,6 +83,8 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var searchTabs: [SearchSession] = []
     /// Buffer ↔ disk diff tabs (hunk lists only — not file buffers).
     @Published private(set) var diffTabs: [BufferDiskDiffSession] = []
+    /// Embedded WKWebView tabs (doc browser — not file buffers).
+    @Published private(set) var webTabs: [WebSession] = []
     @Published var selectedTabID: UUID?
     /// One console note per dirty-buffer debug session (span offsets are file bytes).
     var debugDirtySpanNoted = false
@@ -92,8 +94,9 @@ final class WorkspaceModel: ObservableObject {
     private var tabCancellables: [UUID: AnyCancellable] = [:]
     private var searchCancellables: [UUID: AnyCancellable] = [:]
     private var diffCancellables: [UUID: AnyCancellable] = [:]
+    private var webCancellables: [UUID: AnyCancellable] = [:]
 
-    /// Selected file editor tab (nil when a search/diff tab is selected).
+    /// Selected file editor tab (nil when a search/diff/web tab is selected).
     var selectedTab: EditorTab? {
         tabs.first { $0.id == selectedTabID }
     }
@@ -111,6 +114,10 @@ final class WorkspaceModel: ObservableObject {
         diffTabs.first { $0.id == selectedTabID }
     }
 
+    var selectedWebTab: WebSession? {
+        webTabs.first { $0.id == selectedTabID }
+    }
+
     /// True when a second editor pane is open beside the primary.
     var isEditorSplit: Bool { splitSecondaryTabID != nil }
 
@@ -120,12 +127,18 @@ final class WorkspaceModel: ObservableObject {
         return tabs.first { $0.id == id }
     }
 
-    /// Ordered strip: file tabs then search tabs then diff tabs.
+    /// Ordered strip: file tabs then search / diff / web tabs.
     var tabStripItems: [(id: UUID, title: String, isSearch: Bool)] {
         let files = tabs.map { (id: $0.id, title: $0.title, isSearch: false) }
         let searches = searchTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
         let diffs = diffTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
-        return files + searches + diffs
+        let webs = webTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
+        return files + searches + diffs + webs
+    }
+
+    /// True when there is nothing to show in the editor area.
+    var isEditorEmpty: Bool {
+        tabs.isEmpty && searchTabs.isEmpty && diffTabs.isEmpty && webTabs.isEmpty
     }
 
     // MARK: - Editor split
@@ -365,7 +378,7 @@ final class WorkspaceModel: ObservableObject {
         closeTab(id: id)
     }
 
-    /// Close a file, search, or diff tab; dirty file tabs prompt Save / Don’t Save / Cancel.
+    /// Close a file, search, diff, or web tab; dirty file tabs prompt Save / Don’t Save / Cancel.
     func closeTab(id: UUID) {
         if searchTabs.contains(where: { $0.id == id }) {
             removeSearchTab(id: id)
@@ -373,6 +386,10 @@ final class WorkspaceModel: ObservableObject {
         }
         if diffTabs.contains(where: { $0.id == id }) {
             removeDiffTab(id: id)
+            return
+        }
+        if webTabs.contains(where: { $0.id == id }) {
+            removeWebTab(id: id)
             return
         }
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
@@ -457,12 +474,12 @@ final class WorkspaceModel: ObservableObject {
         searchCancellables[id] = nil
         searchTabs.remove(at: index)
         if selectedTabID == id {
-            // Prefer a neighboring search tab, else the last file tab.
+            // Prefer a neighboring search tab, else another special/file tab.
             if !searchTabs.isEmpty {
                 let next = min(index, searchTabs.count - 1)
                 selectedTabID = searchTabs[next].id
             } else {
-                selectedTabID = tabs.last?.id ?? diffTabs.last?.id
+                selectedTabID = tabs.last?.id ?? diffTabs.last?.id ?? webTabs.last?.id
             }
         }
         objectWillChange.send()
@@ -511,6 +528,66 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    // MARK: - Web browser tabs
+
+    /// Open `url` in a new Web tab (or focus an existing tab with the same URL).
+    @discardableResult
+    func openWeb(url: URL) -> WebSession {
+        let absolute = url.absoluteString
+        if let existing = webTabs.first(where: { $0.currentURL?.absoluteString == absolute || $0.address == absolute }) {
+            selectedTabID = existing.id
+            objectWillChange.send()
+            return existing
+        }
+        let session = WebSession(url: url)
+        webTabs.append(session)
+        bindWeb(session)
+        selectedTabID = session.id
+        objectWillChange.send()
+        return session
+    }
+
+    /// Ask for a URL (default forth-standard.org) and open a Web tab.
+    func promptOpenWebPage() {
+        let alert = NSAlert()
+        alert.messageText = "Open Web Page"
+        alert.informativeText = "Enter an http(s) URL to open in an EditForth browser tab."
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: "https://forth-standard.org/")
+        field.frame = NSRect(x: 0, y: 0, width: 420, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+        var s = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return }
+        if !s.contains("://") { s = "https://" + s }
+        guard let url = URL(string: s) else { return }
+        _ = openWeb(url: url)
+    }
+
+    private func bindWeb(_ session: WebSession) {
+        webCancellables[session.id] = session.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    private func removeWebTab(id: UUID) {
+        guard let index = webTabs.firstIndex(where: { $0.id == id }) else { return }
+        webCancellables[id] = nil
+        webTabs.remove(at: index)
+        if selectedTabID == id {
+            if !webTabs.isEmpty {
+                let next = min(index, webTabs.count - 1)
+                selectedTabID = webTabs[next].id
+            } else {
+                selectedTabID = tabs.last?.id ?? searchTabs.last?.id ?? diffTabs.last?.id
+            }
+        }
+        objectWillChange.send()
+    }
+
     private func removeDiffTab(id: UUID) {
         guard let index = diffTabs.firstIndex(where: { $0.id == id }) else { return }
         diffCancellables[id] = nil
@@ -520,7 +597,7 @@ final class WorkspaceModel: ObservableObject {
                 let next = min(index, diffTabs.count - 1)
                 selectedTabID = diffTabs[next].id
             } else {
-                selectedTabID = tabs.last?.id ?? searchTabs.last?.id
+                selectedTabID = tabs.last?.id ?? searchTabs.last?.id ?? webTabs.last?.id
             }
         }
         objectWillChange.send()

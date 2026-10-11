@@ -32,6 +32,7 @@
 		FAA0106A307A79A0002BBE52 /* ISSUES.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA01069307A79A0002BBE52 /* ISSUES.md */; };
 		FAA010E9307AA940002BBE52 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA010E8307AA940002BBE52 /* README.md */; };
 		FAA010EA307AA940002BBE52 /* DESIGN.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA010E7307AA940002BBE52 /* DESIGN.md */; };
+		FAA01198307BB173002BBE52 /* ASKFORTHMORE.md in Resources */ = {isa = PBXBuildFile; fileRef = FAA01197307BB173002BBE52 /* ASKFORTHMORE.md */; };
 		FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85D7306D82790035B509 /* IPCProtocol.swift */; };
 		FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85DB306D832B0035B509 /* ForthEngine.swift */; };
 		FADE85E2306DB6EE0035B509 /* ForthEditorServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */; };
@@ -87,6 +88,7 @@
 		FAA01069307A79A0002BBE52 /* ISSUES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ISSUES.md; sourceTree = "<group>"; };
 		FAA010E7307AA940002BBE52 /* DESIGN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DESIGN.md; sourceTree = "<group>"; };
 		FAA010E8307AA940002BBE52 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		FAA01197307BB173002BBE52 /* ASKFORTHMORE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ASKFORTHMORE.md; sourceTree = "<group>"; };
 		FADE85D7306D82790035B509 /* IPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCProtocol.swift; sourceTree = "<group>"; };
 		FADE85DB306D832B0035B509 /* ForthEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEngine.swift; sourceTree = "<group>"; };
 		FADE85E1306DB6D70035B509 /* ForthEditorServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForthEditorServer.swift; sourceTree = "<group>"; };
@@ -214,6 +216,7 @@
 		EFED17010000000100000005 = {
 			isa = PBXGroup;
 			children = (
+				FAA01197307BB173002BBE52 /* ASKFORTHMORE.md */,
 				FAA010E7307AA940002BBE52 /* DESIGN.md */,
 				FAA010E8307AA940002BBE52 /* README.md */,
 				FAA01069307A79A0002BBE52 /* ISSUES.md */,
@@ -327,6 +330,7 @@
 		EFED17010000000100000012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				FAA01198307BB173002BBE52 /* ASKFORTHMORE.md in Resources */,
 				FAA010E9307AA940002BBE52 /* README.md in Resources */,
 				FAA010EA307AA940002BBE52 /* DESIGN.md in Resources */,
 				FAA0106A307A79A0002BBE52 /* ISSUES.md in Resources */,
@@ -576,7 +580,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -592,7 +596,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.1;
+				MARKETING_VERSION = 2.3.2;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -611,7 +615,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -627,7 +631,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.1;
+				MARKETING_VERSION = 2.3.2;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -771,7 +775,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -786,7 +790,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.1;
+				MARKETING_VERSION = 2.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -806,7 +810,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -821,7 +825,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.1;
+				MARKETING_VERSION = 2.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

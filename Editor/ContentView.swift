@@ -407,7 +407,7 @@ struct ContentView: View {
     private var editorArea: some View {
         // Keep every editor pane mounted so tab switches do not rebuild
         // NSTextView (text was already in memory; tear-down caused the lag).
-        if workspace.tabs.isEmpty && workspace.searchTabs.isEmpty && workspace.diffTabs.isEmpty {
+        if workspace.isEditorEmpty {
             emptyEditorPlaceholder
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let search = workspace.selectedSearchTab {
@@ -418,12 +418,35 @@ struct ContentView: View {
             // Diff hunks use the full editor area (split stays latent).
             BufferDiskDiffView(session: diff, workspace: workspace)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let web = workspace.selectedWebTab {
+            // Doc browser uses the full editor area (split stays latent).
+            WebBrowserView(session: web) {
+                sendWebPageToAskForth(web)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if workspace.isEditorSplit, workspace.splitSecondaryTab != nil {
             splitEditorArea
         } else {
             fileEditorStack(visibleTabID: workspace.selectedTabID, paneID: "main")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Append the Web tab URL to the Ask Forth Prompt and show the panel.
+    private func sendWebPageToAskForth(_ session: WebSession) {
+        let urlText = session.currentURL?.absoluteString
+            ?? session.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !urlText.isEmpty else { return }
+        let existing = aiAssistant.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existing.isEmpty {
+            aiAssistant.prompt = urlText
+        } else if existing.contains(urlText) {
+            // already present
+        } else {
+            aiAssistant.prompt = existing + "\n" + urlText
+        }
+        aiAssistant.status = "Added page URL to Prompt."
+        showAIAssistant = true
     }
 
     private func splitPaneHeader(title: String, isSecondary: Bool) -> some View {
@@ -493,17 +516,35 @@ struct ContentView: View {
     // MARK: - Tab bar
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(workspace.tabStripItems, id: \.id) { item in
-                    TabChip(
-                        title: item.title,
-                        isSelected: item.id == workspace.selectedTabID,
-                        onSelect: { workspace.selectedTabID = item.id },
-                        onClose: { workspace.closeTab(id: item.id) }
-                    )
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(workspace.tabStripItems, id: \.id) { item in
+                        TabChip(
+                            title: item.title,
+                            isSelected: item.id == workspace.selectedTabID,
+                            onSelect: { workspace.selectedTabID = item.id },
+                            onClose: { workspace.closeTab(id: item.id) }
+                        )
+                    }
                 }
             }
+            .frame(maxWidth: .infinity)
+
+            // Xcode-style trailing inspector toggle (same as View → Ask Forth / ⌥⌘A).
+            Button {
+                showAIAssistant.toggle()
+            } label: {
+                Image(systemName: "sidebar.trailing")
+                    .imageScale(.medium)
+                    .foregroundStyle(showAIAssistant ? Color.accentColor : Color.secondary)
+                    .frame(width: 28, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help(showAIAssistant ? "Hide Ask Forth (⌥⌘A)" : "Show Ask Forth (⌥⌘A)")
+            .accessibilityLabel(showAIAssistant ? "Hide Ask Forth" : "Show Ask Forth")
+            .padding(.trailing, 6)
         }
         .frame(height: 28)
         .background(Color(nsColor: .windowBackgroundColor))

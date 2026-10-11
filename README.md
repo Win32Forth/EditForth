@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.3.1** (build **10**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG is `Releases/EditForth-2.3.1-macOS.dmg` (tag **v2.3.1**). First public release was **v2.0.0**.
+**Version:** **2.3.2** (build **11**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG is `Releases/EditForth-2.3.2-macOS.dmg` (tag **v2.3.2**). First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -18,7 +18,7 @@ ollama pull gemma4:e4b
 
 Leave Ollama running. The panel default is **`gemma4:e4b`**. Other tags that work: **`gemma4:12b`** (better answers, much more memory) and **`gemma4:31b-cloud`** (fast cloud path — not fully local).
 
-Typical use: open **Ask Forth**, ask a question, and watch a new `~/Documents/EditForth/AskForth-N.fth` tab fill as the reply **streams** (wrapped at 80 columns). **Agent Enhance Reply** improves that answer in one click (appends an **Agent Enhanced Reply** section). Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample`. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
+Typical use: open **Ask Forth**, ask a question, and watch a new `~/Documents/EditForth/AskForth-N.fth` tab fill as the reply **streams** (wrapped at 80 columns). **Agent Enhance Reply** improves that answer in one click (appends an **Agent Enhanced Reply** section). Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample` and also searches **`Library/Reference`** (Forth 2012). Optional **Fetch URLs in Prompt** and **View → Open Web Page…** (⇧⌘L) bring web pages into Ask. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
 
 ## Not eForth
 
@@ -80,7 +80,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 
 ## Install (DMG)
 
-1. Open `Releases/EditForth-2.3.1-macOS.dmg` (or the matching GitHub release asset).
+1. Open `Releases/EditForth-2.3.2-macOS.dmg` (or the matching GitHub release asset).
 2. Drag **EditForth.app** and **64Forth.app** into Applications (or keep them side by side in the same folder).
 3. Approve each app once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`). Approving one app does not approve the other.
 
@@ -88,7 +88,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 1. Open and view the .jpg image called 'Getting EditForth to run.jpg'.
 2. This image shows a collage of the dialogs you have to traverse to get the MacOS to allow you to open the app. 
 3. Don't despair, it's not that hard, just follow along;
-4. Mount the .dmg file and you will see 64Forth.app and EditForth.app (versions match; last shipped DMG **2.3.1**).
+4. Mount the .dmg file and you will see 64Forth.app and EditForth.app (versions match; last shipped DMG **2.3.2**).
 5. Drag both apps into Applications (recommended) or onto the desktop — keep them in the same folder so EDIT / VIEW can find EditForth beside 64Forth.
 6. Hold down the Control key and click 64Forth.app, then select Open. (Loop back here to do the same thing with EditForth.app)
 7. You will get an error dialog that tells you that the app cannot be verified and will not be opened.

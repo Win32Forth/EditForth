@@ -15,6 +15,7 @@ final class AIAssistantModel: ObservableObject {
     static let defaultModelKey = "aiAssistantModel"
     static let defaultModel = "gemma4:e4b"
     static let libraryRAGKey = "aiAssistantLibraryRAG"
+    static let urlFetchKey = "aiAssistantURLFetch"
     static let showAgentTranscriptKey = "aiAssistantShowAgentTranscript"
 
     @Published var prompt: String = ""
@@ -25,6 +26,8 @@ final class AIAssistantModel: ObservableObject {
     @Published var isBusy = false
     /// When true, Ask / Fix retrieve Library .fth excerpts into the prompt.
     @Published var includeLibraryContext: Bool
+    /// When true, fetch http(s) URLs found in the Prompt and add page text to the LLM context.
+    @Published var fetchURLsInPrompt: Bool
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
     @Published var modelName: String
@@ -49,6 +52,11 @@ final class AIAssistantModel: ObservableObject {
         } else {
             self.includeLibraryContext = UserDefaults.standard.bool(forKey: Self.libraryRAGKey)
         }
+        if UserDefaults.standard.object(forKey: Self.urlFetchKey) == nil {
+            self.fetchURLsInPrompt = true
+        } else {
+            self.fetchURLsInPrompt = UserDefaults.standard.bool(forKey: Self.urlFetchKey)
+        }
         self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
     }
 
@@ -64,6 +72,10 @@ final class AIAssistantModel: ObservableObject {
 
     func persistLibraryRAG() {
         UserDefaults.standard.set(includeLibraryContext, forKey: Self.libraryRAGKey)
+    }
+
+    func persistURLFetch() {
+        UserDefaults.standard.set(fetchURLsInPrompt, forKey: Self.urlFetchKey)
     }
 
     func persistShowAgentTranscript() {
@@ -160,6 +172,7 @@ final class AIAssistantModel: ObservableObject {
 
         persistModelName()
         persistLibraryRAG()
+        persistURLFetch()
         isBusy = true
         status = busyStatus
         reply = ""
@@ -167,6 +180,8 @@ final class AIAssistantModel: ObservableObject {
         let model = modelName
         let client = self.client
         let useRAG = includeLibraryContext
+        let useURLFetch = fetchURLsInPrompt
+        let urlSource = prompt
 
         Task {
             let reachable = await client.ping()
@@ -208,8 +223,37 @@ final class AIAssistantModel: ObservableObject {
             }
             guard prepared else { return }
 
-            var finalUser = user
-            var ragNote = ""
+            var contextPrefix = ""
+            var contextNote = ""
+
+            if useURLFetch {
+                let promptURLs = AskForthURLFetch.extractURLs(from: urlSource)
+                let standardURLs = AskForthStandardBoost.standardURLs(for: urlSource)
+                if !promptURLs.isEmpty || !standardURLs.isEmpty {
+                    await MainActor.run {
+                        self.status = standardURLs.isEmpty ? "Fetching URLs…" : "Fetching standard / URLs…"
+                    }
+                    var web = await AskForthURLFetch.fetchExcerpts(urls: promptURLs)
+                    if !standardURLs.isEmpty {
+                        let boost = await AskForthURLFetch.fetchExcerpts(urls: standardURLs)
+                        web = AskForthURLFetch.merge(web, boost)
+                    }
+                    if !web.isEmpty {
+                        let block = web.contextBlock(maxChars: 16_000)
+                        if !block.isEmpty {
+                            contextPrefix += block + "\n\n"
+                        }
+                    }
+                    contextNote += web.statusNote
+                    if !standardURLs.isEmpty {
+                        let names = AskForthStandardBoost.candidateWords(in: urlSource).prefix(3).joined(separator: ", ")
+                        if !names.isEmpty {
+                            contextNote += " · Standard \(names)"
+                        }
+                    }
+                }
+            }
+
             if useRAG {
                 await MainActor.run {
                     self.status = "Searching Library…"
@@ -220,18 +264,28 @@ final class AIAssistantModel: ObservableObject {
                 }.value
                 if !rag.isEmpty {
                     let block = rag.contextBlock(maxChars: settings.maxChars)
-                    finalUser = block + "\n\nUser request:\n" + user
-                    let names = rag.snippets.map(\.relativePath).prefix(4).joined(separator: ", ")
-                    ragNote = " · Library \(rag.snippets.count) hit(s): \(names)"
-                } else {
-                    ragNote = " · Library: no hits"
-                }
-                await MainActor.run {
-                    if let name = self.askOutputFileName {
-                        self.status = "Streaming into \(name)…"
-                    } else {
-                        self.status = busyStatus
+                    if !block.isEmpty {
+                        contextPrefix += block + "\n\n"
                     }
+                    let names = rag.snippets.map(\.relativePath).prefix(4).joined(separator: ", ")
+                    contextNote += " · Library \(rag.snippets.count) hit(s): \(names)"
+                } else {
+                    contextNote += " · Library: no hits"
+                }
+            }
+
+            let finalUser: String
+            if contextPrefix.isEmpty {
+                finalUser = user
+            } else {
+                finalUser = contextPrefix + "User request:\n" + user
+            }
+
+            await MainActor.run {
+                if let name = self.askOutputFileName {
+                    self.status = "Streaming into \(name)…"
+                } else {
+                    self.status = busyStatus
                 }
             }
 
@@ -258,7 +312,7 @@ final class AIAssistantModel: ObservableObject {
                     self.askStreamBodyStart = nil
                     self.isBusy = false
                     let fileNote = self.askOutputFileName.map { " · \($0)" } ?? ""
-                    self.status = doneStatus + fileNote + ragNote
+                    self.status = doneStatus + fileNote + contextNote
                 }
             } catch {
                 await MainActor.run {

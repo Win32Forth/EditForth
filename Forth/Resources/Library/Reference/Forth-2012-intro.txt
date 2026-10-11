@@ -1,0 +1,140 @@
+Forth 2012 Standard — intro
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: Introduction
+
+< 200x Membership
+
+Terms, notation, and references >
+
+Forth 2012 Standard
+
+1 Introduction
+
+1.1 Purpose
+
+The purpose of this standard is to promote the portability of Forth
+programs for use on a wide variety of computing systems, to facilitate
+the communication of programs, programming techniques, and ideas among
+Forth programmers, and to serve as a basis for the future evolution of
+the Forth language.
+
+1.2 Scope
+
+This standard specifies an interface between a Forth System and a
+Forth Program by defining the words provided by a Standard System.
+
+1.2.1 Inclusions
+
+This standard specifies:
+
+ the forms that a program written in the Forth language may take;
+
+ the rules for interpreting the meaning of a program and its data.
+
+1.2.2 Exclusions
+
+This standard does not specify:
+
+ the mechanism by which programs are transformed for use on computing systems;
+
+ the operations required for setup and control of the use of programs on computing systems;
+
+ the method of transcription of programs or their input or output data to or from a storage medium;
+
+ the program and Forth system behavior when the rules of this standard fail to establish an interpretation;
+
+ the size or complexity of a program and its data that will exceed the capacity of any specific computing system or the capability of a particular Forth system;
+
+ the physical properties of input/output records, files, and units;
+
+ the physical properties and implementation of storage.
+
+1.3 Document organization
+
+1.3.1 Word sets
+
+This standard groups Forth words and capabilities into word sets
+under a name indicating some shared aspect, typically their common
+functional area. Each word set may have an extension, containing words
+that offer additional functionality. These words are not required in an
+implementation of the word set.
+
+The "Core" word set, defined in sections 1 through 6, contains the
+required words and capabilities of a Standard System. The other word
+sets, defined in sections 7 through 18, are optional, making it possible to provide
+Standard Systems with tailored levels of functionality.
+
+1.3.1.1 Text sections
+
+Within each word set, section 1 contains introductory and explanatory
+material and section 2 introduces terms and notation used throughout
+the standard. There are no requirements in these sections.
+
+Sections 3 and 4 contain the usage and documentation requirements,
+respectively, for Standard Systems and Programs, while section 5
+specifies their labeling.
+
+Sections x.1–x.6 of each word set have the same section
+numbering as sections 1–6 of the whole document to make it easy to
+relate the sections to each other.  This may lead to gaps in section
+numbers if a particular section does not occur in a word set.
+
+1.3.1.2 Glossary sections
+
+Section 6 of each word set specifies the required behavior of the
+definitions in the word set and the extensions word set.
+
+1.3.2 Annexes
+
+The annexes do not contain any required material.
+
+Annex A provides some of the rationale behind the
+committee's decisions in creating this standard, as well as
+implementation examples. It has the same section numbering as the
+body of the standard to make it easy to relate each requirements
+section to its rationale section.
+
+Annex B is a short bibliography on Forth.
+
+Annex C discusses the compatibility of this standard
+with earlier Forths.
+
+Annex D presents some techniques for writing portable
+programs.
+
+Annex H is an index of all Forth words defined in this
+standard.
+
+1.4 Future directions
+
+1.4.1 New technology
+
+This standard adopts certain words and practices that are
+increasingly found in common practice. New words have also
+been adopted to ease creation of portable programs.
+
+1.4.2 Obsolescent features
+
+This standard adopts certain words and practices that cause
+some previously used words and practices to become obsolescent.
+Although retained here because of their widespread use, their
+use in new implementations or new programs is discouraged,
+as they may be withdrawn from future revisions of the standard.
+
+This standard designates the following word as obsolescent:
+
+15.6.2.1580	FORGET
+
+6.2.2530[COMPILE]
+
+13.6.2.1795	LOCALS|
+
+This standard designates the following practice as obsolescent:
+
+ Using ENVIRONMENT? to enquire whether a word set is present.
+
+< 200x Membership
+
+Terms, notation, and references >

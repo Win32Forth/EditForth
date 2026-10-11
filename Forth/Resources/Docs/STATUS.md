@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.3.1** (build **10**) — shipped  
+**Current:** **2.3.2** (build **11**) — shipped  
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-11
+
+---
+
+## v2.3.2 — Ask Forth web + Reference
+
+**Version strings:** marketing **2.3.2**, build **11** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.2** (`Releases/EditForth-2.3.2-macOS.dmg`). Replaces **v2.3.1**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.2 === Oct 11, 2026 4:40 PM ===
+```
+
+### Highlights
+
+- **Library/Reference** — Forth 2012 standard chapters (`.txt`) for Ask Forth RAG; always searched alongside the chosen Library folder (default Sample).
+- **Fetch URLs in Prompt** — optional (default on): fetch `http`/`https` links from the Prompt, strip HTML to text, inject capped excerpts into Ask / Agent Enhance Reply.
+- **forth-standard.org auto-boost** — word-lookup prompts also fetch matching live standard pages via `Forth-2012-word-urls.json`.
+- **Web browser tabs** — **View → Open Web Page…** (⇧⌘L): WKWebView with Back / Forward / URL / Reload / **Send to Ask Forth**.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning notes: repo root `ASKFORTHMORE.md`.
 
 ---
 

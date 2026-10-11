@@ -1,0 +1,916 @@
+Forth 2012 Standard — alpha
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: Alphabetic list of words
+
+< Test Suite
+
+Annex H: Alphabetic list of words
+
+In the following list, the last, four-digit, part of the reference
+number establishes a sequence corresponding to the alphabetic ordering
+of all standard words. The first two or three parts indicate the word
+set and glossary section in which the word is defined.
+
+6.1.0010     !"store"CORE
+
+6.1.0030     #"number-sign"CORE
+
+6.1.0040     #>"number-sign-greater"CORE
+
+6.1.0050     #S"number-sign-s"CORE
+
+6.1.0070     '"tick"CORE
+
+6.1.0080     ("paren"CORE
+
+11.6.1.0080     ("paren"FILE
+
+13.6.1.0086     (LOCAL)"paren-local-paren"LOCAL
+
+6.1.0090     *"star"CORE
+
+6.1.0100     */"star-slash"CORE
+
+6.1.0110     */MOD"star-slash-mod"CORE
+
+6.1.0120     +"plus"CORE
+
+6.1.0130     +!"plus-store"CORE
+
+10.6.2.0135     +FIELD"plus-field"FACILITY EXT
+
+6.1.0140     +LOOP"plus-loop"CORE
+
+18.6.2.0145     +X/STRING"plus-x-string"XCHAR EXT
+
+6.1.0150     ,"comma"CORE
+
+6.1.0160     -"minus"CORE
+
+17.6.1.0170     -TRAILING"dash-trailing"STRING
+
+18.6.2.0175     -TRAILING-GARBAGE"minus-trailing-garbage"XCHAR EXT
+
+6.1.0180     ."dot"CORE
+
+6.1.0190     .""dot-quote"CORE
+
+6.2.0200     .("dot-paren"CORE EXT
+
+6.2.0210     .R"dot-r"CORE EXT
+
+15.6.1.0220     .S"dot-s"TOOLS
+
+6.1.0230     /"slash"CORE
+
+6.1.0240     /MOD"slash-mod"CORE
+
+17.6.1.0245     /STRING"slash-string"STRING
+
+6.1.0250     0<"zero-less"CORE
+
+6.2.0260     0<>"zero-not-equals"CORE EXT
+
+6.1.0270     0="zero-equals"CORE
+
+6.2.0280     0>"zero-greater"CORE EXT
+
+6.1.0290     1+"one-plus"CORE
+
+6.1.0300     1-"one-minus"CORE
+
+6.1.0310     2!"two-store"CORE
+
+6.1.0320     2*"two-star"CORE
+
+6.1.0330     2/"two-slash"CORE
+
+6.2.0340     2>R"two-to-r"CORE EXT
+
+6.1.0350     2@"two-fetch"CORE
+
+8.6.1.0360     2CONSTANT"two-constant"DOUBLE
+
+6.1.0370     2DROP"two-drop"CORE
+
+6.1.0380     2DUP"two-dupe"CORE
+
+8.6.1.0390     2LITERAL"two-literal"DOUBLE
+
+6.1.0400     2OVER"two-over"CORE
+
+6.2.0410     2R>"two-r-from"CORE EXT
+
+6.2.0415     2R@"two-r-fetch"CORE EXT
+
+8.6.2.0420     2ROT"two-rote"DOUBLE EXT
+
+6.1.0430     2SWAP"two-swap"CORE
+
+8.6.2.0435     2VALUE"two-value"DOUBLE EXT
+
+8.6.1.0440     2VARIABLE"two-variable"DOUBLE
+
+6.1.0450     :"colon"CORE
+
+6.2.0455     :NONAME"colon-no-name"CORE EXT
+
+6.1.0460     ;"semicolon"CORE
+
+15.6.2.0470     ;CODE"semicolon-code"TOOLS EXT
+
+6.1.0480     <"less-than"CORE
+
+6.1.0490     <#"less-number-sign"CORE
+
+6.2.0500     <>"not-equals"CORE EXT
+
+6.1.0530     ="equals"CORE
+
+6.1.0540     >"greater-than"CORE
+
+6.1.0550     >BODY"to-body"CORE
+
+12.6.1.0558     >FLOAT"to-float"FLOATING
+
+6.1.0560     >IN"to-in"CORE
+
+6.1.0570     >NUMBER"to-number"CORE
+
+6.1.0580     >R"to-r"CORE
+
+15.6.1.0600     ?"question"TOOLS
+
+6.2.0620     ?DO"question-do"CORE EXT
+
+6.1.0630     ?DUP"question-dupe"CORE
+
+6.1.0650     @"fetch"CORE
+
+6.1.0670     ABORTCORE
+
+9.6.2.0670     ABORTEXCEPTION EXT
+
+6.1.0680     ABORT""abort-quote"CORE
+
+9.6.2.0680     ABORT""abort-quote"EXCEPTION EXT
+
+6.1.0690     ABS"abs"CORE
+
+6.1.0695     ACCEPTCORE
+
+6.2.0698     ACTION-OFCORE EXT
+
+6.2.0700     AGAINCORE EXT
+
+15.6.2.0702     AHEADTOOLS EXT
+
+6.1.0705     ALIGNCORE
+
+6.1.0706     ALIGNEDCORE
+
+14.6.1.0707     ALLOCATEMEMORY
+
+6.1.0710     ALLOTCORE
+
+16.6.2.0715     ALSOSEARCH EXT
+
+6.1.0720     ANDCORE
+
+15.6.2.0740     ASSEMBLERTOOLS EXT
+
+10.6.1.0742     AT-XY"at-x-y"FACILITY
+
+6.1.0750     BASECORE
+
+6.1.0760     BEGINCORE
+
+10.6.2.0763     BEGIN-STRUCTUREFACILITY EXT
+
+11.6.1.0765     BINFILE
+
+6.1.0770     BL"b-l"CORE
+
+17.6.1.0780     BLANKSTRING
+
+7.6.1.0790     BLK"b-l-k"BLOCK
+
+7.6.1.0800     BLOCKBLOCK
+
+7.6.1.0820     BUFFERBLOCK
+
+6.2.0825     BUFFER:"buffer-colon"CORE EXT
+
+15.6.2.0830     BYETOOLS EXT
+
+6.1.0850     C!"c-store"CORE
+
+6.2.0855     C""c-quote"CORE EXT
+
+6.1.0860     C,"c-comma"CORE
+
+6.1.0870     C@"c-fetch"CORE
+
+6.2.0873     CASECORE EXT
+
+9.6.1.0875     CATCHEXCEPTION
+
+6.1.0880     CELL+"cell-plus"CORE
+
+6.1.0890     CELLSCORE
+
+10.6.2.0893     CFIELD:"c-field-colon"FACILITY EXT
+
+6.1.0895     CHAR"char"CORE
+
+18.6.2.0895     CHARXCHAR EXT
+
+6.1.0897     CHAR+"char-plus"CORE
+
+6.1.0898     CHARS"chars"CORE
+
+11.6.1.0900     CLOSE-FILEFILE
+
+17.6.1.0910     CMOVE"c-move"STRING
+
+17.6.1.0920     CMOVE>"c-move-up"STRING
+
+15.6.2.0930     CODETOOLS EXT
+
+17.6.1.0935     COMPARESTRING
+
+6.2.0945     COMPILE,"compile-comma"CORE EXT
+
+6.1.0950     CONSTANTCORE
+
+6.1.0980     COUNTCORE
+
+6.1.0990     CR"c-r"CORE
+
+6.1.1000     CREATECORE
+
+11.6.1.1010     CREATE-FILEFILE
+
+15.6.2.1015     CS-PICK"c-s-pick"TOOLS EXT
+
+15.6.2.1020     CS-ROLL"c-s-roll"TOOLS EXT
+
+8.6.1.1040     D+"d-plus"DOUBLE
+
+8.6.1.1050     D-"d-minus"DOUBLE
+
+8.6.1.1060     D."d-dot"DOUBLE
+
+8.6.1.1070     D.R"d-dot-r"DOUBLE
+
+8.6.1.1075     D0<"d-zero-less"DOUBLE
+
+8.6.1.1080     D0="d-zero-equals"DOUBLE
+
+8.6.1.1090     D2*"d-two-star"DOUBLE
+
+8.6.1.1100     D2/"d-two-slash"DOUBLE
+
+8.6.1.1110     D<"d-less-than"DOUBLE
+
+8.6.1.1120     D="d-equals"DOUBLE
+
+12.6.1.1130     D>F"d-to-f"FLOATING
+
+8.6.1.1140     D>S"d-to-s"DOUBLE
+
+8.6.1.1160     DABS"d-abs"DOUBLE
+
+6.1.1170     DECIMALCORE
+
+6.2.1173     DEFERCORE EXT
+
+6.2.1175     DEFER!"defer-store"CORE EXT
+
+6.2.1177     DEFER@"defer-fetch"CORE EXT
+
+16.6.1.1180     DEFINITIONSSEARCH
+
+11.6.1.1190     DELETE-FILEFILE
+
+6.1.1200     DEPTHCORE
+
+12.6.2.1203     DF!"d-f-store"FLOATING EXT
+
+12.6.2.1204     DF@"d-f-fetch"FLOATING EXT
+
+12.6.2.1205     DFALIGN"d-f-align"FLOATING EXT
+
+12.6.2.1207     DFALIGNED"d-f-aligned"FLOATING EXT
+
+12.6.2.1207.40DFFIELD:"d-f-field-colon"FLOATING EXT
+
+12.6.2.1208     DFLOAT+"d-float-plus"FLOATING EXT
+
+12.6.2.1209     DFLOATS"d-floats"FLOATING EXT
+
+8.6.1.1210     DMAX"d-max"DOUBLE
+
+8.6.1.1220     DMIN"d-min"DOUBLE
+
+8.6.1.1230     DNEGATE"d-negate"DOUBLE
+
+6.1.1240     DOCORE
+
+6.1.1250     DOES>"does"CORE
+
+6.1.1260     DROPCORE
+
+8.6.2.1270     DU<"d-u-less"DOUBLE EXT
+
+15.6.1.1280     DUMPTOOLS
+
+6.1.1290     DUP"dupe"CORE
+
+15.6.2.1300     EDITORTOOLS EXT
+
+10.6.2.1305     EKEY"e-key"FACILITY EXT
+
+10.6.2.1306     EKEY>CHAR"e-key-to-char"FACILITY EXT
+
+10.6.2.1306.40EKEY>FKEY"e-key-to-f-key"FACILITY EXT
+
+18.6.2.1306.60EKEY>XCHAR"e-key-to-x-char"XCHAR EXT
+
+10.6.2.1307     EKEY?"e-key-question"FACILITY EXT
+
+6.1.1310     ELSECORE
+
+6.1.1320     EMITCORE
+
+10.6.2.1325     EMIT?"emit-question"FACILITY EXT
+
+7.6.2.1330     EMPTY-BUFFERSBLOCK EXT
+
+10.6.2.1336     END-STRUCTUREFACILITY EXT
+
+6.2.1342     ENDCASE"end-case"CORE EXT
+
+6.2.1343     ENDOF"end-of"CORE EXT
+
+6.1.1345     ENVIRONMENT?"environment-query"CORE
+
+6.2.1350     ERASECORE EXT
+
+6.1.1360     EVALUATECORE
+
+7.6.1.1360     EVALUATEBLOCK
+
+6.1.1370     EXECUTECORE
+
+6.1.1380     EXITCORE
+
+12.6.1.1400     F!"f-store"FLOATING
+
+12.6.1.1410     F*"f-star"FLOATING
+
+12.6.2.1415     F**"f-star-star"FLOATING EXT
+
+12.6.1.1420     F+"f-plus"FLOATING
+
+12.6.1.1425     F-"f-minus"FLOATING
+
+12.6.2.1427     F."f-dot"FLOATING EXT
+
+12.6.1.1430     F/"f-slash"FLOATING
+
+12.6.1.1440     F0<"f-zero-less-than"FLOATING
+
+12.6.1.1450     F0="f-zero-equals"FLOATING
+
+12.6.1.1460     F<"f-less-than"FLOATING
+
+12.6.1.1470     F>D"f-to-d"FLOATING
+
+12.6.2.1471     F>S"F to S"FLOATING EXT
+
+12.6.1.1472     F@"f-fetch"FLOATING
+
+12.6.2.1474     FABS"f-abs"FLOATING EXT
+
+12.6.2.1476     FACOS"f-a-cos"FLOATING EXT
+
+12.6.2.1477     FACOSH"f-a-cosh"FLOATING EXT
+
+12.6.1.1479     FALIGN"f-align"FLOATING
+
+12.6.1.1483     FALIGNED"f-aligned"FLOATING
+
+12.6.2.1484     FALOG"f-a-log"FLOATING EXT
+
+6.2.1485     FALSECORE EXT
+
+12.6.2.1486     FASIN"f-a-sine"FLOATING EXT
+
+12.6.2.1487     FASINH"f-a-cinch"FLOATING EXT
+
+12.6.2.1488     FATAN"f-a-tan"FLOATING EXT
+
+12.6.2.1489     FATAN2"f-a-tan-two"FLOATING EXT
+
+12.6.2.1491     FATANH"f-a-tan-h"FLOATING EXT
+
+12.6.1.1492     FCONSTANT"f-constant"FLOATING
+
+12.6.2.1493     FCOS"f-cos"FLOATING EXT
+
+12.6.2.1494     FCOSH"f-cosh"FLOATING EXT
+
+12.6.1.1497     FDEPTH"f-depth"FLOATING
+
+12.6.1.1500     FDROP"f-drop"FLOATING
+
+12.6.1.1510     FDUP"f-dupe"FLOATING
+
+12.6.2.1513     FE."f-e-dot"FLOATING EXT
+
+12.6.2.1515     FEXP"f-e-x-p"FLOATING EXT
+
+12.6.2.1516     FEXPM1"f-e-x-p-m-one"FLOATING EXT
+
+12.6.2.1517     FFIELD:"f-field-colon"FLOATING EXT
+
+10.6.2.1518     FIELD:"field-colon"FACILITY EXT
+
+11.6.1.1520     FILE-POSITIONFILE
+
+11.6.1.1522     FILE-SIZEFILE
+
+11.6.2.1524     FILE-STATUSFILE EXT
+
+6.1.1540     FILLCORE
+
+6.1.1550     FINDCORE
+
+16.6.1.1550     FINDSEARCH
+
+12.6.1.1552     FLITERAL"f-literal"FLOATING
+
+12.6.2.1553     FLN"f-l-n"FLOATING EXT
+
+12.6.2.1554     FLNP1"f-l-n-p-one"FLOATING EXT
+
+12.6.1.1555     FLOAT+"float-plus"FLOATING
+
+12.6.1.1556     FLOATSFLOATING
+
+12.6.2.1557     FLOG"f-log"FLOATING EXT
+
+12.6.1.1558     FLOORFLOATING
+
+7.6.1.1559     FLUSHBLOCK
+
+11.6.2.1560     FLUSH-FILEFILE EXT
+
+6.1.1561     FM/MOD"f-m-slash-mod"CORE
+
+12.6.1.1562     FMAX"f-max"FLOATING
+
+12.6.1.1565     FMIN"f-min"FLOATING
+
+12.6.1.1567     FNEGATE"f-negate"FLOATING
+
+15.6.2.1580     FORGETTOOLS EXT
+
+16.6.2.1590     FORTHSEARCH EXT
+
+16.6.1.1595     FORTH-WORDLISTSEARCH
+
+12.6.1.1600     FOVER"f-over"FLOATING
+
+14.6.1.1605     FREEMEMORY
+
+12.6.1.1610     FROT"f-rote"FLOATING
+
+12.6.1.1612     FROUND"f-round"FLOATING
+
+12.6.2.1613     FS."f-s-dot"FLOATING EXT
+
+12.6.2.1614     FSIN"f-sine"FLOATING EXT
+
+12.6.2.1616     FSINCOS"f-sine-cos"FLOATING EXT
+
+12.6.2.1617     FSINH"f-cinch"FLOATING EXT
+
+12.6.2.1618     FSQRT"f-square-root"FLOATING EXT
+
+12.6.1.1620     FSWAP"f-swap"FLOATING
+
+12.6.2.1625     FTAN"f-tan"FLOATING EXT
+
+12.6.2.1626     FTANH"f-tan-h"FLOATING EXT
+
+12.6.2.1627     FTRUNC"f-trunc"FLOATING EXT
+
+12.6.2.1628     FVALUE"f-value"FLOATING EXT
+
+12.6.1.1630     FVARIABLE"f-variable"FLOATING
+
+12.6.2.1640     F~"f-proximate"FLOATING EXT
+
+16.6.1.1643     GET-CURRENTSEARCH
+
+16.6.1.1647     GET-ORDERSEARCH
+
+6.1.1650     HERECORE
+
+6.2.1660     HEXCORE EXT
+
+6.1.1670     HOLDCORE
+
+6.2.1675     HOLDSCORE EXT
+
+6.1.1680     ICORE
+
+6.1.1700     IFCORE
+
+6.1.1710     IMMEDIATECORE
+
+11.6.2.1714     INCLUDEFILE EXT
+
+11.6.1.1717     INCLUDE-FILEFILE
+
+11.6.1.1718     INCLUDEDFILE
+
+6.1.1720     INVERTCORE
+
+6.2.1725     ISCORE EXT
+
+6.1.1730     JCORE
+
+10.6.2.1740.01K-ALT-MASKFACILITY EXT
+
+10.6.2.1740.02K-CTRL-MASKFACILITY EXT
+
+10.6.2.1740.03K-DELETEFACILITY EXT
+
+10.6.2.1740.04K-DOWNFACILITY EXT
+
+10.6.2.1740.05K-ENDFACILITY EXT
+
+10.6.2.1740.06K-F1"k-f-1"FACILITY EXT
+
+10.6.2.1740.07K-F10"k-f-10"FACILITY EXT
+
+10.6.2.1740.08K-F11"k-f-11"FACILITY EXT
+
+10.6.2.1740.09K-F12"k-f-12"FACILITY EXT
+
+10.6.2.1740.10K-F2"k-f-2"FACILITY EXT
+
+10.6.2.1740.11K-F3"k-f-3"FACILITY EXT
+
+10.6.2.1740.12K-F4"k-f-4"FACILITY EXT
+
+10.6.2.1740.13K-F5"k-f-5"FACILITY EXT
+
+10.6.2.1740.14K-F6"k-f-6"FACILITY EXT
+
+10.6.2.1740.15K-F7"k-f-7"FACILITY EXT
+
+10.6.2.1740.16K-F8"k-f-8"FACILITY EXT
+
+10.6.2.1740.17K-F9"k-f-9"FACILITY EXT
+
+10.6.2.1740.18K-HOMEFACILITY EXT
+
+10.6.2.1740.19K-INSERTFACILITY EXT
+
+10.6.2.1740.20K-LEFTFACILITY EXT
+
+10.6.2.1740.21K-NEXTFACILITY EXT
+
+10.6.2.1740.22K-PRIORFACILITY EXT
+
+10.6.2.1740.23K-RIGHTFACILITY EXT
+
+10.6.2.1740.24K-SHIFT-MASKFACILITY EXT
+
+10.6.2.1740.25K-UPFACILITY EXT
+
+6.1.1750     KEYCORE
+
+10.6.1.1755     KEY?"key-question"FACILITY
+
+6.1.1760     LEAVECORE
+
+7.6.2.1770     LISTBLOCK EXT
+
+6.1.1780     LITERALCORE
+
+7.6.1.1790     LOADBLOCK
+
+13.6.2.1795     LOCALS|"locals-bar"LOCAL EXT
+
+6.1.1800     LOOPCORE
+
+6.1.1805     LSHIFT"l-shift"CORE
+
+6.1.1810     M*"m-star"CORE
+
+8.6.1.1820     M*/"m-star-slash"DOUBLE
+
+8.6.1.1830     M+"m-plus"DOUBLE
+
+6.2.1850     MARKERCORE EXT
+
+6.1.1870     MAXCORE
+
+6.1.1880     MINCORE
+
+6.1.1890     MODCORE
+
+6.1.1900     MOVECORE
+
+10.6.2.1905     MSFACILITY EXT
+
+15.6.2.1908     N>R"n-to-r"TOOLS EXT
+
+15.6.2.1909.10NAME>COMPILE"name-to-compile"TOOLS EXT
+
+15.6.2.1909.20NAME>INTERPRET"name-to-interpret"TOOLS EXT
+
+15.6.2.1909.40NAME>STRING"name-to-string"TOOLS EXT
+
+6.1.1910     NEGATECORE
+
+6.2.1930     NIPCORE EXT
+
+15.6.2.1940     NR>"n-r-from"TOOLS EXT
+
+6.2.1950     OFCORE EXT
+
+16.6.2.1965     ONLYSEARCH EXT
+
+11.6.1.1970     OPEN-FILEFILE
+
+6.1.1980     ORCORE
+
+16.6.2.1985     ORDERSEARCH EXT
+
+6.1.1990     OVERCORE
+
+6.2.2000     PADCORE EXT
+
+10.6.1.2005     PAGEFACILITY
+
+6.2.2008     PARSECORE EXT
+
+18.6.2.2008     PARSEXCHAR EXT
+
+6.2.2020     PARSE-NAMECORE EXT
+
+6.2.2030     PICKCORE EXT
+
+6.1.2033     POSTPONECORE
+
+12.6.2.2035     PRECISIONFLOATING EXT
+
+16.6.2.2037     PREVIOUSSEARCH EXT
+
+6.1.2050     QUITCORE
+
+11.6.1.2054     R/O"r-o"FILE
+
+11.6.1.2056     R/W"r-w"FILE
+
+6.1.2060     R>"r-from"CORE
+
+6.1.2070     R@"r-fetch"CORE
+
+11.6.1.2080     READ-FILEFILE
+
+11.6.1.2090     READ-LINEFILE
+
+6.1.2120     RECURSECORE
+
+6.2.2125     REFILLCORE EXT
+
+7.6.2.2125     REFILLBLOCK EXT
+
+11.6.2.2125     REFILLFILE EXT
+
+11.6.2.2130     RENAME-FILEFILE EXT
+
+6.1.2140     REPEATCORE
+
+17.6.2.2141     REPLACESSTRING EXT
+
+11.6.1.2142     REPOSITION-FILEFILE
+
+12.6.1.2143     REPRESENTFLOATING
+
+11.6.2.2144.10REQUIREFILE EXT
+
+11.6.2.2144.50REQUIREDFILE EXT
+
+14.6.1.2145     RESIZEMEMORY
+
+11.6.1.2147     RESIZE-FILEFILE
+
+6.2.2148     RESTORE-INPUTCORE EXT
+
+6.2.2150     ROLLCORE EXT
+
+6.1.2160     ROT"rote"CORE
+
+6.1.2162     RSHIFT"r-shift"CORE
+
+6.1.2165     S""s-quote"CORE
+
+11.6.1.2165     S""s-quote"FILE
+
+6.1.2170     S>D"s-to-d"CORE
+
+12.6.2.2175     S>F"S to F"FLOATING EXT
+
+7.6.1.2180     SAVE-BUFFERSBLOCK
+
+6.2.2182     SAVE-INPUTCORE EXT
+
+7.6.2.2190     SCR"s-c-r"BLOCK EXT
+
+17.6.1.2191     SEARCHSTRING
+
+16.6.1.2192     SEARCH-WORDLISTSEARCH
+
+15.6.1.2194     SEETOOLS
+
+16.6.1.2195     SET-CURRENTSEARCH
+
+16.6.1.2197     SET-ORDERSEARCH
+
+12.6.2.2200     SET-PRECISIONFLOATING EXT
+
+12.6.2.2202     SF!"s-f-store"FLOATING EXT
+
+12.6.2.2203     SF@"s-f-fetch"FLOATING EXT
+
+12.6.2.2204     SFALIGN"s-f-align"FLOATING EXT
+
+12.6.2.2206     SFALIGNED"s-f-aligned"FLOATING EXT
+
+12.6.2.2206.40SFFIELD:"s-f-field-colon"FLOATING EXT
+
+12.6.2.2207     SFLOAT+"s-float-plus"FLOATING EXT
+
+12.6.2.2208     SFLOATS"s-floats"FLOATING EXT
+
+6.1.2210     SIGNCORE
+
+17.6.1.2212     SLITERALSTRING
+
+6.1.2214     SM/REM"s-m-slash-rem"CORE
+
+6.1.2216     SOURCECORE
+
+6.2.2218     SOURCE-ID"source-i-d"CORE EXT
+
+11.6.1.2218     SOURCE-ID"source-i-d"FILE
+
+6.1.2220     SPACECORE
+
+6.1.2230     SPACESCORE
+
+6.1.2250     STATECORE
+
+15.6.2.2250     STATETOOLS EXT
+
+17.6.2.2255     SUBSTITUTESTRING EXT
+
+6.1.2260     SWAPCORE
+
+15.6.2.2264     SYNONYMTOOLS EXT
+
+11.6.2.2266     S\""s-backslash-quote"FILE EXT
+
+6.2.2266     S\""s-backslash-quote"CORE EXT
+
+6.1.2270     THENCORE
+
+9.6.1.2275     THROWEXCEPTION
+
+7.6.2.2280     THRUBLOCK EXT
+
+10.6.2.2292     TIME&DATE"time-and-date"FACILITY EXT
+
+6.2.2295     TOCORE EXT
+
+15.6.2.2297     TRAVERSE-WORDLISTTOOLS EXT
+
+6.2.2298     TRUECORE EXT
+
+6.2.2300     TUCKCORE EXT
+
+6.1.2310     TYPECORE
+
+6.1.2320     U."u-dot"CORE
+
+6.2.2330     U.R"u-dot-r"CORE EXT
+
+6.1.2340     U<"u-less-than"CORE
+
+6.2.2350     U>"u-greater-than"CORE EXT
+
+6.1.2360     UM*"u-m-star"CORE
+
+6.1.2370     UM/MOD"u-m-slash-mod"CORE
+
+17.6.2.2375     UNESCAPESTRING EXT
+
+6.1.2380     UNLOOPCORE
+
+6.1.2390     UNTILCORE
+
+6.2.2395     UNUSEDCORE EXT
+
+7.6.1.2400     UPDATEBLOCK
+
+6.2.2405     VALUECORE EXT
+
+6.1.2410     VARIABLECORE
+
+11.6.1.2425     W/O"w-o"FILE
+
+6.1.2430     WHILECORE
+
+6.2.2440     WITHINCORE EXT
+
+6.1.2450     WORDCORE
+
+16.6.1.2460     WORDLISTSEARCH
+
+15.6.1.2465     WORDSTOOLS
+
+11.6.1.2480     WRITE-FILEFILE
+
+11.6.1.2485     WRITE-LINEFILE
+
+18.6.1.2486.50X-SIZEXCHAR
+
+18.6.2.2486.70X-WIDTHXCHAR EXT
+
+18.6.1.2487.10XC!+"x-c-store-plus"XCHAR
+
+18.6.1.2487.15XC!+?"x-c-store-plus-query"XCHAR
+
+18.6.1.2487.20XC,"x-c-comma"XCHAR
+
+18.6.1.2487.25XC-SIZE"x-c-size"XCHAR
+
+18.6.2.2487.30XC-WIDTH"x-c-width"XCHAR EXT
+
+18.6.1.2487.35XC@+"x-c-fetch-plus"XCHAR
+
+18.6.1.2487.40XCHAR+"x-char-plus"XCHAR
+
+18.6.2.2487.45XCHAR-"x-char-minus"XCHAR EXT
+
+18.6.1.2488.10XEMIT"x-emit"XCHAR
+
+18.6.2.2488.20XHOLD"x-hold"XCHAR EXT
+
+18.6.1.2488.30XKEY"x-key"XCHAR
+
+18.6.1.2488.35XKEY?"x-key-query"XCHAR
+
+6.1.2490     XOR"x-or"CORE
+
+18.6.2.2495     X\STRING-"x-string-minus"XCHAR EXT
+
+6.1.2500     ["left-bracket"CORE
+
+6.1.2510     [']"bracket-tick"CORE
+
+6.1.2520     [CHAR]"bracket-char"CORE
+
+18.6.2.2520     [CHAR]"bracket-char"XCHAR EXT
+
+6.2.2530     [COMPILE]"bracket-compile"CORE EXT
+
+15.6.2.2530.30[DEFINED]"bracket-defined"TOOLS EXT
+
+15.6.2.2531     [ELSE]"bracket-else"TOOLS EXT
+
+15.6.2.2532     [IF]"bracket-if"TOOLS EXT
+
+15.6.2.2533     [THEN]"bracket-then"TOOLS EXT
+
+15.6.2.2534     [UNDEFINED]"bracket-undefined"TOOLS EXT
+
+6.2.2535     \"backslash"CORE EXT
+
+7.6.2.2535     \"backslash"BLOCK EXT
+
+6.1.2540     ]"right-bracket"CORE
+
+13.6.2.2550     {:"brace-colon"LOCAL EXT
+
+< Test Suite

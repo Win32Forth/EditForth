@@ -1,0 +1,7607 @@
+Forth 2012 Standard — core
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: Glossary
+
+< Compliance and labeling
+
+The optional Block word set >
+
+6 Glossary
+
+6.1 Core words
+
+6.1.0010
+
+!
+
+store
+
+CORE
+
+ 
+
+ ( x a-addr -- )
+
+      Store x at a-addr.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0150  ,.
+
+6.1.0030
+
+#
+
+number-sign
+
+CORE
+
+ 
+
+ ( ud1 -- ud2 )
+
+      Divide ud1 by the number in BASE giving the
+      quotient ud2 and the remainder n. (n is
+      the least significant digit of ud1.) Convert n
+      to external form and add the resulting character to the beginning
+      of the pictured numeric output string. An ambiguous condition
+      exists if # executes outside of a
+      <# #> delimited number conversion.
+
+See
+
+ 6.1.0040 #>,
+      6.1.0050 #S,
+      6.1.0490 <#.
+
+Testing
+
+      : GP3  <# 1 0 # # #> S" 01" S= ;
+T{ GP3 -> <TRUE> }T
+
+6.1.0040
+
+#>
+
+number-sign-greater
+
+CORE
+
+ 
+
+ ( xd -- c-addr u )
+
+      Drop xd. Make the pictured numeric output string
+      available as a character string. c-addr and u
+      specify the resulting character string. A program may replace
+      characters within the string.
+
+See
+
+ 6.1.0030 #,
+      6.1.0050 #S,
+      6.1.0490 <#.
+
+Testing
+
+  -->
+      See F.6.1.0030 #,
+      F.6.1.0050  #S,
+      F.6.1.1670  HOLD and
+      F.6.1.2210  SIGN.
+
+6.1.0050
+
+#S
+
+number-sign-s
+
+CORE
+
+ 
+
+ ( ud1 -- ud2 )
+
+      Convert one digit of ud1 according to the rule for
+      #. Continue conversion until the quotient is zero.
+      ud2 is zero. An ambiguous condition exists if
+      #S executes outside of a <# #>
+      delimited number conversion.
+
+See
+
+ 6.1.0030 #,
+      6.1.0040 #>,
+      6.1.0490 <#.
+
+Testing
+
+: GP4  <# 1 0 #S #> S" 1" S= ;
+T{ GP4 -> <TRUE> }T
+
+        : GP5
+   BASE @ <TRUE>
+   MAX-BASE 1+ 2 DO		     \ FOR EACH POSSIBLE BASE
+     I BASE !	             \ TBD: ASSUMES BASE WORKS
+       I 0 <# #S #> S" 10" S= AND
+      LOOP
+      SWAP BASE ! ;
+T{ GP5 -> <TRUE> }T
+
+        : GP6
+  	BASE @ >R  2 BASE !
+  	MAX-UINT MAX-UINT <# #S #>	  		\ MAXIMUM UD TO BINARY
+  	R> BASE !								                      	\ S: C-ADDR U
+  	DUP #BITS-UD = SWAP
+  	0 DO														                            	\ S: C-ADDR FLAG
+    		OVER C@ [CHAR] 1 = AND	   	\ ALL ONES
+    		>R CHAR+ R>
+  	LOOP SWAP DROP ;
+T{ GP6 -> <TRUE> }T
+
+        : GP7
+  	BASE @ >R		MAX-BASE BASE !
+  	<TRUE>
+  	A 0 DO
+    		I 0 <# #S #>
+    		1 = SWAP C@ I 30 + = AND AND
+  	LOOP
+  	MAX-BASE A DO
+    		I 0 <# #S #>
+    		1 = SWAP C@ 41 I A - + = AND AND
+  	LOOP
+  	R> BASE ! ;
+T{ GP7 -> <TRUE> }T
+
+6.1.0070
+
+'
+
+tick
+
+CORE
+
+ 
+
+ ( "<spaces>name" -- xt )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Find name and return xt, the execution
+      token for name. An ambiguous condition exists if
+      name is not found. When interpreting,
+      ' xyz EXECUTE is equivalent to xyz.
+
+See
+
+ 3.4.3.2 Interpretation semantics,
+      3.4.1 Parsing,
+      A.6.1.0070  ',
+      A.6.1.2033  POSTPONE,
+      A.6.1.2510  ['].
+
+Rationale
+
+      Typical use: ... ' name.
+
+      Many Forth systems use a state-smart tick. Many do not.
+      Forth-2012 follows the usage of Forth 94.
+
+See
+
+ A.3.4.3.2 Interpretation semantics,
+      A.6.1.1550  FIND.
+
+Testing
+
+      T{ : GT1 123 ;   ->     }T
+T{ ' GT1 EXECUTE -> 123 }T
+
+6.1.0080
+
+(
+
+paren
+
+CORE
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "ccc<paren>" -- )
+
+      Parse ccc delimited by )
+      (right parenthesis).
+      ( is an immediate word.
+
+      The number of characters in ccc may be zero to the
+      number of characters in the parse area.
+
+See
+
+ 3.4.1 Parsing,
+      11.6.1.0080 (,
+      A.6.1.0080  (.
+
+Rationale
+
+      Typical use: ... ( ccc) ...
+
+Testing
+
+      \ There is no space either side of the ).
+
+      T{ ( A comment)1234 ->  }T
+T{ : pc1 ( A comment)1234 ; pc1 -> 1234 }T
+
+6.1.0090
+
+*
+
+star
+
+CORE
+
+ 
+
+ ( n1 | u1 n2 | u2 -- n3 | u3 )
+
+      Multiply n1 | u1 by n2 | u2 giving the product
+      n3 | u3.
+
+Testing
+
+      T{  0  0 * ->  0 }T          \ TEST IDENTITIE\S
+T{  0  1 * ->  0 }T
+T{  1  0 * ->  0 }T
+T{  1  2 * ->  2 }T
+T{  2  1 * ->  2 }T
+T{  3  3 * ->  9 }T
+T{ -3  3 * -> -9 }T
+T{  3 -3 * -> -9 }T
+T{ -3 -3 * ->  9 }T
+
+      T{ MID-UINT+1 1 RSHIFT 2 *               -> MID-UINT+1 }T
+T{ MID-UINT+1 2 RSHIFT 4 *               -> MID-UINT+1 }T
+T{ MID-UINT+1 1 RSHIFT MID-UINT+1 OR 2 * -> MID-UINT+1 }T
+
+6.1.0100
+
+*/
+
+star-slash
+
+CORE
+
+ 
+
+ ( n1 n2 n3 -- n4 )
+
+      Multiply n1 by n2 producing the intermediate
+      double-cell result d. Divide d by n3 giving the
+      single-cell quotient n4. An ambiguous condition exists
+      if n3 is zero or if the quotient n4 lies
+      outside the range of a signed number. If d and n3
+      differ in sign, the implementation-defined result returned will
+      be the same as that returned by either the phrase
+      >R M* R> FM/MOD SWAP DROP
+      or the phrase
+      >R M* R> SM/REM SWAP DROP.
+
+See
+
+ 3.2.2.1 Integer division.
+
+Testing
+
+IFFLOORED   	: T*/ T*/MOD SWAP DROP ;
+IFSYM       	: T*/ T*/MOD SWAP DROP ;
+
+        T{       0 2       1 */ ->       0 2       1 T*/ }T
+T{       1 2       1 */ ->       1 2       1 T*/ }T
+T{       2 2       1 */ ->       2 2       1 T*/ }T
+T{      -1 2       1 */ ->      -1 2       1 T*/ }T
+T{      -2 2       1 */ ->      -2 2       1 T*/ }T
+T{       0 2      -1 */ ->       0 2      -1 T*/ }T
+T{       1 2      -1 */ ->       1 2      -1 T*/ }T
+T{       2 2      -1 */ ->       2 2      -1 T*/ }T
+T{      -1 2      -1 */ ->      -1 2      -1 T*/ }T
+T{      -2 2      -1 */ ->      -2 2      -1 T*/ }T
+T{       2 2       2 */ ->       2 2       2 T*/ }T
+T{      -1 2      -1 */ ->      -1 2      -1 T*/ }T
+T{      -2 2      -2 */ ->      -2 2      -2 T*/ }T
+T{       7 2       3 */ ->       7 2       3 T*/ }T
+T{       7 2      -3 */ ->       7 2      -3 T*/ }T
+T{      -7 2       3 */ ->      -7 2       3 T*/ }T
+T{      -7 2      -3 */ ->      -7 2      -3 T*/ }T
+T{ MAX-INT 2 MAX-INT */ -> MAX-INT 2 MAX-INT T*/ }T
+T{ MIN-INT 2 MIN-INT */ -> MIN-INT 2 MIN-INT T*/ }T
+
+6.1.0110
+
+*/MOD
+
+star-slash-mod
+
+CORE
+
+ 
+
+ ( n1 n2 n3 -- n4 n5 )
+
+      Multiply n1 by n2 producing the intermediate
+      double-cell result d. Divide d by n3 producing the
+      single-cell remainder n4 and the single-cell quotient
+      n5. An ambiguous condition exists if n3 is
+      zero, or if the quotient n5 lies outside the range of a
+      single-cell signed integer. If d and n3 differ in
+      sign, the implementation-defined result returned will be the
+      same as that returned by either the phrase
+      >R M* R> FM/MOD or the phrase
+      >R M* R> SM/REM.
+
+See
+
+ 3.2.2.1 Integer division.
+
+Testing
+
+IFFLOORED   	: T*/MOD >R M* R> FM/MOD ;
+IFSYM       	: T*/MOD >R M* R> SM/REM ;
+
+        T{       0 2       1 */MOD ->       0 2       1 T*/MOD }T
+T{       1 2       1 */MOD ->       1 2       1 T*/MOD }T
+T{       2 2       1 */MOD ->       2 2       1 T*/MOD }T
+T{      -1 2       1 */MOD ->      -1 2       1 T*/MOD }T
+T{      -2 2       1 */MOD ->      -2 2       1 T*/MOD }T
+T{       0 2      -1 */MOD ->       0 2      -1 T*/MOD }T
+T{       1 2      -1 */MOD ->       1 2      -1 T*/MOD }T
+T{       2 2      -1 */MOD ->       2 2      -1 T*/MOD }T
+T{      -1 2      -1 */MOD ->      -1 2      -1 T*/MOD }T
+T{      -2 2      -1 */MOD ->      -2 2      -1 T*/MOD }T
+T{       2 2       2 */MOD ->       2 2       2 T*/MOD }T
+T{      -1 2      -1 */MOD ->      -1 2      -1 T*/MOD }T
+T{      -2 2      -2 */MOD ->      -2 2      -2 T*/MOD }T
+T{       7 2       3 */MOD ->       7 2       3 T*/MOD }T
+T{       7 2      -3 */MOD ->       7 2      -3 T*/MOD }T
+T{      -7 2       3 */MOD ->      -7 2       3 T*/MOD }T
+T{      -7 2      -3 */MOD ->      -7 2      -3 T*/MOD }T
+T{ MAX-INT 2 MAX-INT */MOD -> MAX-INT 2 MAX-INT T*/MOD }T
+T{ MIN-INT 2 MIN-INT */MOD -> MIN-INT 2 MIN-INT T*/MOD }T
+
+6.1.0120
+
++
+
+plus
+
+CORE
+
+ 
+
+ ( n1 | u1 n2 | u2 -- n3 | u3 )
+
+      Add n2 | u2 to n1 | u1, giving the sum
+      n3 | u3.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      T{        0  5 + ->          5 }T
+T{        5  0 + ->          5 }T
+T{        0 -5 + ->         -5 }T
+T{       -5  0 + ->         -5 }T
+T{        1  2 + ->          3 }T
+T{        1 -2 + ->         -1 }T
+T{       -1  2 + ->          1 }T
+T{       -1 -2 + ->         -3 }T
+T{       -1  1 + ->          0 }T
+T{ MID-UINT  1 + -> MID-UINT+1 }T
+
+6.1.0130
+
++!
+
+plus-store
+
+CORE
+
+ 
+
+ ( n | u a-addr -- )
+
+      Add n | u to the single-cell number at a-addr.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      T{  0 1ST !        ->   }T
+T{  1 1ST +!       ->   }T
+T{    1ST @        -> 1 }T
+T{ -1 1ST +! 1ST @ -> 0 }T
+
+6.1.0140
+
++LOOP
+
+plus-loop
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: do-sys -- )
+
+      Append the run-time semantics given below to the current
+      definition. Resolve the destination of all unresolved
+      occurrences of LEAVE between the location given
+      by do-sys and the next location for a transfer of
+      control, to execute the words following +LOOP.
+
+Run-time
+
+      ( n -- )
+      ( R: loop-sys1 --  | loop-sys2 )
+
+      An ambiguous condition exists if the loop control parameters
+      are unavailable. Add n to the loop index. If the loop
+      index did not cross the boundary between the loop limit minus
+      one and the loop limit, continue execution at the beginning
+      of the loop. Otherwise, discard the current loop control
+      parameters and continue execution immediately following the
+      loop.
+
+See
+
+ 6.1.1240 DO,
+      6.1.1680 I,
+      6.1.1760 LEAVE,
+      A.6.1.0140  +LOOP.
+
+Rationale
+
+      Typical use:
+      : X  ... limit first DO
+      ... step +LOOP
+      ;
+
+Testing
+
+T{ : GD2 DO I -1 +LOOP ; ->  }T
+T{        1          4 GD2 -> 4 3 2  1 }T
+T{       -1          2 GD2 -> 2 1 0 -1 }T
+T{ MID-UINT MID-UINT+1 GD2 -> MID-UINT+1 MID-UINT }T
+
+        VARIABLE gditerations
+VARIABLE gdincrement
+
+        : gd7 ( limit start increment -- )
+   gdincrement !
+   0 gditerations !
+   DO
+     1 gditerations +!
+     I
+     gditerations @  6 = IF LEAVE THEN
+     gdincrement @
+   +LOOP gditerations @
+;
+
+        T{    4  4  -1 gd7 ->  4                  1  }T
+T{    1  4  -1 gd7 ->  4  3  2  1         4  }T
+T{    4  1  -1 gd7 ->  1  0 -1 -2  -3  -4 6  }T
+T{    4  1   0 gd7 ->  1  1  1  1   1   1 6  }T
+T{    0  0   0 gd7 ->  0  0  0  0   0   0 6  }T
+T{    1  4   0 gd7 ->  4  4  4  4   4   4 6  }T
+T{    1  4   1 gd7 ->  4  5  6  7   8   9 6  }T
+T{    4  1   1 gd7 ->  1  2  3            3  }T
+T{    4  4   1 gd7 ->  4  5  6  7   8   9 6  }T
+T{    2 -1  -1 gd7 -> -1 -2 -3 -4  -5  -6 6  }T
+T{   -1  2  -1 gd7 ->  2  1  0 -1         4  }T
+T{    2 -1   0 gd7 -> -1 -1 -1 -1  -1  -1 6  }T
+T{   -1  2   0 gd7 ->  2  2  2  2   2   2 6  }T
+T{   -1  2   1 gd7 ->  2  3  4  5   6   7 6  }T
+T{    2 -1   1 gd7 -> -1 0 1              3  }T
+T{  -20 30 -10 gd7 -> 30 20 10  0 -10 -20 6  }T
+T{  -20 31 -10 gd7 -> 31 21 11  1  -9 -19 6  }T
+T{  -20 29 -10 gd7 -> 29 19  9 -1 -11     5  }T
+
+        \ With large and small increments
+
+        MAX-UINT 8 RSHIFT 1+ CONSTANT ustep
+ustep NEGATE CONSTANT -ustep
+MAX-INT 7 RSHIFT 1+ CONSTANT step
+step NEGATE CONSTANT -step
+
+        VARIABLE bump
+
+        T{  : gd8 bump ! DO 1+ bump @ +LOOP ; ->  }T
+
+        T{  0 MAX-UINT 0 ustep gd8 -> 256 }T
+T{  0 0 MAX-UINT -ustep gd8 -> 256 }T
+T{  0 MAX-INT MIN-INT step gd8 -> 256 }T
+T{  0 MIN-INT MAX-INT -step gd8 -> 256 }T
+
+6.1.0150
+
+,
+
+comma
+
+CORE
+
+ 
+
+ ( x -- )
+
+      Reserve one cell of data space and store x in the cell.
+      If the data-space pointer is aligned when , begins
+      execution, it will remain aligned when , finishes
+      execution. An ambiguous condition exists if the data-space
+      pointer is not aligned prior to execution of ,.
+
+See
+
+ 3.3.3 Data space,
+      3.3.3.1 Address alignment,
+      A.6.1.0150  ,.
+
+Rationale
+
+      The use of , (comma) for compiling execution tokens is
+      not portable.
+
+      See: 6.2.0945 COMPILE,.
+
+Testing
+
+HERE 1 ,
+HERE 2 ,
+CONSTANT 2ND
+CONSTANT 1ST
+
+        T{       1ST 2ND U< -> <TRUE> }T \ HERE MUST GROW WITH ALLOT
+T{       1ST CELL+  -> 2ND }T    \ ... BY ONE CELL
+T{   1ST 1 CELLS +  -> 2ND }T
+T{     1ST @ 2ND @  -> 1 2 }T
+T{         5 1ST !  ->     }T
+T{     1ST @ 2ND @  -> 5 2 }T
+T{         6 2ND !  ->     }T
+T{     1ST @ 2ND @  -> 5 6 }T
+T{           1ST 2@ -> 6 5 }T
+T{       2 1 1ST 2! ->     }T
+T{           1ST 2@ -> 2 1 }T
+T{ 1S 1ST !  1ST @  -> 1S  }T    \ CAN STORE CELL-WIDE VALUE
+
+6.1.0160
+
+-
+
+minus
+
+CORE
+
+ 
+
+ ( n1 | u1 n2 | u2 -- n3 | u3 )
+
+      Subtract n2 | u2 from n1 | u1, giving the
+      difference n3 | u3.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      T{          0  5 - ->       -5 }T
+T{          5  0 - ->        5 }T
+T{          0 -5 - ->        5 }T
+T{         -5  0 - ->       -5 }T
+T{          1  2 - ->       -1 }T
+T{          1 -2 - ->        3 }T
+T{         -1  2 - ->       -3 }T
+T{         -1 -2 - ->        1 }T
+T{          0  1 - ->       -1 }T
+T{ MID-UINT+1  1 - -> MID-UINT }T
+
+6.1.0180
+
+.
+
+dot
+
+CORE
+
+ 
+
+ ( n -- )
+
+      Display n in free field format.
+
+See
+
+ 3.2.1.2 Digit conversion,
+      3.2.1.3 Free-field number display.
+
+Testing
+
+      See F.6.1.1320  EMIT.
+
+6.1.0190
+
+."
+
+dot-quote
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "ccc<quote>" -- )
+
+      Parse ccc delimited by " (double-quote).
+      Append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( -- )
+
+      Display ccc.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.0200 .(,
+      A.6.1.0190  .".
+
+Rationale
+
+      Typical use:
+      : X ...
+      ." ccc" ...
+      ;
+
+      An implementation may define interpretation semantics for
+      ." if desired. In one plausible implementation,
+      interpreting ." would display the delimited message.
+      In another plausible implementation, interpreting ."
+      would compile code to display the message later. In still
+      another plausible implementation, interpreting ." would
+      be treated as an exception. Given this variation a Standard
+      Program may not use ." while interpreting. Similarly,
+      a Standard Program may not compile POSTPONE ."
+      inside a new word, and then use that word while interpreting.
+
+Testing
+
+      T{ : pb1 CR ." You should see 2345: "." 2345"; pb1 ->  }T
+
+      See F.6.1.1320  EMIT.
+
+4ex
+
+6.1.0230
+
+/
+
+slash
+
+CORE
+
+ 
+
+ ( n1 n2 -- n3 )
+
+      Divide n1 by n2, giving the single-cell quotient
+      n3. An ambiguous condition exists if n2 is zero.
+      If n1 and n2 differ in sign, the
+      implementation-defined result returned will be the same as that
+      returned by either the phrase
+      >R S>D R> FM/MOD SWAP DROP
+      or the phrase
+      >R S>D R> SM/REM SWAP DROP.
+
+See
+
+ 3.2.2.1 Integer division.
+
+Testing
+
+IFFLOORED   	: T/ T/MOD SWAP DROP ;
+IFSYM        : T/ T/MOD SWAP DROP ;
+
+        T{       0       1 / ->       0       1 T/ }T
+T{       1       1 / ->       1       1 T/ }T
+T{       2       1 / ->       2       1 T/ }T
+T{      -1       1 / ->      -1       1 T/ }T
+T{      -2       1 / ->      -2       1 T/ }T
+T{       0      -1 / ->       0      -1 T/ }T
+T{       1      -1 / ->       1      -1 T/ }T
+T{       2      -1 / ->       2      -1 T/ }T
+T{      -1      -1 / ->      -1      -1 T/ }T
+T{      -2      -1 / ->      -2      -1 T/ }T
+T{       2       2 / ->       2       2 T/ }T
+T{      -1      -1 / ->      -1      -1 T/ }T
+T{      -2      -2 / ->      -2      -2 T/ }T
+T{       7       3 / ->       7       3 T/ }T
+T{       7      -3 / ->       7      -3 T/ }T
+T{      -7       3 / ->      -7       3 T/ }T
+T{      -7      -3 / ->      -7      -3 T/ }T
+T{ MAX-INT       1 / -> MAX-INT       1 T/ }T
+T{ MIN-INT       1 / -> MIN-INT       1 T/ }T
+T{ MAX-INT MAX-INT / -> MAX-INT MAX-INT T/ }T
+T{ MIN-INT MIN-INT / -> MIN-INT MIN-INT T/ }T
+
+10ex
+
+6.1.0240
+
+/MOD
+
+slash-mod
+
+CORE
+
+ 
+
+ ( n1 n2 -- n3 n4 )
+
+      Divide n1 by n2, giving the single-cell remainder
+      n3 and the single-cell quotient n4. An ambiguous
+      condition exists if n2 is zero. If n1 and
+      n2 differ in sign, the implementation-defined result
+      returned will be the same as that returned by either the phrase
+      >R S>D R> FM/MOD
+      or the phrase
+      >R S>D R> SM/REM.
+
+See
+
+ 3.2.2.1 Integer division.
+
+Testing
+
+IFFLOORED     : T/MOD  >R S>D R> FM/MOD ;
+IFSYM        : T/MOD  >R S>D R> SM/REM ;
+
+        T{       0       1 /MOD ->       0       1 T/MOD }T
+T{       1       1 /MOD ->       1       1 T/MOD }T
+T{       2       1 /MOD ->       2       1 T/MOD }T
+T{      -1       1 /MOD ->      -1       1 T/MOD }T
+T{      -2       1 /MOD ->      -2       1 T/MOD }T
+T{       0      -1 /MOD ->       0      -1 T/MOD }T
+T{       1      -1 /MOD ->       1      -1 T/MOD }T
+T{       2      -1 /MOD ->       2      -1 T/MOD }T
+T{      -1      -1 /MOD ->      -1      -1 T/MOD }T
+T{      -2      -1 /MOD ->      -2      -1 T/MOD }T
+T{       2       2 /MOD ->       2       2 T/MOD }T
+T{      -1      -1 /MOD ->      -1      -1 T/MOD }T
+T{      -2      -2 /MOD ->      -2      -2 T/MOD }T
+T{       7       3 /MOD ->       7       3 T/MOD }T
+T{       7      -3 /MOD ->       7      -3 T/MOD }T
+T{      -7       3 /MOD ->      -7       3 T/MOD }T
+T{      -7      -3 /MOD ->      -7      -3 T/MOD }T
+T{ MAX-INT       1 /MOD -> MAX-INT       1 T/MOD }T
+T{ MIN-INT       1 /MOD -> MIN-INT       1 T/MOD }T
+T{ MAX-INT MAX-INT /MOD -> MAX-INT MAX-INT T/MOD }T
+T{ MIN-INT MIN-INT /MOD -> MIN-INT MIN-INT T/MOD }T
+
+6.1.0250
+
+0<
+
+zero-less
+
+CORE
+
+ 
+
+ ( n -- flag )
+
+      flag is true if and only if n is less than zero.
+
+Testing
+
+      T{       0 0< -> <FALSE> }T
+T{      -1 0< -> <TRUE>  }T
+T{ MIN-INT 0< -> <TRUE>  }T
+T{       1 0< -> <FALSE> }T
+T{ MAX-INT 0< -> <FALSE> }T
+
+6.1.0270
+
+0=
+
+zero-equals
+
+CORE
+
+ 
+
+ ( x -- flag )
+
+      flag is true if and only if x is equal to zero.
+
+Testing
+
+      T{        0 0= -> <TRUE>  }T
+T{        1 0= -> <FALSE> }T
+T{        2 0= -> <FALSE> }T
+T{       -1 0= -> <FALSE> }T
+T{ MAX-UINT 0= -> <FALSE> }T
+T{ MIN-INT  0= -> <FALSE> }T
+T{ MAX-INT  0= -> <FALSE> }T
+
+6.1.0290
+
+1+
+
+one-plus
+
+CORE
+
+ 
+
+ ( n1 | u1 -- n2 | u2 )
+
+      Add one (1) to n1 | u1 giving the sum
+      n2 | u2.
+
+Testing
+
+      T{        0 1+ ->          1 }T
+T{       -1 1+ ->          0 }T
+T{        1 1+ ->          2 }T
+T{ MID-UINT 1+ -> MID-UINT+1 }T
+
+6.1.0300
+
+1-
+
+one-minus
+
+CORE
+
+ 
+
+ ( n1 | u1 -- n2 | u2 )
+
+      Subtract one (1) from n1 | u1 giving the difference
+      n2 | u2.
+
+Testing
+
+      T{          2 1- ->        1 }T
+T{          1 1- ->        0 }T
+T{          0 1- ->       -1 }T
+T{ MID-UINT+1 1- -> MID-UINT }T
+
+6.1.0310
+
+2!
+
+two-store
+
+CORE
+
+ 
+
+ ( x1 x2 a-addr -- )
+
+      Store the cell pair x1 x2 at a-addr, with
+      x2 at a-addr and x1 at the next
+      consecutive cell. It is equivalent to the sequence
+      SWAP OVER ! CELL+ !.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0150 ,.
+
+6.1.0320
+
+2*
+
+two-star
+
+CORE
+
+ 
+
+ ( x1 -- x2 )
+
+      x2 is the result of shifting x1 one bit toward
+      the most-significant bit, filling the vacated least-significant
+      bit with zero.
+
+Testing
+
+      T{   0S 2*       ->   0S }T
+T{    1 2*       ->    2 }T
+T{ 4000 2*       -> 8000 }T
+T{   1S 2* 1 XOR ->   1S }T
+T{  MSB 2*       ->   0S }T
+
+6.1.0330
+
+2/
+
+two-slash
+
+CORE
+
+ 
+
+ ( x1 -- x2 )
+
+      x2 is the result of shifting x1 one bit toward
+      the least-significant bit, leaving the most-significant bit
+      unchanged.
+
+Testing
+
+      T{          0S 2/ ->   0S }T
+T{           1 2/ ->    0 }T
+T{        4000 2/ -> 2000 }T
+T{          1S 2/ ->   1S }T \ MSB PROPOGATED
+T{    1S 1 XOR 2/ ->   1S }T
+T{ MSB 2/ MSB AND ->  MSB }T
+
+6.1.0350
+
+2@
+
+two-fetch
+
+CORE
+
+ 
+
+ ( a-addr -- x1 x2 )
+
+      Fetch the cell pair x1 x2 stored at a-addr.
+      x2 is stored at a-addr and x1 at the
+      next consecutive cell. It is equivalent to the sequence
+      DUP CELL+ @ SWAP @.
+
+See
+
+ 3.3.3.1 Address alignment,
+      6.1.0310 2!.
+
+Testing
+
+      See F.6.1.0150 ,.
+
+6.1.0370
+
+2DROP
+
+two-drop
+
+CORE
+
+ 
+
+ ( x1 x2 -- )
+
+      Drop cell pair x1 x2 from the stack.
+
+Testing
+
+      T{ 1 2 2DROP ->  }T
+
+6.1.0380
+
+2DUP
+
+two-dupe
+
+CORE
+
+ 
+
+ ( x1 x2 -- x1 x2 x1 x2 )
+
+      Duplicate cell pair x1 x2.
+
+Testing
+
+      T{ 1 2 2DUP -> 1 2 1 2 }T
+
+6.1.0400
+
+2OVER
+
+two-over
+
+CORE
+
+ 
+
+ ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
+
+      Copy cell pair x1 x2 to the top of the stack.
+
+Testing
+
+      T{ 1 2 3 4 2OVER -> 1 2 3 4 1 2 }T
+
+6.1.0430
+
+2SWAP
+
+two-swap
+
+CORE
+
+ 
+
+ ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
+
+      Exchange the top two cell pairs.
+
+Testing
+
+      T{ 1 2 3 4 2SWAP -> 3 4 1 2 }T
+
+6.1.0450
+
+:
+
+colon
+
+CORE
+
+ 
+
+ ( C: "<spaces>name" -- colon-sys )
+
+      Skip leading space delimiters. Parse name delimited by a
+      space. Create a definition for name, called a "colon
+      definition". Enter compilation state and start the current
+      definition, producing colon-sys. Append the initiation
+      semantics given below to the current definition.
+
+      The execution semantics of name will be determined by the
+      words compiled into the body of the definition. The current
+      definition shall not be findable in the dictionary until it is
+      ended (or until the execution of DOES> in some systems).
+
+Initiation
+
+ ( i×x -- i×x )
+      ( R: -- nest-sys )
+
+      Save implementation-dependent information nest-sys
+      about the calling definition. The stack effects i×x
+      represent arguments to name.
+
+name Execution
+
+      ( i×x -- j×x )
+
+      Execute the definition name. The stack effects
+      i×x and j×x represent arguments to and
+      results from name, respectively.
+
+See
+
+ 3.4.3.2 Interpretation semantics,
+      3.4.1 Parsing,
+      3.4.5 Compilation,
+      6.1.1250 DOES>,
+      6.1.2500 [,
+      6.1.2540 ],
+      15.6.2.0470 ;CODE,
+      A.6.1.0450  :.
+
+Rationale
+
+      Typical use:
+      : name ... ;
+
+      In Forth 83, this word was specified to alter the search order.
+      This specification is explicitly removed in this standard. We
+      believe that in most cases this has no effect; however, systems
+      that allow many search orders found the Forth-83 behavior of
+      colon very undesirable.
+
+      Note that colon does not itself invoke the compiler. Colon sets
+      compilation state so that later words in the parse area are
+      compiled.
+
+Testing
+
+      T{ : NOP : POSTPONE ; ; ->  }T
+T{ NOP NOP1 NOP NOP2 ->  }T
+T{ NOP1 ->  }T
+T{ NOP2 ->  }T
+
+      The following tests the dictionary search order:
+
+      T{ : GDX   123 ;    : GDX   GDX 234 ; ->  }T
+T{ GDX -> 123 234 }T
+
+6.1.0460
+
+;
+
+semicolon
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: colon-sys -- )
+
+      Append the run-time semantics below to the current definition. End
+      the current definition, allow it to be found in the dictionary and
+      enter interpretation state, consuming colon-sys. If the
+      data-space pointer is not aligned, reserve enough data space to
+      align it.
+
+Run-time
+
+      ( -- )
+      ( R: nest-sys -- )
+
+      Return to the calling definition specified by nest-sys.
+
+See
+
+ 3.4 The Forth text interpreter,
+      3.4.5 Compilation,
+      A.6.1.0460  ;.
+
+Rationale
+
+      Typical use:
+      : name ... ;
+
+      One function performed by both ; and ;CODE
+      is to allow the current definition to be found in the
+      dictionary. If the current definition was created by
+      :NONAME the current definition has no definition name
+      and thus cannot be found in the dictionary. If :NONAME
+      is implemented the Forth compiler must maintain enough
+      information about the current definition to allow ; and
+      ;CODE to determine whether or not any action must
+      be taken to allow it to be found.
+
+Testing
+
+      See F.6.1.0450 :.
+
+6.1.0480
+
+<
+
+less-than
+
+CORE
+
+ 
+
+ ( n1 n2 -- flag )
+
+      flag is true if and only if n1 is less than
+      n2.
+
+See
+
+ 6.1.2340 U<.
+
+Testing
+
+      T{       0       1 < -> <TRUE>  }T
+T{       1       2 < -> <TRUE>  }T
+T{      -1       0 < -> <TRUE>  }T
+T{      -1       1 < -> <TRUE>  }T
+T{ MIN-INT       0 < -> <TRUE>  }T
+T{ MIN-INT MAX-INT < -> <TRUE>  }T
+T{       0 MAX-INT < -> <TRUE>  }T
+T{       0       0 < -> <FALSE> }T
+T{       1       1 < -> <FALSE> }T
+T{       1       0 < -> <FALSE> }T
+T{       2       1 < -> <FALSE> }T
+T{       0      -1 < -> <FALSE> }T
+T{       1      -1 < -> <FALSE> }T
+T{       0 MIN-INT < -> <FALSE> }T
+T{ MAX-INT MIN-INT < -> <FALSE> }T
+T{ MAX-INT       0 < -> <FALSE> }T
+
+6.1.0490
+
+<#
+
+less-number-sign
+
+CORE
+
+ 
+
+ ( -- )
+
+      Initialize the pictured numeric output conversion process.
+
+See
+
+ 6.1.0030 #,
+      6.1.0040 #>,
+      6.1.0050 #S.
+
+Testing
+
+      See F.6.1.0030 #,
+      F.6.1.0050 #S,
+      F.6.1.1670  HOLD,
+      F.6.1.2210  SIGN.
+
+6.1.0530
+
+=
+
+equals
+
+CORE
+
+ 
+
+ ( x1 x2 -- flag )
+
+      flag is true if and only if x1 is bit-for-bit
+      the same as x2.
+
+Testing
+
+      T{  0  0 = -> <TRUE>  }T
+T{  1  1 = -> <TRUE>  }T
+T{ -1 -1 = -> <TRUE>  }T
+T{  1  0 = -> <FALSE> }T
+T{ -1  0 = -> <FALSE> }T
+T{  0  1 = -> <FALSE> }T
+T{  0 -1 = -> <FALSE> }T
+
+6.1.0540
+
+>
+
+greater-than
+
+CORE
+
+ 
+
+ ( n1 n2 -- flag )
+
+      flag is true if and only if n1 is greater than n2.
+
+See
+
+ 6.2.2350 U>.
+
+Testing
+
+  -->
+      T{       0       1 > -> <FALSE> }T
+T{       1       2 > -> <FALSE> }T
+T{      -1       0 > -> <FALSE> }T
+T{      -1       1 > -> <FALSE> }T
+T{ MIN-INT       0 > -> <FALSE> }T
+T{ MIN-INT MAX-INT > -> <FALSE> }T
+T{       0 MAX-INT > -> <FALSE> }T
+T{       0       0 > -> <FALSE> }T
+T{       1       1 > -> <FALSE> }T
+T{       1       0 > -> <TRUE>  }T
+T{       2       1 > -> <TRUE>  }T
+T{       0      -1 > -> <TRUE>  }T
+T{       1      -1 > -> <TRUE>  }T
+T{       0 MIN-INT > -> <TRUE>  }T
+T{ MAX-INT MIN-INT > -> <TRUE>  }T
+T{ MAX-INT       0 > -> <TRUE>  }T
+
+6.1.0550
+
+>BODY
+
+to-body
+
+CORE
+
+ 
+
+ ( xt -- a-addr )
+
+      a-addr is the data-field address corresponding to
+      xt. An ambiguous condition exists if xt is not
+      for a word defined via CREATE.
+
+See
+
+ 3.3.3 Data space,
+      A.6.1.0550  >BODY.
+
+Rationale
+
+ BODY -->
+      a-addr is the address that HERE would have
+      returned had it been executed immediately after the execution
+      of the CREATE that defined xt.
+
+Testing
+
+ BODY -->
+      T{  CREATE CR0 ->      }T
+T{ ' CR0 >BODY -> HERE }T
+
+6.1.0560
+
+>IN
+
+to-in
+
+CORE
+
+ 
+
+ ( -- a-addr )
+
+      a-addr is the address of a cell containing the offset in
+      characters from the start of the input buffer to the start of
+      the parse area.
+
+Testing
+
+ IN -->
+
+VARIABLE SCANS
+: RESCAN?  -1 SCANS +! SCANS @ IF 0 >IN ! THEN ;
+
+        T{   2 SCANS ! 
+
+        345 RESCAN? 
+ -> 345 345 }T
+
+        : GS2  5 SCANS ! S" 123 RESCAN?" EVALUATE ;
+T{ GS2 -> 123 123 123 123 123 }T
+
+        \ These tests must start on a new line
+DECIMAL
+T{ 123456 DEPTH OVER 9 < 35 AND + 3 + >IN !
+-> 123456 23456 3456 456 56 6 }T
+T{ 14145 8115 ?DUP 0= 34 AND >IN +! TUCK MOD 14 >IN ! GCD calculation
+-> 15 }T
+
+6.1.0570
+
+>NUMBER
+
+to-number
+
+CORE
+
+ 
+
+ ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
+
+      ud2 is the unsigned result of converting the characters
+      within the string specified by c-addr1 u1 into digits,
+      using the number in BASE, and adding each into ud1
+      after multiplying ud1 by the number in BASE.
+      Conversion continues left-to-right until a character that is not
+      convertible, including any "+" or "-", is encountered or the
+      string is entirely converted.
+      c-addr2 is the location of the first unconverted character
+      or the first character past the end of the string if the string was
+      entirely converted. u2 is the number of unconverted
+      characters in the string. An ambiguous condition exists if
+      ud2 overflows during the conversion.
+
+See
+
+ 3.2.1.2 Digit conversion.
+
+Testing
+
+ NUMBER -->
+
+CREATE GN-BUF 0 C,
+: GN-STRING	 GN-BUF 1 ;
+: GN-CONSUMED GN-BUF CHAR+ 0 ;
+: GN'		 [CHAR] ' WORD CHAR+ C@ GN-BUF C!  GN-STRING ;
+
+        T{ 0 0 GN' 0' >NUMBER ->         0 0 GN-CONSUMED }T
+T{ 0 0 GN' 1' >NUMBER ->         1 0 GN-CONSUMED }T
+T{ 1 0 GN' 1' >NUMBER -> BASE @ 1+ 0 GN-CONSUMED }T
+\ FOLLOWING SHOULD FAIL TO CONVERT
+T{ 0 0 GN' -' >NUMBER ->         0 0 GN-STRING   }T
+T{ 0 0 GN' +' >NUMBER ->         0 0 GN-STRING   }T
+T{ 0 0 GN' .' >NUMBER ->         0 0 GN-STRING   }T
+
+        : >NUMBER-BASED
+   BASE @ >R BASE ! >NUMBER R> BASE ! ;
+
+        T{ 0 0 GN' 2'       10 >NUMBER-BASED ->  2 0 GN-CONSUMED }T
+T{ 0 0 GN' 2'        2 >NUMBER-BASED ->  0 0 GN-STRING   }T
+T{ 0 0 GN' F'       10 >NUMBER-BASED ->  F 0 GN-CONSUMED }T
+T{ 0 0 GN' G'       10 >NUMBER-BASED ->  0 0 GN-STRING   }T
+T{ 0 0 GN' G' MAX-BASE >NUMBER-BASED -> 10 0 GN-CONSUMED }T
+T{ 0 0 GN' Z' MAX-BASE >NUMBER-BASED -> 23 0 GN-CONSUMED }T
+
+        : GN1 ( UD BASE -- UD' LEN )
+  	\ UD SHOULD EQUAL UD' AND LEN SHOULD BE ZERO.
+  	BASE @ >R BASE !
+  	<# #S #>
+  	0 0 2SWAP >NUMBER SWAP DROP    \ RETURN LENGTH ONLY
+  	R> BASE ! ;
+
+        T{        0   0        2 GN1 ->        0   0 0 }T
+T{ MAX-UINT   0        2 GN1 -> MAX-UINT   0 0 }T
+T{ MAX-UINT DUP        2 GN1 -> MAX-UINT DUP 0 }T
+T{        0   0 MAX-BASE GN1 ->        0   0 0 }T
+T{ MAX-UINT   0 MAX-BASE GN1 -> MAX-UINT   0 0 }T
+T{ MAX-UINT DUP MAX-BASE GN1 -> MAX-UINT DUP 0 }T
+
+6.1.0580
+
+>R
+
+to-r
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( x -- )
+      ( R: -- x )
+
+      Move x to the return stack.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.2060 R>,
+      6.1.2070 R@,
+      6.2.0340 2>R,
+      6.2.0410 2R>,
+      6.2.0415 2R@.
+
+Testing
+
+ R -->
+      T{ : GR1 >R R> ; ->  }T
+T{ : GR2 >R R@ R> DROP ; ->  }T
+T{ 123 GR1 -> 123 }T
+T{ 123 GR2 -> 123 }T
+T{  1S GR1 ->  1S }T      ( Return stack holds cells )
+
+6.1.0630
+
+?DUP
+
+question-dupe
+
+CORE
+
+ 
+
+ ( x -- 0  |  x x )
+
+      Duplicate x if it is non-zero.
+
+Testing
+
+      T{ -1 ?DUP -> -1 -1 }T
+T{  0 ?DUP ->  0    }T
+T{  1 ?DUP ->  1  1 }T
+
+6.1.0650
+
+@
+
+fetch
+
+CORE
+
+ 
+
+ ( a-addr -- x )
+
+      x is the value stored at a-addr.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0150 ,.
+
+6.1.0670
+
+ABORT
+
+ 
+
+CORE
+
+ 
+
+ ( i×x -- )
+      ( R: j×x -- )
+
+      Empty the data stack and perform the function of QUIT,
+      which includes emptying the return stack, without displaying
+      a message.
+
+See
+
+ 9.6.2.0670 ABORT.
+
+6.1.0680
+
+ABORT"
+
+abort-quote
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "ccc<quote>" -- )
+
+      Parse ccc delimited by a " (double-quote).
+      Append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( i×x x1 --  |  i×x )
+      ( R: j×x --  |  j×x )
+
+      Remove x1 from the stack. If any bit of x1 is not
+      zero, display ccc and perform an implementation-defined
+      abort sequence that includes the function of ABORT.
+
+See
+
+ 3.4.1 Parsing,
+      9.6.2.0680 ABORT",
+      A.6.1.0680  ABORT".
+
+Rationale
+
+      Typical use:
+      : X ...
+      test ABORT" ccc"
+      ... ;
+
+6.1.0690
+
+ABS
+
+abs
+
+CORE
+
+ 
+
+ ( n -- u )
+
+      u is the absolute value of n.
+
+Testing
+
+      T{       0 ABS ->          0 }T
+T{       1 ABS ->          1 }T
+T{      -1 ABS ->          1 }T
+T{ MIN-INT ABS -> MID-UINT+1 }T
+
+6.1.0695
+
+ACCEPT
+
+ 
+
+CORE
+
+ 
+
+ ( c-addr +n1 -- +n2 )
+
+      Receive a string of at most +n1 characters. An ambiguous
+      condition exists if +n1 is zero or greater than 32,767.
+      Display graphic characters as they are received. A program that
+      depends on the presence or absence of non-graphic characters in the
+      string has an environmental dependency. The editing functions, if
+      any, that the system performs in order to construct the string are
+      implementation-defined.
+
+      Input terminates when an implementation-defined line terminator is
+      received. When input terminates, nothing is appended to the string,
+      and the display is maintained in an implementation-defined way.
+
+      +n2 is the length of the string stored at c-addr.
+
+See
+
+ A.6.1.0695  ACCEPT.
+
+Rationale
+
+      Specification of a non-zero, positive integer count (+n1)
+      for ACCEPT allows some implementors to continue their
+      practice of using a zero or negative value as a flag to trigger
+      special behavior. Insofar as such behavior is outside the
+      standard, Standard Programs cannot depend upon it, but the
+      committee doesn't wish to preclude it unnecessarily.
+      Because actual values are almost always small integers, no
+      functionality is impaired by this restriction.
+
+      It is recommended that all non-graphic characters be reserved
+      for editing or control functions and not be stored in the input
+      string.
+
+      Because external system hardware and software may perform the
+      ACCEPT function, when a line terminator is received the
+      action of the cursor, and therefore the display, is
+      implementation-defined. It is recommended that the cursor remain
+      immediately following the entered text after a line terminator
+      is received.
+
+Testing
+
+CREATE ABUF 80 CHARS ALLOT
+
+        : ACCEPT-TEST
+     CR ." PLEASE TYPE UP TO 80 CHARACTERS:" CR
+     ABUF 80 ACCEPT
+     CR ." RECEIVED: " [CHAR] " EMIT
+     ABUF SWAP TYPE [CHAR] " EMIT CR
+;
+
+        T{ ACCEPT-TEST ->  }T
+
+6.1.0705
+
+ALIGN
+
+ 
+
+CORE
+
+ 
+
+ ( -- )
+
+      If the data-space pointer is not aligned, reserve enough space
+      to align it.
+
+See
+
+ 3.3.3 Data space,
+      3.3.3.1 Address alignment,
+      A.6.1.0705  ALIGN.
+
+Rationale
+
+      In this standard we have attempted to provide transportability
+      across various CPU architectures. One of the frequent causes
+      of transportability problems is the requirement of cell-aligned
+      addresses on some CPUs. On these systems, ALIGN and
+      ALIGNED may be required to build and traverse data
+      structures built with C,. Implementors may define these
+      words as no-ops on systems for which they aren't functional.
+
+Testing
+
+ALIGN  1 ALLOT HERE  ALIGN HERE 3 CELLS ALLOT
+CONSTANT A-ADDR  CONSTANT UA-ADDR
+T{ UA-ADDR ALIGNED -> A-ADDR }T
+T{       1 A-ADDR C!         A-ADDR       C@ ->       1 }T
+T{    1234 A-ADDR !          A-ADDR       @  ->    1234 }T
+T{ 123 456 A-ADDR 2!         A-ADDR       2@ -> 123 456 }T
+T{       2 A-ADDR CHAR+ C!   A-ADDR CHAR+ C@ ->       2 }T
+T{       3 A-ADDR CELL+ C!   A-ADDR CELL+ C@ ->       3 }T
+T{    1234 A-ADDR CELL+ !    A-ADDR CELL+ @  ->    1234 }T
+T{ 123 456 A-ADDR CELL+ 2!   A-ADDR CELL+ 2@ -> 123 456 }T
+
+6.1.0706
+
+ALIGNED
+
+ 
+
+CORE
+
+ 
+
+ ( addr -- a-addr )
+
+      a-addr is the first aligned address greater than or equal
+      to addr.
+
+See
+
+ 3.3.3.1 Address alignment,
+      6.1.0705 ALIGN.
+
+6.1.0710
+
+ALLOT
+
+ 
+
+CORE
+
+ 
+
+ ( n -- )
+
+      If n is greater than zero, reserve n address units
+      of data space. If n is less than zero, release  | n |
+      address units of data space. If n is zero, leave the
+      data-space pointer unchanged.
+
+      If the data-space pointer is aligned and n is a multiple
+      of the size of a cell when ALLOT begins execution, it will
+      remain aligned when ALLOT finishes execution.
+
+      If the data-space pointer is character aligned and n is a
+      multiple of the size of a character when ALLOT begins
+      execution, it will remain character aligned when ALLOT
+      finishes execution.
+
+See
+
+ 3.3.3 Data space.
+
+Testing
+
+HERE 1 ALLOT
+HERE
+CONSTANT 2NDA
+CONSTANT 1STA
+T{ 1STA 2NDA U< -> <TRUE> }T    \ HERE MUST GROW WITH ALLOT
+T{      1STA 1+ ->   2NDA }T    \ ... BY ONE ADDRESS UNIT
+( MISSING TEST: NEGATIVE ALLOT )
+
+6.1.0720
+
+AND
+
+ 
+
+CORE
+
+ 
+
+ ( x1 x2 -- x3 )
+
+      x3 is the bit-by-bit logical "and" of x1
+      with x2.
+
+Testing
+
+      T{ 0 0 AND -> 0 }T
+T{ 0 1 AND -> 0 }T
+T{ 1 0 AND -> 0 }T
+T{ 1 1 AND -> 1 }T
+
+      T{ 0 INVERT 1 AND -> 1 }T
+T{ 1 INVERT 1 AND -> 0 }T
+
+      T{ 0S 0S AND -> 0S }T
+T{ 0S 1S AND -> 0S }T
+T{ 1S 0S AND -> 0S }T
+T{ 1S 1S AND -> 1S }T
+
+6.1.0750
+
+BASE
+
+ 
+
+CORE
+
+ 
+
+ ( -- a-addr )
+
+      a-addr is the address of a cell containing the current
+      number-conversion radix {{2...36}}.
+
+Testing
+
+: GN2	\ ( -- 16 10 )
+   BASE @ >R
+        HEX BASE @
+        DECIMAL BASE @
+        R> BASE ! ;
+T{ GN2 -> 10 A }T
+
+6.1.0760
+
+BEGIN
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- dest )
+
+      Put the next location for a transfer of control, dest, onto
+      the control flow stack. Append the run-time semantics given below
+      to the current definition.
+
+Run-time
+
+      ( -- )
+
+      Continue execution.
+
+See
+
+ 3.2.3.2 Control-flow stack,
+      6.1.2140 REPEAT,
+      6.1.2390 UNTIL,
+      6.1.2430 WHILE,
+A.6.1.0760  BEGIN.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      BEGIN ... test UNTIL
+      ;
+
+      or
+
+         : X ...
+      BEGIN ...
+      test WHILE ...
+      REPEAT
+      ;
+
+Testing
+
+      See F.6.1.2430  WHILE,
+      F.6.1.2390  UNTIL.
+
+8ex
+
+6.1.0770
+
+BL
+
+b-l
+
+CORE
+
+ 
+
+ ( -- char )
+
+      char is the character value for a space.
+
+See
+
+ A.6.1.0770  BL.
+
+Rationale
+
+      Because space is used throughout Forth as the standard
+      delimiter, this word is the only way a program has to find and
+      use the system value of "space". The value of a space
+      character can not be obtained with CHAR, for instance.
+
+Testing
+
+      T{ BL -> 20 }T
+
+6.1.0850
+
+C!
+
+c-store
+
+CORE
+
+ 
+
+ ( char c-addr -- )
+
+      Store char at c-addr. When character size is smaller
+      than cell size, only the number of low-order bits corresponding to
+      character size are transferred.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0860  C,.
+
+6.1.0860
+
+C,
+
+c-comma
+
+CORE
+
+ 
+
+ ( char -- )
+
+      Reserve space for one character in the data space and store
+      char in the space. If the data-space pointer is character
+      aligned when C, begins execution, it will remain character
+      aligned when C, finishes execution.
+      An ambiguous condition exists if the data-space pointer is not
+      character-aligned prior to execution of C,.
+
+See
+
+ 3.3.3 Data space,
+      3.3.3.1 Address alignment.
+
+Testing
+
+HERE 1 C,
+HERE 2 C,
+CONSTANT 2NDC
+CONSTANT 1STC
+
+        T{    1STC 2NDC U< -> <TRUE> }T	\ HERE MUST GROW WITH ALLOT
+T{      1STC CHAR+ ->  2NDC  }T		\ ... BY ONE CHAR
+T{  1STC 1 CHARS + ->  2NDC  }T
+T{ 1STC C@ 2NDC C@ ->   1 2  }T
+T{       3 1STC C! ->        }T
+T{ 1STC C@ 2NDC C@ ->   3 2  }T
+T{       4 2NDC C! ->        }T
+T{ 1STC C@ 2NDC C@ ->   3 4  }T
+
+6.1.0870
+
+C@
+
+c-fetch
+
+CORE
+
+ 
+
+ ( c-addr -- char )
+
+      Fetch the character stored at c-addr. When the cell size is
+      greater than character size, the unused high-order bits are all
+      zeroes.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0860 C,.
+
+6.1.0880
+
+CELL+
+
+cell-plus
+
+CORE
+
+ 
+
+ ( a-addr1 -- a-addr2 )
+
+      Add the size in address units of a cell to a-addr1, giving
+      a-addr2.
+
+See
+
+ 3.3.3.1 Address alignment,
+      A.6.1.0880  CELL+.
+
+Rationale
+
+      As with ALIGN and ALIGNED, the words CELLS
+      and CELL+ were added to aid in transportability across
+      systems with different cell sizes. They are intended to be used
+      in manipulating indexes and addresses in integral numbers of
+      cell-widths. Example:
+
+2VARIABLE DATA
+
+          0 100 DATA 2!
+
+          DATA @ . 100
+
+          DATA CELL+ @ . 0
+
+Testing
+
+      See F.6.1.0150 ,.
+
+6.1.0890
+
+CELLS
+
+ 
+
+CORE
+
+ 
+
+ ( n1 -- n2 )
+
+      n2 is the size in address units of n1 cells.
+
+See
+
+ A.6.1.0880 CELL+, A.6.1.0890  CELLS.
+
+Rationale
+
+      Example:
+
+        CREATE NUMBERS
+        100 CELLS ALLOT
+
+      Allots space in the array NUMBERS for 100 cells
+      of data.
+
+Testing
+
+: BITS ( X -- U )
+   0 SWAP BEGIN DUP WHILE
+     DUP MSB AND IF >R 1+ R> THEN 2*
+   REPEAT DROP
+        ;
+
+        ( CELLS >= 1 AU, INTEGRAL MULTIPLE OF CHAR SIZE, >= 16 BITS )
+T{ 1 CELLS 1 <         -> <FALSE> }T
+T{ 1 CELLS 1 CHARS MOD ->    0    }T
+T{ 1S BITS 10 <        -> <FALSE> }T
+
+6.1.0895
+
+CHAR
+
+char
+
+CORE
+
+ 
+
+ ( "<spaces>name" -- char )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Put the value of its first character onto the stack.
+
+See
+
+ 3.4.1 Parsing,
+      6.1.2520 [CHAR],
+      A.6.1.0895  CHAR.
+
+Rationale
+
+      Typical use: ...
+      CHAR A CONSTANT "A" ...
+
+Testing
+
+      T{ CHAR X     -> 58 }T
+T{ CHAR HELLO -> 48 }T
+
+6.1.0897
+
+CHAR+
+
+char-plus
+
+CORE
+
+ 
+
+ ( c-addr1 -- c-addr2 )
+
+      Add the size in address units of a character to
+      c-addr1, giving c-addr2.
+
+See
+
+ 3.3.3.1 Address alignment.
+
+Testing
+
+      See F.6.1.0860 C,.
+
+6.1.0898
+
+CHARS
+
+chars
+
+CORE
+
+ 
+
+ ( n1 -- n2 )
+
+      n2 is the size in address units of n1
+      characters.
+
+Testing
+
+( CHARACTERS >= 1 AU, <= SIZE OF CELL, >= 8 BITS )
+T{ 1 CHARS 1 <       -> <FALSE> }T
+T{ 1 CHARS 1 CELLS > -> <FALSE> }T
+( TBD: HOW TO FIND NUMBER OF BITS? )
+
+6.1.0950
+
+CONSTANT
+
+ 
+
+CORE
+
+ 
+
+ ( x "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Create a definition for name with the execution
+      semantics defined below.
+
+      name is referred to as a "constant".
+
+name Execution
+
+      ( -- x )
+
+      Place x on the stack.
+
+See
+
+ 3.4.1 Parsing,
+      A.6.1.0950  CONSTANT.
+
+Rationale
+
+      Typical use: ...
+      DECIMAL 10 CONSTANT TEN
+      ...
+
+Testing
+
+      T{ 123 CONSTANT X123 ->  }T
+T{ X123 -> 123 }T
+
+      T{ : EQU CONSTANT ; ->  }T
+T{ X123 EQU Y123 ->  }T
+T{ Y123 -> 123 }T
+
+6.1.0980
+
+COUNT
+
+ 
+
+CORE
+
+ 
+
+ ( c-addr1 -- c-addr2 u )
+
+      Return the character string specification for the counted
+      string stored at c-addr1. c-addr2 is the
+      address of the first character after c-addr1. u
+      is the contents of the character at c-addr1, which is
+      the length in characters of the string at c-addr2.
+
+Testing
+
+      T{ GT1STRING COUNT -> GT1STRING CHAR+ 3 }T
+
+6.1.0990
+
+CR
+
+c-r
+
+CORE
+
+ 
+
+ ( -- )
+
+      Cause subsequent output to appear at the beginning of the next
+      line.
+
+Testing
+
+      See F.6.1.1320  EMIT.
+
+6.1.1000
+
+CREATE
+
+ 
+
+CORE
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by a
+      space. Create a definition for name with the execution
+      semantics defined below. If the data-space pointer is not
+      aligned, reserve enough data space to align it. The new
+      data-space pointer defines name's data field.
+      CREATE does not allocate data space in name's
+      data field.
+
+name Execution
+
+      ( -- a-addr )
+
+      a-addr is the address of name's data field.
+      The execution semantics of name may be extended by
+      using DOES>.
+
+See
+
+ 3.3.3 Data space,
+      6.1.1250 DOES>,
+      A.6.1.1000  CREATE.
+
+Rationale
+
+      The data-field address of a word defined by CREATE is
+      given by the data-space pointer immediately following the
+      execution of CREATE.
+
+      Reservation of data field space is typically done with
+      ALLOT.
+
+      Typical use: ...
+      CREATE SOMETHING ...
+
+Testing
+
+      See F.6.1.0550 >BODY and
+      F.6.1.1250  DOES>.
+
+6.1.1170
+
+DECIMAL
+
+ 
+
+CORE
+
+ 
+
+ ( -- )
+
+      Set the numeric conversion radix to ten (decimal).
+
+Testing
+
+      See F.6.1.0750 BASE.
+
+6.1.1200
+
+DEPTH
+
+ 
+
+CORE
+
+ 
+
+ ( -- +n )
+
+      +n is the number of single-cell values contained in the
+      data stack before +n was placed on the stack.
+
+Testing
+
+      T{ 0 1 DEPTH -> 0 1 2 }T
+T{   0 DEPTH -> 0 1   }T
+T{     DEPTH -> 0     }T
+
+6.1.1240
+
+DO
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- do-sys )
+
+      Place do-sys onto the control-flow stack. Append the
+      run-time semantics given below to the current definition. The
+      semantics are incomplete until resolved by a consumer of
+      do-sys such as LOOP.
+
+Run-time
+
+      ( n1 | u1 n2 | u2 -- )
+      ( R: -- loop-sys )
+
+      Set up loop control parameters with index n2 | u2 and
+      limit n1 | u1. An ambiguous condition exists if
+      n1 | u1 and n2 | u2 are not both the same
+      type. Anything already on the return stack becomes unavailable
+      until the loop-control parameters are discarded.
+
+See
+
+ 3.2.3.2 Control-flow stack,
+      6.1.0140 +LOOP,
+      6.1.1800 LOOP,
+      A.6.1.1240  DO.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      limit first DO
+      ...
+      LOOP
+      ;
+
+      or
+
+         : X ...
+      limit first DO
+      ...
+      step +LOOP
+      ;
+
+Testing
+
+      See F.6.1.1800  LOOP,
+      F.6.1.0140 +LOOP,
+      F.6.1.1730  J,
+      F.6.1.1760  LEAVE,
+      F.6.1.2380  UNLOOP.
+
+6.1.1250
+
+DOES>
+
+does
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: colon-sys1 -- colon-sys2 )
+
+      Append the run-time semantics below to the current definition.
+      Whether or not the current definition is rendered findable in
+      the dictionary by the compilation of DOES> is
+      implementation defined. Consume colon-sys1 and
+      produce colon-sys2. Append the initiation semantics
+      given below to the current definition.
+
+Run-time
+
+      ( -- )
+      ( R: nest-sys1 -- )
+
+      Replace the execution semantics of the most recent definition,
+      referred to as name, with the name execution
+      semantics given below. Return control to the calling definition
+      specified by nest-sys1. An ambiguous condition exists
+      if name was not defined with CREATE or a
+      user-defined word that calls CREATE.
+
+Initiation
+
+      ( i×x -- i×x a-addr )
+      ( R: -- nest-sys2 )
+
+      Save implementation-dependent information nest-sys2
+      about the calling definition. Place name's data field
+      address on the stack. The stack effects i×x represent
+      arguments to name.
+
+name Execution
+
+      ( i×x -- j×x )
+
+      Execute the portion of the definition that begins with the
+      initiation semantics appended by the DOES> which modified
+      name. The stack effects i×x and j×x
+      represent arguments to and results from name,
+      respectively.
+
+See
+
+ 6.1.1000 CREATE,
+      A.6.1.1250  DOES>.
+
+Rationale
+
+  -->
+      Typical use:
+      : X ... DOES> ... ;
+
+      Following DOES>, a Standard Program may not make any
+      assumptions regarding the ability to find either the name of
+      the definition containing the DOES> or any previous
+      definition whose name may be concealed by it. DOES>
+      effectively ends one definition and begins another as far as
+      local variables and control-flow structures are concerned.
+      The compilation behavior makes it clear that the user is not
+      entitled to place DOES> inside any control-flow
+      structures.
+
+Testing
+
+  -->
+      T{ : DOES1 DOES> @ 1 + ; ->  }T
+T{ : DOES2 DOES> @ 2 + ; ->  }T
+T{ CREATE CR1 ->  }T
+T{ CR1   -> HERE }T
+T{ 1 ,   ->   }T
+T{ CR1 @ -> 1 }T
+T{ DOES1 ->   }T
+T{ CR1   -> 2 }T
+T{ DOES2 ->   }T
+T{ CR1   -> 3 }T
+
+      T{ : WEIRD: CREATE DOES> 1 + DOES> 2 + ; ->  }T
+T{ WEIRD: W1 ->  }T
+T{ ' W1 >BODY -> HERE }T
+T{ W1 -> HERE 1 + }T
+T{ W1 -> HERE 2 + }T
+
+6.1.1260
+
+DROP
+
+ 
+
+CORE
+
+ 
+
+ ( x -- )
+
+      Remove x from the stack.
+
+Testing
+
+      T{ 1 2 DROP -> 1 }T
+T{ 0   DROP ->   }T
+
+6.1.1290
+
+DUP
+
+dupe
+
+CORE
+
+ 
+
+ ( x -- x x )
+
+      Duplicate x.
+
+Testing
+
+      T{ 1 DUP -> 1 1 }T
+
+6.1.1310
+
+ELSE
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: orig1 -- orig2 )
+
+      Put the location of a new unresolved forward reference
+      orig2 onto the control flow stack. Append the run-time
+      semantics given below to the current definition. The semantics
+      will be incomplete until orig2 is resolved (e.g., by
+      THEN). Resolve the forward reference orig1 using
+      the location following the appended run-time semantics.
+
+Run-time
+
+      ( -- )
+
+      Continue execution at the location given by the resolution of
+      orig2.
+
+See
+
+ 6.1.1700 IF,
+      6.1.2270 THEN,
+      A.6.1.1310  ELSE.
+
+Rationale
+
+      Typical use:
+      : X ...
+      test IF ...
+      ELSE ... THEN
+      ;
+
+Testing
+
+      See F.6.1.1700  IF.
+
+6.1.1320
+
+EMIT
+
+ 
+
+CORE
+
+ 
+
+ ( x -- )
+
+      If x is a graphic character in the implementation-defined
+      character set, display x. The effect of EMIT for all
+      other values of x is implementation-defined.
+
+      When passed a character whose character-defining bits have a
+      value between hex 20 and 7E inclusive, the corresponding
+      standard character, specified by 3.1.2.1 Graphic characters, is displayed. Because different output
+      devices can respond differently to control characters, programs
+      that use control characters to perform specific functions have
+      an environmental dependency. Each EMIT deals with only one
+      character.
+
+See
+
+ 6.1.2310 TYPE.
+
+Testing
+
+: OUTPUT-TEST
+
+             ." YOU SHOULD SEE THE STANDARD GRAPHIC CHARACTERS:" CR
+     41 BL DO I EMIT LOOP CR
+     61 41 DO I EMIT LOOP CR
+     7F 61 DO I EMIT LOOP CR
+
+             ." YOU SHOULD SEE 0-9 SEPARATED BY A SPACE:" CR
+     9 1+ 0 DO I . LOOP CR
+
+             ." YOU SHOULD SEE 0-9 (WITH NO SPACES):" CR
+     [CHAR] 9 1+ [CHAR] 0
+        DO I 0 SPACES EMIT LOOP CR
+
+             ." YOU SHOULD SEE A-G SEPARATED BY A SPACE:" CR
+     [CHAR] G 1+ [CHAR] A
+        DO I EMIT SPACE LOOP CR
+
+             ." YOU SHOULD SEE 0-5 SEPARATED BY TWO SPACES:" CR
+     5 1+ 0
+        DO I [CHAR] 0 + EMIT 2 SPACES LOOP CR
+
+             ." YOU SHOULD SEE TWO SEPARATE LINES:" CR
+     S" LINE 1" TYPE CR S" LINE 2" TYPE CR
+
+             ."  YOU SHOULD SEE THE NUMBER RANGES OF SIGNED AND UNSIGNED NUMBERS:" CR
+     ."   SIGNED: " MIN-INT . MAX-INT . CR
+     ." UNSIGNED: " 0 U. MAX-UINT U. CR
+;
+
+        T{ OUTPUT-TEST ->  }T
+
+6.1.1345
+
+ENVIRONMENT?
+
+environment-query
+
+CORE
+
+ 
+
+ ( c-addr u -- false  |  i×x true )
+
+      c-addr is the address of a character string and u
+      is the string's character count. u may have a value in
+      the range from zero to an implementation-defined maximum which
+      shall not be less than 31. The character string should contain a
+      keyword from 3.2.6 Environmental queries or the
+      optional word sets to be checked for correspondence with an
+      attribute of the present environment. If the system treats the
+      attribute as unknown, the returned flag is false;
+      otherwise, the flag is true and the i×x returned
+      is of the type specified in the table for the attribute queried.
+
+See
+
+ A.6.1.1345  ENVIRONMENT?.
+
+Rationale
+
+      In a Standard System that contains only the Core word set,
+      effective use of ENVIRONMENT? requires either its use
+      within a definition, or the use of user-supplied auxiliary
+      definitions. The Core word set lacks both a direct method for
+      collecting a string in interpretation state (11.6.1.2165 S"
+      is in an optional word set) and also a means to test the
+      returned flag in interpretation state (e.g. the optional
+      15.6.2.2532 [IF]).
+
+Testing
+
+      \ should be the same for any query starting with X:
+T{ S" X:deferred" ENVIRONMENT? DUP 0= XOR INVERT -> <TRUE>  }T
+T{ S" X:notfound" ENVIRONMENT? DUP 0= XOR INVERT -> <FALSE> }T
+
+6.1.1360
+
+EVALUATE
+
+ 
+
+CORE
+
+ 
+
+ ( i×x c-addr u -- j×x )
+
+      Save the current input source specification. Store minus-one
+      (-1) in SOURCE-ID if it is present. Make the string
+      described by c-addr and u both the input source
+      and input buffer, set >IN to zero, and interpret. When
+      the parse area is empty, restore the prior input source
+      specification. Other stack effects are due to the words
+      EVALUATEd.
+
+Testing
+
+: GE1 S" 123" ; IMMEDIATE
+: GE2 S" 123 1+" ; IMMEDIATE
+: GE3 S" : GE4 345 ;" ;
+: GE5 EVALUATE ; IMMEDIATE
+
+        T{ GE1 EVALUATE -> 123 }T ( TEST EVALUATE IN INTERP. STATE )
+T{ GE2 EVALUATE -> 124 }T
+T{ GE3 EVALUATE ->     }T
+T{ GE4          -> 345 }T
+
+        T{ : GE6 GE1 GE5 ; ->  }T ( TEST EVALUATE IN COMPILE STATE )
+T{ GE6 -> 123 }T
+T{ : GE7 GE2 GE5 ; ->  }T
+T{ GE7 -> 124 }T
+
+        See F.9.3.6 for additional test.
+
+6.1.1370
+
+EXECUTE
+
+ 
+
+CORE
+
+ 
+
+ ( i×x xt -- j×x )
+
+      Remove xt from the stack and perform the semantics
+      identified by it. Other stack effects are due to the word
+      EXECUTEd.
+
+See
+
+ 6.1.0070 ',
+      6.1.2510 ['].
+
+Testing
+
+      See F.6.1.0070 ' and F.6.1.2510  ['].
+
+6.1.1380
+
+EXIT
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- )
+      ( R: nest-sys -- )
+
+      Return control to the calling definition specified by
+      nest-sys. Before executing EXIT within a
+      do-loop, a program shall discard the loop-control parameters
+      by executing UNLOOP.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.2380 UNLOOP,
+      A.6.1.1380  EXIT.
+
+Rationale
+
+      Typical use:
+      : X ...
+      test IF
+      ... EXIT THEN
+      ... ;
+
+Testing
+
+      See F.6.1.2380  UNLOOP.
+
+6.1.1540
+
+FILL
+
+ 
+
+CORE
+
+ 
+
+ ( c-addr u char -- )
+
+      If u is greater than zero, store char in each of
+      u consecutive characters of memory beginning at
+      c-addr.
+
+Testing
+
+      T{ FBUF 0 20 FILL ->  }T
+T{ SEEBUF -> 00 00 00 }T
+
+      T{ FBUF 1 20 FILL ->  }T
+T{ SEEBUF -> 20 00 00 }T
+
+      T{ FBUF 3 20 FILL ->  }T
+T{ SEEBUF -> 20 20 20 }T
+
+4ex
+
+6.1.1550
+
+FIND
+
+ 
+
+CORE
+
+ 
+
+ ( c-addr -- c-addr 0  |  xt 1  |  xt -1 )
+
+      Find the definition named in the counted string at c-addr.
+      If the definition is not found, return c-addr and zero.
+      If the definition is found, return its execution token xt.
+      If the definition is immediate, also return one (1),
+      otherwise also return minus-one (-1). For a given string,
+      the values returned by FIND while compiling may differ
+      from those returned while not compiling.
+
+See
+
+ 3.4.2 Finding definition names,
+      A.6.1.0070 ',
+      A.6.1.1550  FIND,
+A.6.1.2033  POSTPONE,
+      A.6.1.2510  ['].
+
+Rationale
+
+      One of the more difficult issues which the committee took on
+      was the problem of divorcing the specification of
+      implementation mechanisms from the specification of the
+      Forth language. Three basic implementation approaches can be
+      quickly enumerated:
+
+      1) Threaded code mechanisms.
+      These are the traditional approaches to implementing Forth,
+      but other techniques may be used.
+
+      2) Subroutine threading with "macro-expansion" (code
+      copying). Short routines, like the code for DUP,
+      are copied into a definition rather than compiling a
+      JSR reference.
+
+      3) Native coding with optimization.
+      This may include stack optimization (replacing such phrases
+      as SWAP ROT + with one or two machine
+      instructions, for example), parallelization (the trend in
+      the newer RISC chips is to have several functional subunits
+      which can execute in parallel), and so on.
+
+      The initial requirement (inherited from Forth 83) that
+      compilation addresses be compiled into the dictionary
+      disallowed type 2 and type 3 implementations.
+
+      Type 3 mechanisms and optimizations of type 2 implementations
+      were hampered by the explicit specification of immediacy or
+      non-immediacy of all standard words. POSTPONE allowed
+      de-specification of immediacy or non-immediacy for all but a
+      few Forth words whose behavior must be STATE-independent.
+
+      One type 3 implementation, Charles Moore's cmForth, has both
+      compiling and interpreting versions of many Forth words. At the
+      present, this appears to be a common approach for type 3
+      implementations. The committee felt that this implementation
+      approach must be allowed. Consequently, it is possible that
+      words without interpretation semantics can be found only during
+      compilation, and other words may exist in two versions: a
+      compiling version and an interpreting version. Hence the values
+      returned by FIND may depend on STATE, and '
+      and ['] may be unable to find words without
+      interpretation semantics.
+
+Testing
+
+HERE
+        3 C,
+        CHAR G C,
+        CHAR T C,
+        CHAR 1 C,
+        CONSTANT GT1STRING
+HERE
+        3 C,
+        CHAR G C,
+        CHAR T C,
+        CHAR 2 C,
+        CONSTANT GT2STRING
+T{ GT1STRING FIND -> ' GT1 -1 }T
+T{ GT2STRING FIND -> ' GT2 1  }T
+( HOW TO SEARCH FOR NON-EXISTENT WORD? )
+
+6.1.1561
+
+FM/MOD
+
+f-m-slash-mod
+
+CORE
+
+ 
+
+ ( d1 n1 -- n2 n3 )
+
+      Divide d1 by n1, giving the floored quotient
+      n3 and the remainder n2. Input and output stack
+      arguments are signed. An ambiguous condition exists if
+      n1 is zero or if the quotient lies outside the range of
+      a single-cell signed integer.
+
+See
+
+ 3.2.2.1 Integer division,
+      6.1.2214 SM/REM,
+      6.1.2370 UM/MOD,
+      A.6.1.1561  FM/MOD.
+
+Rationale
+
+      By introducing the requirement for "floored" division,
+      Forth 83 produced much controversy and concern on the part of
+      those who preferred the more common practice followed in other
+      languages of implementing division according to the behavior
+      of the host CPU, which is most often symmetric (rounded toward
+      zero). In attempting to find a compromise position, this
+      standard provides primitives for both common varieties, floored
+      and symmetric (see SM/REM). FM/MOD is the floored
+      version.
+
+      The committee considered providing two complete sets
+      of explicitly named division operators, and declined to do so
+      on the grounds that this would unduly enlarge and complicate
+      the standard. Instead, implementors may define the normal
+      division words in terms of either FM/MOD or
+      SM/REM providing they document their choice. People
+      wishing to have explicitly named sets of operators are
+      encouraged to do so. FM/MOD may be used, for example,
+      to define:
+
+: /_MOD ( n1 n2 -- n3 n4)
+          >R S>D R> FM/MOD
+          ;
+
+          : /_ ( n1 n2 -- n3)
+          /_MOD SWAP DROP
+          ;
+
+          : _MOD ( n1 n2 -- n3)
+          /_MOD DROP
+          ;
+
+          : */_MOD ( n1 n2 n3 -- n4 n5)
+          >R M* R> FM/MOD
+          ;
+
+          : */_ ( n1 n2 n3 -- n4 )
+          */_MOD SWAP DROP
+          ;
+
+Testing
+
+      T{       0 S>D              1 FM/MOD ->  0       0 }T
+T{       1 S>D              1 FM/MOD ->  0       1 }T
+T{       2 S>D              1 FM/MOD ->  0       2 }T
+T{      -1 S>D              1 FM/MOD ->  0      -1 }T
+T{      -2 S>D              1 FM/MOD ->  0      -2 }T
+T{       0 S>D             -1 FM/MOD ->  0       0 }T
+T{       1 S>D             -1 FM/MOD ->  0      -1 }T
+T{       2 S>D             -1 FM/MOD ->  0      -2 }T
+T{      -1 S>D             -1 FM/MOD ->  0       1 }T
+T{      -2 S>D             -1 FM/MOD ->  0       2 }T
+T{       2 S>D              2 FM/MOD ->  0       1 }T
+T{      -1 S>D             -1 FM/MOD ->  0       1 }T
+T{      -2 S>D             -2 FM/MOD ->  0       1 }T
+T{       7 S>D              3 FM/MOD ->  1       2 }T
+T{       7 S>D             -3 FM/MOD -> -2      -3 }T
+T{      -7 S>D              3 FM/MOD ->  2      -3 }T
+T{      -7 S>D             -3 FM/MOD -> -1       2 }T
+T{ MAX-INT S>D              1 FM/MOD ->  0 MAX-INT }T
+T{ MIN-INT S>D              1 FM/MOD ->  0 MIN-INT }T
+T{ MAX-INT S>D        MAX-INT FM/MOD ->  0       1 }T
+T{ MIN-INT S>D        MIN-INT FM/MOD ->  0       1 }T
+T{    1S 1                  4 FM/MOD ->  3 MAX-INT }T
+T{       1 MIN-INT M*       1 FM/MOD ->  0 MIN-INT }T
+T{       1 MIN-INT M* MIN-INT FM/MOD ->  0       1 }T
+T{       2 MIN-INT M*       2 FM/MOD ->  0 MIN-INT }T
+T{       2 MIN-INT M* MIN-INT FM/MOD ->  0       2 }T
+T{       1 MAX-INT M*       1 FM/MOD ->  0 MAX-INT }T
+T{       1 MAX-INT M* MAX-INT FM/MOD ->  0       1 }T
+T{       2 MAX-INT M*       2 FM/MOD ->  0 MAX-INT }T
+T{       2 MAX-INT M* MAX-INT FM/MOD ->  0       2 }T
+T{ MIN-INT MIN-INT M* MIN-INT FM/MOD ->  0 MIN-INT }T
+T{ MIN-INT MAX-INT M* MIN-INT FM/MOD ->  0 MAX-INT }T
+T{ MIN-INT MAX-INT M* MAX-INT FM/MOD ->  0 MIN-INT }T
+T{ MAX-INT MAX-INT M* MAX-INT FM/MOD ->  0 MAX-INT }T
+
+6.1.1650
+
+HERE
+
+ 
+
+CORE
+
+ 
+
+ ( -- addr )
+
+      addr is the data-space pointer.
+
+See
+
+ 3.3.3.2 Contiguous regions.
+
+Testing
+
+      See F.6.1.0150 ,,
+      F.6.1.0710 ALLOT,
+      F.6.1.0860 C,.
+
+6.1.1670
+
+HOLD
+
+ 
+
+CORE
+
+ 
+
+ ( char -- )
+
+      Add char to the beginning of the pictured numeric output
+      string. An ambiguous condition exists if HOLD executes
+      outside of a <# #> delimited number
+      conversion.
+
+Testing
+
+: GP1  <# 41 HOLD 42 HOLD 0 0 #> S" BA" S= ;
+T{ GP1 -> <TRUE> }T
+
+6.1.1680
+
+I
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- n | u )
+      ( R: loop-sys -- loop-sys )
+
+      n | u is a copy of the current (innermost) loop index.
+      An ambiguous condition exists if the loop control parameters
+      are unavailable.
+
+Testing
+
+      See F.6.1.1800  LOOP,
+      F.6.1.0140 +LOOP,
+      F.6.1.1730  J,
+      F.6.1.1760  LEAVE,
+      F.6.1.2380  UNLOOP.
+
+2ex
+
+6.1.1700
+
+IF
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- orig )
+
+      Put the location of a new unresolved forward reference
+      orig onto the control flow stack. Append the run-time
+      semantics given below to the current definition. The semantics
+      are incomplete until orig is resolved, e.g., by
+      THEN or ELSE.
+
+Run-time
+
+      ( x -- )
+
+      If all bits of x are zero, continue execution at the
+      location specified by the resolution of orig.
+
+See
+
+ 3.2.3.2 Control-flow stack,
+      6.1.1310 ELSE,
+      6.1.2270 THEN,
+      A.6.1.1700  IF.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      test IF ... THEN
+      ... ;
+
+      or
+
+         : X ...
+      test IF
+      ... ELSE ... THEN
+      ... ;
+
+Testing
+
+      T{ : GI1 IF 123 THEN ; ->  }T
+T{ : GI2 IF 123 ELSE 234 THEN ; ->  }T
+T{  0 GI1 ->     }T
+T{  1 GI1 -> 123 }T
+T{ -1 GI1 -> 123 }T
+T{  0 GI2 -> 234 }T
+T{  1 GI2 -> 123 }T
+T{ -1 GI1 -> 123 }T
+
+      \ Multiple ELSEs in an IF statement
+: melse IF 1 ELSE 2 ELSE 3 ELSE 4 ELSE 5 THEN ;
+T{ <FALSE> melse -> 2 4 }T
+T{ <TRUE>  melse -> 1 3 5 }T
+
+6.1.1710
+
+IMMEDIATE
+
+ 
+
+CORE
+
+ 
+
+ ( -- )
+
+      Make the most recent definition an immediate word. An ambiguous
+      condition exists if the most recent definition does not have a
+      name or if it was defined as a SYNONYM.
+
+See
+
+ 15.6.2.2264 SYNONYM
+      A.6.1.1710  IMMEDIATE.
+
+Rationale
+
+      Typical use:
+      : X
+      ... ; IMMEDIATE
+
+Testing
+
+      T{ 123 CONSTANT iw1 IMMEDIATE iw1 -> 123 }T
+T{ : iw2 iw1 LITERAL ; iw2 -> 123 }T
+
+      T{ VARIABLE iw3 IMMEDIATE 234 iw3 ! iw3 @ -> 234 }T
+T{ : iw4 iw3 [ @ ] LITERAL ; iw4 -> 234 }T
+
+      T{ :NONAME [ 345 ] iw3 [ ! ] ; DROP iw3 @ -> 345 }T
+T{ CREATE iw5 456 , IMMEDIATE ->  }T
+T{ :NONAME iw5 [ @ iw3 ! ] ; DROP iw3 @ -> 456 }T
+
+      T{ : iw6 CREATE , IMMEDIATE DOES> @ 1+ ; ->  }T
+T{ 111 iw6 iw7 iw7 -> 112 }T
+T{ : iw8 iw7 LITERAL 1+ ; iw8 -> 113 }T
+
+      T{ : iw9 CREATE , DOES> @ 2 + IMMEDIATE ; ->  }T
+: find-iw BL WORD FIND NIP ;
+T{ 222 iw9 iw10 find-iw iw10 -> -1 }T    \ iw10 is not immediate
+T{ iw10 find-iw iw10 -> 224 1 }T          \ iw10 becomes immediate
+
+      See F.6.1.2510  ['],
+      F.6.1.2033  POSTPONE,
+      F.6.1.2250  STATE,
+      F.6.1.2165  S".
+
+6.1.1720
+
+INVERT
+
+ 
+
+CORE
+
+ 
+
+ ( x1 -- x2 )
+
+      Invert all bits of x1, giving its logical inverse
+      x2.
+
+See
+
+ 6.1.1910 NEGATE,
+      6.1.0270 0=,
+      A.6.1.1720  INVERT.
+
+Rationale
+
+      The word NOT was originally provided in Forth as a
+      flag operator to make control structures readable. Under its
+      intended usage the following two definitions would produce
+      identical results:
+
+: ONE ( flag -- )
+   IF
+          ." true"
+          ELSE
+          ." false"
+          THEN
+          ;
+
+          : TWO ( flag -- )
+   NOT IF
+          ." false"
+          ELSE
+          ." true"
+          THEN
+          ;
+
+      This was common usage prior to the Forth-83 Standard which
+      redefined NOT as a cell-wide one's-complement
+      operation, functionally equivalent to the phrase -1
+      XOR. At the same time, the data type manipulated by
+      this word was changed from a flag to a cell-wide collection of
+      bits and the standard value for true was changed from "1"
+      (rightmost bit only set) to "-1" (all bits set). As these
+      definitions of TRUE and NOT were incompatible
+      with their previous definitions, many Forth users continue to
+      rely on the old definitions. Hence both versions are in common
+      use.
+
+      Therefore, usage of NOT cannot be standardized at
+      this time. The two traditional meanings of NOT —
+      that of negating the sense of a flag and that of doing a one's
+      complement operation — are made available by 0= and
+      INVERT, respectively.
+
+Testing
+
+      T{ 0S INVERT -> 1S }T
+T{ 1S INVERT -> 0S }T
+
+6.1.1730
+
+J
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- n | u )
+      ( R: loop-sys1 loop-sys2 -- loop-sys1 loop-sys2 )
+
+      n | u is a copy of the next-outer loop index. An
+      ambiguous condition exists if the loop control parameters of
+      the next-outer loop, loop-sys1, are unavailable.
+
+See
+
+ A.6.1.1730  J.
+
+Rationale
+
+      J may only be used with a nested
+      DO ... LOOP,
+      DO ... +LOOP,
+      ?DO ... LOOP, or
+      ?DO ... +LOOP,
+      for example, in the form:
+
+         : X
+      ... DO
+      ... DO
+      ... J ...
+      LOOP
+      ... +LOOP
+      ... ;
+
+Testing
+
+      T{ : GD3 DO 1 0 DO J LOOP LOOP ; ->  }T
+T{          4        1 GD3 ->  1 2 3   }T
+T{          2       -1 GD3 -> -1 0 1   }T
+T{ MID-UINT+1 MID-UINT GD3 -> MID-UINT }T
+
+      T{ : GD4 DO 1 0 DO J LOOP -1 +LOOP ; ->  }T
+T{        1          4 GD4 -> 4 3 2 1             }T
+T{       -1          2 GD4 -> 2 1 0 -1            }T
+T{ MID-UINT MID-UINT+1 GD4 -> MID-UINT+1 MID-UINT }T
+
+6.1.1750
+
+KEY
+
+ 
+
+CORE
+
+ 
+
+ ( -- char )
+
+      Receive one character char, a member of the
+      implementation-defined character set. Keyboard events that do
+      not correspond to such characters are discarded until a valid
+      character is received, and those events are subsequently
+      unavailable.
+
+      All standard characters can be received. Characters received by
+      KEY are not displayed.
+
+      Any standard character returned by KEY has the numeric
+      value specified in 3.1.2.1 Graphic characters.
+      Programs that require the ability to receive control characters
+      have an environmental dependency.
+
+See
+
+ 10.6.2.1305 EKEY,
+      10.6.2.1307 EKEY?,
+      10.6.1.1755 KEY?,
+      A.6.1.1750  KEY.
+
+Rationale
+
+      Use of KEY indicates that the application is processing
+      primitive characters.  Some input devices, e.g., keyboards,
+      may provide more information than can be represented as a
+      primitive character and such an event may be received as an
+      implementation-specific sequence of primitive characters.
+
+      See A.10.6.2.1305  EKEY.
+
+6.1.1760
+
+LEAVE
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- )
+      ( R: loop-sys -- )
+
+      Discard the current loop control parameters. An ambiguous condition
+      exists if they are unavailable. Continue execution immediately
+      following the innermost syntactically enclosing
+      DO...LOOP or DO...+LOOP.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0140 +LOOP,
+      6.1.1800 LOOP,
+      A.6.1.1760  LEAVE.
+
+Rationale
+
+      Note that LEAVE immediately exits the loop. No words
+      following LEAVE within the loop will be executed.
+      Typical use:
+
+         : X ... DO
+      ... IF
+      ... LEAVE
+      THEN ... LOOP ...
+      ;
+
+Testing
+
+      T{ : GD5 123 SWAP 0 DO 
+     I 4 > IF DROP 234 LEAVE THEN 
+   LOOP ; ->  }T
+T{ 1 GD5 -> 123 }T
+T{ 5 GD5 -> 123 }T
+T{ 6 GD5 -> 234 }T
+
+6.1.1780
+
+LITERAL
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( x -- )
+
+      Append the run-time semantics given below to the current definition.
+
+Run-time
+
+      ( -- x )
+
+      Place x on the stack.
+
+See
+
+ A.6.1.1780  LITERAL.
+
+Rationale
+
+      Typical use:
+      : X ...
+      [ x ] LITERAL
+      ... ;
+
+Testing
+
+      T{ : GT3 GT2 LITERAL ; ->  }T
+T{ GT3 -> ' GT1 }T
+
+6.1.1800
+
+LOOP
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: do-sys -- )
+
+      Append the run-time semantics given below to the current
+      definition. Resolve the destination of all unresolved
+      occurrences of LEAVE between the location given by
+      do-sys and the next location for a transfer of
+      control, to execute the words following the LOOP.
+
+Run-time
+
+      ( -- )
+      ( R: loop-sys1 --  |  loop-sys2 )
+
+      An ambiguous condition exists if the loop control parameters are
+      unavailable. Add one to the loop index. If the loop index is then
+      equal to the loop limit, discard the loop parameters and continue
+      execution immediately following the loop. Otherwise continue
+      execution at the beginning of the loop.
+
+See
+
+ 6.1.1240 DO,
+      6.1.1680 I,
+      6.1.1760 LEAVEA.6.1.1800  LOOP.
+
+Rationale
+
+      2ex
+      Typical use:
+
+         : X ...
+      limit first DO
+      ...
+      LOOP
+      ... ;
+
+      or
+
+         : X ...
+      limit first ?DO
+      ...
+      LOOP
+      ... ;
+
+Testing
+
+      T{ : GD1 DO I LOOP ; ->  }T
+T{          4        1 GD1 ->  1 2 3   }T
+T{          2       -1 GD1 -> -1 0 1   }T
+T{ MID-UINT+1 MID-UINT GD1 -> MID-UINT }T
+
+6.1.1805
+
+LSHIFT
+
+l-shift
+
+CORE
+
+ 
+
+ ( x1 u -- x2 )
+
+      Perform a logical left shift of u bit-places on
+      x1, giving x2. Put zeroes into the least
+      significant bits vacated by the shift. An ambiguous condition
+      exists if u is greater than or equal to the number of
+      bits in a cell.
+
+Testing
+
+      T{   1 0 LSHIFT ->    1 }T
+T{   1 1 LSHIFT ->    2 }T
+T{   1 2 LSHIFT ->    4 }T
+T{   1 F LSHIFT -> 8000 }T      \ BIGGEST GUARANTEED SHIFT
+T{  1S 1 LSHIFT 1 XOR -> 1S }T
+T{ MSB 1 LSHIFT ->    0 }T
+
+6.1.1810
+
+M*
+
+m-star
+
+CORE
+
+ 
+
+ ( n1 n2 -- d )
+
+      d is the signed product of n1 times n2.
+
+See
+
+ A.6.1.1810  M*.
+
+Rationale
+
+      This word is a useful early step in calculation, going to
+      extra precision conveniently. It has been in use since the
+      Forth systems of the early 1970's.
+
+Testing
+
+      T{       0       0 M* ->       0 S>D }T
+T{       0       1 M* ->       0 S>D }T
+T{       1       0 M* ->       0 S>D }T
+T{       1       2 M* ->       2 S>D }T
+T{       2       1 M* ->       2 S>D }T
+T{       3       3 M* ->       9 S>D }T
+T{      -3       3 M* ->      -9 S>D }T
+T{       3      -3 M* ->      -9 S>D }T
+T{      -3      -3 M* ->       9 S>D }T
+T{       0 MIN-INT M* ->       0 S>D }T
+T{       1 MIN-INT M* -> MIN-INT S>D }T
+T{       2 MIN-INT M* ->       0 1S  }T
+T{       0 MAX-INT M* ->       0 S>D }T
+T{       1 MAX-INT M* -> MAX-INT S>D }T
+T{       2 MAX-INT M* -> MAX-INT     1 LSHIFT 0 }T
+T{ MIN-INT MIN-INT M* ->       0 MSB 1 RSHIFT   }T
+T{ MAX-INT MIN-INT M* ->     MSB MSB 2/         }T
+T{ MAX-INT MAX-INT M* ->       1 MSB 2/ INVERT  }T
+
+6.1.1870
+
+MAX
+
+ 
+
+CORE
+
+ 
+
+ ( n1 n2 -- n3 )
+
+      n3 is the greater of n1 and n2.
+
+Testing
+
+      T{       0       1 MAX ->       1 }T
+T{       1       2 MAX ->       2 }T
+T{      -1       0 MAX ->       0 }T
+T{      -1       1 MAX ->       1 }T
+T{ MIN-INT       0 MAX ->       0 }T
+T{ MIN-INT MAX-INT MAX -> MAX-INT }T
+T{       0 MAX-INT MAX -> MAX-INT }T
+T{       0       0 MAX ->       0 }T
+T{       1       1 MAX ->       1 }T
+T{       1       0 MAX ->       1 }T
+T{       2       1 MAX ->       2 }T
+T{       0      -1 MAX ->       0 }T
+T{       1      -1 MAX ->       1 }T
+T{       0 MIN-INT MAX ->       0 }T
+T{ MAX-INT MIN-INT MAX -> MAX-INT }T
+T{ MAX-INT       0 MAX -> MAX-INT }T
+
+6.1.1880
+
+MIN
+
+ 
+
+CORE
+
+ 
+
+ ( n1 n2 -- n3 )
+
+      n3 is the lesser of n1 and n2.
+
+Testing
+
+      T{       0       1 MIN ->       0 }T
+T{       1       2 MIN ->       1 }T
+T{      -1       0 MIN ->      -1 }T
+T{      -1       1 MIN ->      -1 }T
+T{ MIN-INT       0 MIN -> MIN-INT }T
+T{ MIN-INT MAX-INT MIN -> MIN-INT }T
+T{       0 MAX-INT MIN ->       0 }T
+T{       0       0 MIN ->       0 }T
+T{       1       1 MIN ->       1 }T
+T{       1       0 MIN ->       0 }T
+T{       2       1 MIN ->       1 }T
+T{       0      -1 MIN ->      -1 }T
+T{       1      -1 MIN ->      -1 }T
+T{       0 MIN-INT MIN -> MIN-INT }T
+T{ MAX-INT MIN-INT MIN -> MIN-INT }T
+T{ MAX-INT       0 MIN ->       0 }T
+
+6.1.1890
+
+MOD
+
+ 
+
+CORE
+
+ 
+
+ ( n1 n2 -- n3 )
+
+      Divide n1 by n2, giving the single-cell remainder
+      n3. An ambiguous condition exists if n2 is zero.
+      If n1 and n2 differ in sign, the
+      implementation-defined result returned will be the same as that
+      returned by either the phrase
+      >R S>D R> FM/MOD DROP
+      or the phrase
+      >R S>D R> SM/REM DROP.
+
+See
+
+ 3.2.2.1 Integer division.
+
+Testing
+
+IFFLOORED    	: TMOD T/MOD DROP ;
+IFSYM       	: TMOD T/MOD DROP ;
+
+        T{       0       1 MOD ->       0       1 TMOD }T
+T{       1       1 MOD ->       1       1 TMOD }T
+T{       2       1 MOD ->       2       1 TMOD }T
+T{      -1       1 MOD ->      -1       1 TMOD }T
+T{      -2       1 MOD ->      -2       1 TMOD }T
+T{       0      -1 MOD ->       0      -1 TMOD }T
+T{       1      -1 MOD ->       1      -1 TMOD }T
+T{       2      -1 MOD ->       2      -1 TMOD }T
+T{      -1      -1 MOD ->      -1      -1 TMOD }T
+T{      -2      -1 MOD ->      -2      -1 TMOD }T
+T{       2       2 MOD ->       2       2 TMOD }T
+T{      -1      -1 MOD ->      -1      -1 TMOD }T
+T{      -2      -2 MOD ->      -2      -2 TMOD }T
+T{       7       3 MOD ->       7       3 TMOD }T
+T{       7      -3 MOD ->       7      -3 TMOD }T
+T{      -7       3 MOD ->      -7       3 TMOD }T
+T{      -7      -3 MOD ->      -7      -3 TMOD }T
+T{ MAX-INT       1 MOD -> MAX-INT       1 TMOD }T
+T{ MIN-INT       1 MOD -> MIN-INT       1 TMOD }T
+T{ MAX-INT MAX-INT MOD -> MAX-INT MAX-INT TMOD }T
+T{ MIN-INT MIN-INT MOD -> MIN-INT MIN-INT TMOD }T
+
+6.1.1900
+
+MOVE
+
+ 
+
+CORE
+
+ 
+
+ ( addr1 addr2 u -- )
+
+      If u is greater than zero, copy the contents of u
+      consecutive address units at addr1 to the u
+      consecutive address units at addr2. After MOVE
+      completes, the u consecutive address units at addr2
+      contain exactly what the u consecutive address units at
+      addr1 contained before the move.
+
+See
+
+	17.6.1.0910 CMOVE,
+      17.6.1.0920 CMOVE>,
+      A.6.1.1900  MOVE.
+
+Rationale
+
+      CMOVE and CMOVE> are the primary
+      move operators in Forth 83. They specify a behavior for moving
+      that implies propagation if the move is suitably invoked. In
+      some hardware, this specific behavior cannot be achieved using
+      the best move instruction. Further, CMOVE and
+      CMOVE> move characters; Forth needs a move
+      instruction capable of dealing with address units. Thus
+      MOVE has been defined and added to the Core word set,
+      and CMOVE and CMOVE> have been
+      moved to the String word set.
+
+Testing
+
+      T{ FBUF FBUF 3 CHARS MOVE ->  }T  \ BIZARRE SPECIAL CASE
+T{ SEEBUF -> 20 20 20 }T
+
+      T{ SBUF FBUF 0 CHARS MOVE ->  }T
+T{ SEEBUF -> 20 20 20 }T
+
+      T{ SBUF FBUF 1 CHARS MOVE ->  }T
+T{ SEEBUF -> 12 20 20 }T
+
+      T{ SBUF FBUF 3 CHARS MOVE ->  }T
+T{ SEEBUF -> 12 34 56 }T
+
+      T{ FBUF FBUF CHAR+ 2 CHARS MOVE ->  }T
+T{ SEEBUF -> 12 12 34 }T
+
+      T{ FBUF CHAR+ FBUF 2 CHARS MOVE ->  }T
+T{ SEEBUF -> 12 34 34 }T
+
+4ex
+
+6.1.1910
+
+NEGATE
+
+ 
+
+CORE
+
+ 
+
+ ( n1 -- n2 )
+
+      Negate n1, giving its arithmetic inverse n2.
+
+See
+
+ 6.1.1720 INVERT,
+      6.1.0270 0=.
+
+Testing
+
+      T{  0 NEGATE ->  0 }T
+T{  1 NEGATE -> -1 }T
+T{ -1 NEGATE ->  1 }T
+T{  2 NEGATE -> -2 }T
+T{ -2 NEGATE ->  2 }T
+
+6.1.1980
+
+OR
+
+ 
+
+CORE
+
+ 
+
+ ( x1 x2 -- x3 )
+
+      x3 is the bit-by-bit inclusive-or of x1 with
+      x2.
+
+Testing
+
+      T{ 0S 0S OR -> 0S }T
+T{ 0S 1S OR -> 1S }T
+T{ 1S 0S OR -> 1S }T
+T{ 1S 1S OR -> 1S }T
+
+6.1.1990
+
+OVER
+
+ 
+
+CORE
+
+ 
+
+ ( x1 x2 -- x1 x2 x1 )
+
+      Place a copy of x1 on top of the stack.
+
+Testing
+
+      T{ 1 2 OVER -> 1 2 1 }T
+
+6.1.2033
+
+POSTPONE
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Find name. Append the compilation semantics of
+      name to the current definition. An ambiguous condition
+      exists if name is not found.
+
+See
+
+ 3.4.1 Parsing,
+      A.6.1.2033  POSTPONE.
+
+Rationale
+
+      Typical use:
+
+         : ENDIF
+      POSTPONE THEN
+      ; IMMEDIATE
+
+         : X ...
+      IF ... ENDIF
+      ... ;
+
+      POSTPONE replaces most of the functionality of
+      COMPILE and  [COMPILE]. COMPILE and
+
+      [COMPILE] are used for the same purpose: postpone the
+      compilation behavior of the next word in the parse area.
+      COMPILE was designed to be applied to non-immediate
+      words and [COMPILE] to immediate words. This burdens
+      the programmer with needing to know which words in a system
+      are immediate. Consequently, Forth standards have had to
+      specify the immediacy or non-immediacy of all words covered by
+      the standard. This unnecessarily constrains implementors.
+
+      A second problem with COMPILE is that some
+      programmers have come to expect and exploit a particular
+      implementation, namely:
+
+         : COMPILE R>
+      DUP @ , CELL+ >R
+      ;
+
+      This implementation will not work on native code Forth systems.
+      In a native code Forth using inline code expansion and peephole
+      optimization, the size of the object code produced varies; this
+      information is difficult to communicate to a "dumb"
+      COMPILE. A "smart" (i.e., immediate) COMPILE
+      would not have this problem, but this was forbidden in previous
+      standards.
+
+      For these reasons, COMPILE has not been included in
+      the standard and [COMPILE] has been moved in favor of
+      POSTPONE. Additional discussion can be found in Hayes,
+      J.R., "Postpone", Proceedings of the 1989 Rochester
+      Forth Conference.
+
+Testing
+
+      T{ : GT4 POSTPONE GT1 ; IMMEDIATE ->  }T
+T{ : GT5 GT4 ; ->  }T
+T{ GT5 -> 123 }T
+
+      T{ : GT6 345 ; IMMEDIATE ->  }T
+T{ : GT7 POSTPONE GT6 ; ->  }T
+T{ GT7 -> 345 }T
+
+6.1.2050
+
+QUIT
+
+ 
+
+CORE
+
+ 
+
+ ( -- )
+      ( R: i×x -- )
+
+      Empty the return stack, store zero in SOURCE-ID if it is
+      present, make the user input device the input source, and enter
+      interpretation state. Do not display a message. Repeat the
+      following:
+
+      • Accept a line from the input source into the input buffer,
+      set >IN to zero, and interpret.
+
+      • Display the implementation-defined system prompt if in
+      interpretation state, all processing has been completed,
+      and no ambiguous condition exists.
+
+See
+
+ 3.4 The Forth text interpreter.
+
+Implementation
+
+      : QUIT
+   ( empty the return stack and set the input source to the user input device )
+   POSTPONE [
+     REFILL
+   WHILE
+     ['] INTERPRET CATCH
+     CASE
+      0 OF STATE @ 0= IF
+      ." OK" THEN CR ENDOF
+     -1 OF ( Aborted ) ENDOF
+     -2 OF ( display message from ABORT" ) ENDOF
+     ( default ) DUP ." Exception # " .
+     ENDCASE
+   REPEAT BYE
+;
+
+This assumes the existence of a system-implementation word
+        INTERPRET that embodies the text interpreter semantics
+        described in 3.4 The Forth text interpreter.
+        Further discussion of the interpret loop can be found in
+        A.6.2.0945  COMPILE,.
+
+4ex
+
+6.1.2060
+
+R>
+
+r-from
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- x )
+      ( R: x -- )
+
+      Move x from the return stack to the data stack.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0580 >R,
+      6.1.2070 R@,
+      6.2.0340 2>R,
+      6.2.0410 2R>,
+      6.2.0415 2R@.
+
+Testing
+
+  -->
+      See F.6.1.0580 >R.
+
+6.1.2070
+
+R@
+
+r-fetch
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- x )
+      ( R: x -- x )
+
+      Copy x from the return stack to the data stack.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0580 >R,
+      6.1.2060 R>,
+      6.2.0340 2>R,
+      6.2.0410 2R>,
+      6.2.0415 2R@.
+
+Testing
+
+      See F.6.1.0580 >R.
+
+6.1.2120
+
+RECURSE
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( -- )
+
+      Append the execution semantics of the current definition to
+      the current definition. An ambiguous condition exists if
+      RECURSE appears in a definition after DOES>.
+
+See
+
+ 6.1.1250 DOES>,
+      6.1.2120 RECURSE,
+      A.6.1.2120  RECURSE.
+
+Rationale
+
+      Typical use:
+      : X ... RECURSE ... ;
+
+      This is Forth's recursion operator; in some implementations it
+      is called MYSELF. The usual example is the coding of
+      the factorial function.
+
+: FACTORIAL ( +n1 -- +n2)
+   DUP 2 < IF
+          DROP 1 EXIT
+          THEN
+   DUP 1-  RECURSE  *
+;
+
+      n2 = n1(n1-1)(n1-2)...(2)(1), the product of n1
+      with all positive integers less than itself (as a special case,
+      zero factorial equals one). While beloved of computer scientists,
+      recursion makes unusually heavy use of both stacks and should
+      therefore be used with caution. See alternate definition in
+      A.6.1.2140  REPEAT.
+
+Testing
+
+      T{ : GI6 ( N -- 0,1,..N ) 
+
+           DUP IF DUP >R 1- RECURSE R>
+      THEN ; ->  }T
+T{ 0 GI6 -> 0 }T
+T{ 1 GI6 -> 0 1 }T
+T{ 2 GI6 -> 0 1 2 }T
+T{ 3 GI6 -> 0 1 2 3 }T
+T{ 4 GI6 -> 0 1 2 3 4 }T
+
+      DECIMAL
+T{ :NONAME ( n -- 0, 1, .., n ) 
+     DUP IF DUP >R 1- RECURSE R> THEN 
+   ; 
+   CONSTANT rn1 ->  }T
+T{ 0 rn1 EXECUTE -> 0 }T
+T{ 4 rn1 EXECUTE -> 0 1 2 3 4 }T
+
+      :NONAME  ( n -- n1 )
+   1- DUP
+   CASE 0 OF EXIT ENDOF
+     1 OF 11 SWAP RECURSE ENDOF
+     2 OF 22 SWAP RECURSE ENDOF
+     3 OF 33 SWAP RECURSE ENDOF
+     DROP ABS RECURSE EXIT
+   ENDCASE
+; CONSTANT rn2
+
+      T{  1 rn2 EXECUTE -> 0 }T
+T{  2 rn2 EXECUTE -> 11 0 }T
+T{  4 rn2 EXECUTE -> 33 22 11 0 }T
+T{ 25 rn2 EXECUTE -> 33 22 11 0 }T
+
+6.1.2140
+
+REPEAT
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: orig dest -- )
+
+      Append the run-time semantics given below to the current
+      definition, resolving the backward reference dest.
+      Resolve the forward reference orig using the location
+      following the appended run-time semantics.
+
+Run-time
+
+      ( -- )
+
+      Continue execution at the location given by dest.
+
+See
+
+ 6.1.0760 BEGIN,
+      6.1.2430 WHILE,
+      A.6.1.2140  REPEAT.
+
+Rationale
+
+      Typical use:
+
+: FACTORIAL ( +n1 -- +n2 )
+   DUP 2 < IF
+          DROP 1 EXIT  THEN
+   DUP
+   BEGIN  DUP 2 > WHILE
+     1-  SWAP OVER *  SWAP
+   REPEAT DROP
+;
+
+Testing
+
+      See F.6.1.2430  WHILE.
+
+6.1.2160
+
+ROT
+
+rote
+
+CORE
+
+ 
+
+ ( x1 x2 x3 -- x2 x3 x1 )
+
+      Rotate the top three stack entries.
+
+Testing
+
+      T{ 1 2 3 ROT -> 2 3 1 }T
+
+6.1.2162
+
+RSHIFT
+
+r-shift
+
+CORE
+
+ 
+
+ ( x1 u -- x2 )
+
+      Perform a logical right shift of u bit-places on
+      x1, giving x2. Put zeroes into the most
+      significant bits vacated by the shift. An ambiguous condition
+      exists if u is greater than or equal to the number of
+      bits in a cell.
+
+Testing
+
+      T{    1 0 RSHIFT -> 1 }T
+T{    1 1 RSHIFT -> 0 }T
+T{    2 1 RSHIFT -> 1 }T
+T{    4 2 RSHIFT -> 1 }T
+T{ 8000 F RSHIFT -> 1 }T						               \ Biggest
+T{  MSB 1 RSHIFT MSB AND ->   0 }T    \ RSHIFT zero fills MSBs
+T{  MSB 1 RSHIFT     2*  -> MSB }T
+
+6.1.2165
+
+S"
+
+s-quote
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "ccc<quote>" -- )
+
+      Parse ccc delimited by " (double-quote).
+      Append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( -- c-addr u )
+
+      Return c-addr and u describing a string
+      consisting of the characters ccc. A program shall
+      not alter the returned string.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.0855 C",
+      11.6.1.2165 S",
+      6.2.2266 S\",
+      A.6.1.2165  S".
+
+Rationale
+
+      Typical use:
+      : X ...
+      S" ccc"
+      ... ;
+
+Testing
+
+      T{ : GC4 S" XY" ; ->   }T
+T{ GC4 SWAP DROP  -> 2 }T
+T{ GC4 DROP DUP C@ SWAP CHAR+ C@ -> 58 59 }T
+
+      : GC5 S" A String"2DROP ; \ There is no space between the " and 2DROP
+T{ GC5 ->  }T
+
+6.1.2170
+
+S>D
+
+s-to-d
+
+CORE
+
+ 
+
+ ( n -- d )
+
+      Convert the number n to the double-cell number d
+      with the same numerical value.
+
+Testing
+
+ D -->
+      T{       0 S>D ->       0  0 }T
+T{       1 S>D ->       1  0 }T
+T{       2 S>D ->       2  0 }T
+T{      -1 S>D ->      -1 -1 }T
+T{      -2 S>D ->      -2 -1 }T
+T{ MIN-INT S>D -> MIN-INT -1 }T
+T{ MAX-INT S>D -> MAX-INT  0 }T
+
+6.1.2210
+
+SIGN
+
+ 
+
+CORE
+
+ 
+
+ ( n -- )
+
+      If n is negative, add a minus sign to the beginning of
+      the pictured numeric output string. An ambiguous condition exists
+      if SIGN executes outside of a <# #>
+      delimited number conversion.
+
+Testing
+
+: GP2  <# -1 SIGN 0 SIGN -1 SIGN 0 0 #> S" --" S= ;
+T{ GP2 -> <TRUE> }T
+
+6.1.2214
+
+SM/REM
+
+s-m-slash-rem
+
+CORE
+
+ 
+
+ ( d1 n1 -- n2 n3 )
+
+      Divide d1 by n1, giving the symmetric quotient
+      n3 and the remainder n2. Input and output stack
+      arguments are signed. An ambiguous condition exists if n1
+      is zero or if the quotient lies outside the range of a single-cell
+      signed integer.
+
+See
+
+ 3.2.2.1 Integer division,
+      6.1.1561 FM/MOD,
+      6.1.2370 UM/MOD,
+      A.6.1.2214  SM/REM.
+
+Rationale
+
+      See the previous discussion of division under FM/MOD.
+      SM/REM is the symmetric-division primitive, which allows
+      programs to define the following symmetric-division operators:
+
+: /-REM ( n1 n2 -- n3 n4 )
+          >R S>D R> SM/REM
+          ;
+
+          : /- ( n1 n2 -- n3 )
+          /-REM SWAP DROP
+          ;
+
+          : -REM ( n1 n2 -- n3 )
+          /-REM DROP
+          ;
+
+          : */-REM ( n1 n2 n3 -- n4 n5 )
+          >R M* R> SM/REM
+          ;
+
+          : */- ( n1 n2 n3 -- n4 )
+          */-REM SWAP DROP
+          ;
+
+Testing
+
+      T{       0 S>D              1 SM/REM ->  0       0 }T
+T{       1 S>D              1 SM/REM ->  0       1 }T
+T{       2 S>D              1 SM/REM ->  0       2 }T
+T{      -1 S>D              1 SM/REM ->  0      -1 }T
+T{      -2 S>D              1 SM/REM ->  0      -2 }T
+T{       0 S>D             -1 SM/REM ->  0       0 }T
+T{       1 S>D             -1 SM/REM ->  0      -1 }T
+T{       2 S>D             -1 SM/REM ->  0      -2 }T
+T{      -1 S>D             -1 SM/REM ->  0       1 }T
+T{      -2 S>D             -1 SM/REM ->  0       2 }T
+T{       2 S>D              2 SM/REM ->  0       1 }T
+T{      -1 S>D             -1 SM/REM ->  0       1 }T
+T{      -2 S>D             -2 SM/REM ->  0       1 }T
+T{       7 S>D              3 SM/REM ->  1       2 }T
+T{       7 S>D             -3 SM/REM ->  1      -2 }T
+T{      -7 S>D              3 SM/REM ->  1      -2 }T
+T{      -7 S>D             -3 SM/REM -> -1       2 }T
+T{ MAX-INT S>D              1 SM/REM ->  0 MAX-INT }T
+T{ MIN-INT S>D              1 SM/REM ->  0 MIN-INT }T
+T{ MAX-INT S>D        MAX-INT SM/REM ->  0       1 }T
+T{ MIN-INT S>D        MIN-INT SM/REM ->  0       1 }T
+T{      1S 1                4 SM/REM ->  3 MAX-INT }T
+T{       2 MIN-INT M*       2 SM/REM ->  0 MIN-INT }T
+T{       2 MIN-INT M* MIN-INT SM/REM ->  0       2 }T
+T{       2 MAX-INT M*       2 SM/REM ->  0 MAX-INT }T
+T{       2 MAX-INT M* MAX-INT SM/REM ->  0       2 }T
+T{ MIN-INT MIN-INT M* MIN-INT SM/REM ->  0 MIN-INT }T
+T{ MIN-INT MAX-INT M* MIN-INT SM/REM ->  0 MAX-INT }T
+T{ MIN-INT MAX-INT M* MAX-INT SM/REM ->  0 MIN-INT }T
+T{ MAX-INT MAX-INT M* MAX-INT SM/REM ->  0 MAX-INT }T
+
+6.1.2216
+
+SOURCE
+
+ 
+
+CORE
+
+ 
+
+ ( -- c-addr u )
+
+      c-addr is the address of, and u is the number of
+      characters in, the input buffer.
+
+See
+
+ A.6.1.2216  SOURCE.
+
+Rationale
+
+      SOURCE simplifies the process of directly accessing the
+      input buffer by hiding the differences between its location
+      for different input sources. This also gives implementors more
+      flexibility in their implementation of buffering mechanisms
+      for different input sources. The committee moved away from an
+      input buffer specification consisting of a collection of
+      individual variables.
+
+Testing
+
+: GS1 S" SOURCE" 2DUP EVALUATE
+        >R SWAP >R = R> R> = ;
+T{ GS1 -> <TRUE> <TRUE> }T
+
+        : GS4 SOURCE >IN ! DROP ;
+T{ GS4 123 456 
+    ->  }T
+
+6.1.2220
+
+SPACE
+
+ 
+
+CORE
+
+ 
+
+ ( -- )
+
+      Display one space.
+
+Testing
+
+      See F.6.1.1320 EMIT.
+
+6.1.2230
+
+SPACES
+
+ 
+
+CORE
+
+ 
+
+ ( n -- )
+
+      If n is greater than zero, display n spaces.
+
+Testing
+
+      See F.6.1.1320 EMIT.
+
+6.1.2250
+
+STATE
+
+ 
+
+CORE
+
+ 
+
+ ( -- a-addr )
+
+      a-addr is the address of a cell containing the
+      compilation-state flag. STATE is true when in
+      compilation state, false otherwise. The true value
+      in STATE is non-zero, but is otherwise
+      implementation-defined. Only the following standard words alter
+      the value in STATE:
+      : (colon),
+      ; (semicolon),
+      ABORT,
+      QUIT,
+      :NONAME,
+      [ (left-bracket),
+      ] (right-bracket).
+
+Note
+
+      A program shall not directly alter the contents of STATE.
+
+See
+
+ 3.4 The Forth text interpreter,
+      6.1.0450 :,
+      6.1.0460 ;
+      6.1.0670 ABORT,
+      6.1.2050 QUIT,
+      6.1.2500 [,
+      6.1.2540 ],
+      6.2.0455 :NONAME,
+      15.6.2.2250 STATE,
+      A.6.1.2250  STATE.
+
+Rationale
+
+      Although
+      EVALUATE,
+      LOAD,
+      INCLUDE-FILE and
+      INCLUDED
+      are not listed as words which alter STATE, the text
+      interpreted by any one of these words could include one or
+      more words which explicitly alter STATE.
+      EVALUATE,
+      LOAD,
+      INCLUDE-FILE and
+      INCLUDED
+      do not in themselves alter STATE.
+
+      STATE does not nest with text interpreter nesting. For
+      example, the code sequence:
+
+         : FOO
+      S" ]" EVALUATE
+      ;
+          
+      FOO
+
+      will leave the system in compilation state. Similarly, after
+      LOADing a block containing ], the system
+      will be in compilation state.
+
+      Note that ] does not affect the parse area and that the
+      only effect that : has on the parse area is to parse a
+      word. This entitles a program to use these words to set the
+      state with known side-effects on the parse area. For example:
+
+         : NOP
+      : POSTPONE ; IMMEDIATE
+      ;
+
+         NOP ALIGN
+   NOP ALIGNED
+
+      Some non-compliant systems have ] invoke a
+      compiler loop in addition to setting STATE. Such a
+      system would inappropriately attempt to compile the second
+      use of NOP.
+
+Testing
+
+      T{ : GT8 STATE @ ; IMMEDIATE ->  }T
+T{ GT8 -> 0 }T
+T{ : GT9 GT8 LITERAL ; ->  }T
+T{ GT9 0= -> <FALSE> }T
+
+6.1.2260
+
+SWAP
+
+ 
+
+CORE
+
+ 
+
+ ( x1 x2 -- x2 x1 )
+
+      Exchange the top two stack items.
+
+Testing
+
+      T{ 1 2 SWAP -> 2 1 }T
+
+6.1.2270
+
+THEN
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: orig -- )
+
+      Append the run-time semantics given below to the current
+      definition. Resolve the forward reference orig using
+      the location of the appended run-time semantics.
+
+Run-time
+
+      ( -- )
+
+      Continue execution.
+
+See
+
+ 6.1.1310 ELSE,
+      6.1.1700 IF,
+      A.6.1.2270  THEN.
+
+Rationale
+
+      Typical use:
+
+         : X ...
+      test IF ... THEN
+      ... ;
+
+      or
+
+         : X ...
+      test IF ... ELSE ... THEN
+      ... ;
+
+Testing
+
+      See F.6.1.1700 IF.
+
+6.1.2310
+
+TYPE
+
+ 
+
+CORE
+
+ 
+
+ ( c-addr u -- )
+
+      If u is greater than zero, display the character string
+      specified by c-addr and u.
+
+      When passed a character in a character string whose
+      character-defining bits have a value between hex 20 and 7E
+      inclusive, the corresponding standard character, specified
+      by 3.1.2.1 Graphic characters, is displayed.
+      Because different output devices can respond differently to
+      control characters, programs that use control characters to
+      perform specific functions have an environmental dependency.
+
+See
+
+ 6.1.1320 EMIT.
+
+Testing
+
+      See F.6.1.1320 EMIT.
+
+6.1.2320
+
+U.
+
+u-dot
+
+CORE
+
+ 
+
+ ( u -- )
+
+      Display u in free field format.
+
+Testing
+
+      See F.6.1.1320 EMIT.
+
+6.1.2340
+
+U<
+
+u-less-than
+
+CORE
+
+ 
+
+ ( u1 u2 -- flag )
+
+      flag is true if and only if u1 is less than
+      u2.
+
+See
+
+ 6.1.0480 <.
+
+Testing
+
+      T{        0        1 U< -> <TRUE>  }T
+T{        1        2 U< -> <TRUE>  }T
+T{        0 MID-UINT U< -> <TRUE>  }T
+T{        0 MAX-UINT U< -> <TRUE>  }T
+T{ MID-UINT MAX-UINT U< -> <TRUE>  }T
+T{        0        0 U< -> <FALSE> }T
+T{        1        1 U< -> <FALSE> }T
+T{        1        0 U< -> <FALSE> }T
+T{        2        1 U< -> <FALSE> }T
+T{ MID-UINT        0 U< -> <FALSE> }T
+T{ MAX-UINT        0 U< -> <FALSE> }T
+T{ MAX-UINT MID-UINT U< -> <FALSE> }T
+
+6.1.2360
+
+UM*
+
+u-m-star
+
+CORE
+
+ 
+
+ ( u1 u2 -- ud )
+
+      Multiply u1 by u2, giving the unsigned double-cell
+      product ud. All values and arithmetic are unsigned.
+
+Testing
+
+      T{ 0 0 UM* -> 0 0 }T
+T{ 0 1 UM* -> 0 0 }T
+T{ 1 0 UM* -> 0 0 }T
+T{ 1 2 UM* -> 2 0 }T
+T{ 2 1 UM* -> 2 0 }T
+T{ 3 3 UM* -> 9 0 }T
+
+      T{ MID-UINT+1 1 RSHIFT 2 UM* ->  MID-UINT+1 0 }T
+T{ MID-UINT+1          2 UM* ->           0 1 }T
+T{ MID-UINT+1          4 UM* ->           0 2 }T
+T{         1S          2 UM* -> 1S 1 LSHIFT 1 }T
+T{   MAX-UINT   MAX-UINT UM* ->    1 1 INVERT }T
+
+6.1.2370
+
+UM/MOD
+
+u-m-slash-mod
+
+CORE
+
+ 
+
+ ( ud u1 -- u2 u3 )
+
+      Divide ud by u1, giving the quotient u3
+      and the remainder u2. All values and arithmetic are
+      unsigned. An ambiguous condition exists if u1 is zero or
+      if the quotient lies outside the range of a single-cell unsigned
+      integer.
+
+See
+
+ 3.2.2.1 Integer division,
+      6.1.1561 FM/MOD,
+      6.1.2214 SM/REM.
+
+Testing
+
+      T{        0            0        1 UM/MOD -> 0        0 }T
+T{        1            0        1 UM/MOD -> 0        1 }T
+T{        1            0        2 UM/MOD -> 1        0 }T
+T{        3            0        2 UM/MOD -> 1        1 }T
+T{ MAX-UINT        2 UM*        2 UM/MOD -> 0 MAX-UINT }T
+T{ MAX-UINT        2 UM* MAX-UINT UM/MOD -> 0        2 }T
+T{ MAX-UINT MAX-UINT UM* MAX-UINT UM/MOD -> 0 MAX-UINT }T
+
+6.1.2380
+
+UNLOOP
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- )
+      ( R: loop-sys -- )
+
+      Discard the loop-control parameters for the current nesting
+      level. An UNLOOP is required for each nesting level
+      before the definition may be EXITed. An ambiguous
+      condition exists if the loop-control parameters are unavailable.
+
+See
+
+ 3.2.3.3 Return stack,
+      A.6.1.2380  UNLOOP.
+
+Rationale
+
+      Typical use:
+
+        : X ...
+   limit first DO
+     ... test IF
+        ... UNLOOP EXIT THEN ...
+   LOOP ...
+;
+
+      UNLOOP allows the use of EXIT within the context
+      of DO ... LOOP and related do-loop constructs.
+      UNLOOP as a function has been called UNDO.
+      UNLOOP is more indicative of the action: nothing gets
+      undone — we simply stop doing it.
+
+Testing
+
+      T{ : GD6 ( PAT: {0 0},{0 0}{1 0}{1 1},{0 0}{1 0}{1 1}{2 0}{2 1}{2 2} ) 
+      0 SWAP 0 DO 
+         I 1+ 0 DO 
+           I J + 3 = IF
+      I UNLOOP I UNLOOP EXIT THEN 1+ 
+         LOOP 
+      LOOP ; ->  }T
+T{ 1 GD6 -> 1 }T
+T{ 2 GD6 -> 3 }T
+T{ 3 GD6 -> 4 1 2 }T
+
+6.1.2390
+
+UNTIL
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: dest -- )
+
+      Append the run-time semantics given below to the current
+      definition, resolving the backward reference dest.
+
+Run-time
+
+      ( x -- )
+
+      If all bits of x are zero, continue execution at the
+      location specified by dest.
+
+See
+
+ 6.1.0760 BEGIN,
+      A.6.1.2390  UNTIL.
+
+Rationale
+
+      Typical use:
+      : X ...
+      BEGIN ... test UNTIL
+      ... ;
+
+Testing
+
+      T{ : GI4 BEGIN DUP 1+ DUP 5 > UNTIL ; ->  }T
+T{ 3 GI4 -> 3 4 5 6 }T
+T{ 5 GI4 -> 5 6 }T
+T{ 6 GI4 -> 6 7 }T
+
+6.1.2410
+
+VARIABLE
+
+ 
+
+CORE
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Create a definition for name with the execution
+      semantics defined below. Reserve one cell of data space at an
+      aligned address.
+
+      name is referred to as a "variable".
+
+name Execution
+
+      ( -- a-addr )
+
+      a-addr is the address of the reserved cell. A program
+      is responsible for initializing the contents of the reserved
+      cell.
+
+See
+
+ 3.4.1 Parsing,
+      A.6.1.2410  VARIABLE.
+
+Rationale
+
+      Typical use:
+      VARIABLE XYZ
+
+Testing
+
+      T{ VARIABLE V1 ->     }T
+T{    123 V1 ! ->     }T
+T{        V1 @ -> 123 }T
+
+6.1.2430
+
+WHILE
+
+ 
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: dest -- orig dest )
+
+      Put the location of a new unresolved forward reference
+      orig onto the control flow stack, under the existing
+      dest. Append the run-time semantics given below to the
+      current definition. The semantics are incomplete until
+      orig and dest are resolved (e.g., by
+      REPEAT).
+
+Run-time
+
+      ( x -- )
+
+      If all bits of x are zero, continue execution at the
+      location specified by the resolution of orig.
+
+See
+
+ A.6.1.2430  WHILE.
+
+Rationale
+
+      Typical use:
+      : X ...
+      BEGIN ...
+      test WHILE
+      ... REPEAT
+      ... ;
+
+Testing
+
+      T{ : GI3 BEGIN DUP 5 < WHILE DUP 1+ REPEAT ; ->  }T
+T{ 0 GI3 -> 0 1 2 3 4 5 }T
+T{ 4 GI3 -> 4 5 }T
+T{ 5 GI3 -> 5 }T
+T{ 6 GI3 -> 6 }T
+
+      T{ : GI5 BEGIN DUP 2 > WHILE 
+      DUP 5 < WHILE DUP 1+ REPEAT 
+      123 ELSE 345 THEN ; ->  }T
+T{ 1 GI5 -> 1 345 }T
+T{ 2 GI5 -> 2 345 }T
+T{ 3 GI5 -> 3 4 5 123 }T
+T{ 4 GI5 -> 4 5 123 }T
+T{ 5 GI5 -> 5 123 }T
+
+6.1.2450
+
+WORD
+
+ 
+
+CORE
+
+ 
+
+ ( char "<chars>ccc<char>" -- c-addr )
+
+      Skip leading delimiters. Parse characters ccc delimited
+      by char.  An ambiguous condition exists if the length of
+      the parsed string is greater than the implementation-defined
+      length of a counted string.
+
+      c-addr is the address of a transient region containing
+      the parsed word as a counted string. If the parse area was
+      empty or contained no characters other than the delimiter, the
+      resulting string has a zero length.
+      A program may replace characters within the string.
+
+See
+
+ 3.3.3.6 Other transient regions,
+      3.4.1 Parsing,
+      A.6.1.2450  WORD.
+
+Rationale
+
+      Typical use: char WORD ccc<char>
+
+Testing
+
+: GS3 WORD COUNT SWAP C@ ;
+T{ BL GS3 HELLO -> 5 CHAR H }T
+T{ CHAR " GS3 GOODBYE" -> 7 CHAR G }T
+T{ BL GS3 
+   DROP -> 0 }T  \ Blank lines return zero-length strings
+
+6.1.2490
+
+XOR
+
+x-or
+
+CORE
+
+ 
+
+ ( x1 x2 -- x3 )
+
+      x3 is the bit-by-bit exclusive-or of x1 with
+      x2.
+
+Testing
+
+      T{ 0S 0S XOR -> 0S }T
+T{ 0S 1S XOR -> 1S }T
+T{ 1S 0S XOR -> 1S }T
+T{ 1S 1S XOR -> 0S }T
+
+6.1.2500
+
+[
+
+left-bracket
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( -- )
+
+      Enter interpretation state. [ is an immediate word.
+
+See
+
+ 3.4 The Forth text interpreter,
+      3.4.5 Compilation,
+      6.1.2540 ],
+      A.6.1.2500  [.
+
+Rationale
+
+      Typical use:
+      : X ...
+      [ 4321 ] LITERAL
+      ... ;
+
+Testing
+
+      T{ : GC3 [ GC1 ] LITERAL ; ->  }T
+T{ GC3 -> 58 }T
+
+6.1.2510
+
+[']
+
+bracket-tick
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Find name. Append the run-time semantics given
+      below to the current definition.
+
+      An ambiguous condition exists if name is not found.
+
+Run-time
+
+      ( -- xt )
+
+      Place name's execution token xt on the stack.
+      The execution token returned by the compiled phrase
+      "['] X" is the same value returned by
+      "' X" outside of compilation state.
+
+See
+
+ 3.4.1 Parsing,
+      6.1.1550 FIND,
+      A.6.1.0070 '
+      A.6.1.2033 POSTPONE,
+      A.6.1.2510  ['].
+
+Rationale
+
+      Typical use:
+      : X ...
+      ['] name
+      ... ;
+
+      See:
+      A.6.1.1550 FIND.
+
+Testing
+
+      T{ : GT2 ['] GT1 ; IMMEDIATE ->  }T
+T{ GT2 EXECUTE -> 123 }T
+
+6.1.2520
+
+[CHAR]
+
+bracket-char
+
+CORE
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited
+      by a space. Append the run-time semantics given below to the
+      current definition.
+
+Run-time
+
+      ( -- char )
+
+      Place char, the value of the first character of
+      name, on the stack.
+
+See
+
+ 3.4.1 Parsing,
+      6.1.0895 CHAR,
+      A.6.1.2520  [CHAR].
+
+Rationale
+
+      Typical use:
+      : X ...
+      [CHAR] c
+      ... ;
+
+Testing
+
+      T{ : GC1 [CHAR] X     ; ->  }T
+T{ : GC2 [CHAR] HELLO ; ->  }T
+T{ GC1 -> 58 }T
+T{ GC2 -> 48 }T
+
+6.1.2540
+
+]
+
+right-bracket
+
+CORE
+
+ 
+
+ ( -- )
+
+      Enter compilation state.
+
+See
+
+ 3.4 The Forth text interpreter,
+      3.4.5 Compilation,
+      6.1.2500 [,
+      A.6.1.2540  ].
+
+Rationale
+
+      Typical use:
+      : X ...
+      [ 4321 ] LITERAL
+      ... ;
+
+Testing
+
+      See F.6.1.2500 [.
+
+6.2 Core extension words
+
+6.2.0200
+
+.(
+
+dot-paren
+
+CORE EXT
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "ccc<paren>" -- )
+
+      Parse and display ccc delimited by ) (right
+      parenthesis). .( is an immediate word.
+
+See
+
+ 3.4.1 Parsing,
+      6.1.0190 .",
+      A.6.2.0200  .(.
+
+Rationale
+
+      Typical use:
+      .( ccc)
+
+6.2.0210
+
+.R
+
+dot-r
+
+CORE EXT
+
+ 
+
+ ( n1 n2 -- )
+
+      Display n1 right aligned in a field n2
+      characters wide. If the number of characters required to display
+      n1 is greater than n2, all digits are displayed
+      with no leading spaces in a field as wide as necessary.
+
+See
+
+ A.6.2.0210  .R.
+
+Rationale
+
+      In .R, "R" is short for RIGHT.
+
+6.2.0260
+
+0<>
+
+zero-not-equals
+
+CORE EXT
+
+ 
+
+ ( x -- flag )
+
+      flag is true if and only if x is not equal to
+      zero.
+
+6.2.0280
+
+0>
+
+zero-greater
+
+CORE EXT
+
+ 
+
+ ( n -- flag )
+
+      flag is true if and only if n is greater than
+      zero.
+
+6.2.0340
+
+2>R
+
+two-to-r
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( x1 x2 -- )
+      ( R: -- x1 x2 )
+
+      Transfer cell pair x1 x2 to the return stack.
+      Semantically equivalent to SWAP >R >R.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0580 >R,
+      6.1.2060 R>,
+      6.1.2070 R@,
+      6.2.0410 2R>,
+      6.2.0415 2R@,
+      A.6.2.0340  2>R.
+
+Rationale
+
+ R -->
+      The primary advantage of 2>R is that it puts the top
+      stack entry on the top of the return stack. For instance, a
+      double-cell number may be transferred to the return stack and
+      still have the most significant cell accessible on the top of
+      the return stack.
+
+6.2.0410
+
+2R>
+
+two-r-from
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- x1 x2 )
+      ( R: x1 x2 -- )
+
+      Transfer cell pair x1 x2 from the return stack.
+      Semantically equivalent to R> R> SWAP.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0580 >R
+      6.1.2060 R>
+      6.1.2070 R@
+      6.2.0340 2>R,
+      6.2.0415 2R@,
+      A.6.2.0410  2R>.
+
+Rationale
+
+  -->
+      Note that 2R> is not equivalent to R> R>.
+      Instead, it mirrors the action of 2>R
+      (see A.6.2.0340).
+
+6.2.0415
+
+2R@
+
+two-r-fetch
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( -- x1 x2 )
+      ( R: x1 x2 -- x1 x2 )
+
+      Copy cell pair x1 x2 from the return stack.
+      Semantically equivalent to R> R> 2DUP
+      >R >R SWAP.
+
+See
+
+ 3.2.3.3 Return stack,
+      6.1.0580 >R,
+      6.1.2060 R>,
+      6.1.2070 R@,
+      6.2.0340 2>R,
+      6.2.0410 2R>.
+
+6.2.0455
+
+:NONAME
+
+colon-no-name
+
+CORE EXT
+
+ 
+
+ ( C: -- colon-sys )
+      ( S: -- xt )
+
+      Create an execution token xt, enter compilation state
+      and start the current definition, producing colon-sys.
+      Append the initiation semantics given below to the current
+      definition.
+
+      The execution semantics of xt will be determined by the
+      words compiled into the body of the definition. This definition
+      can be executed later by using xt EXECUTE.
+
+      If the control-flow stack is implemented using the data stack,
+      colon-sys shall be the topmost item on the data stack.
+      See 3.2.3.2 Control-flow stack.
+
+Initiation
+
+      ( i×x -- i×x )
+      ( R: -- nest-sys )
+
+      Save implementation-dependent information nest-sys
+      about the calling definition. The stack effects i×x
+      represent arguments to xt.
+
+xt Execution
+
+      ( i×x -- j×x )
+
+      Execute the definition specified by xt. The stack
+      effects i×x and j×x represent arguments to
+      and results from xt, respectively.
+
+See
+
+ A.6.2.0455  :NONAME.
+
+Rationale
+
+      Typical use:
+
+         DEFER print
+
+         :NONAME ( n -- ) . ; IS print
+
+Note
+
+ RECURSE and DOES> are allowed within a :NONAME definition.
+
+Testing
+
+      VARIABLE nn1
+VARIABLE nn2
+T{ :NONAME 1234 ; nn1 ! ->  }T
+T{ :NONAME 9876 ; nn2 ! ->  }T
+T{ nn1 @ EXECUTE -> 1234 }T
+T{ nn2 @ EXECUTE -> 9876 }T
+
+6.2.0500
+
+<>
+
+not-equals
+
+CORE EXT
+
+ 
+
+ ( x1 x2 -- flag )
+
+      flag is true if and only if x1 is not bit-for-bit
+      the same as x2.
+
+6.2.0620
+
+?DO
+
+question-do
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- do-sys )
+
+      Put do-sys onto the control-flow stack. Append the
+      run-time semantics given below to the current definition. The
+      semantics are incomplete until resolved by a consumer of
+      do-sys such as LOOP.
+
+Run-time
+
+      ( n1 | u1 n2 | u2 -- )
+      ( R: -- loop-sys )
+
+      If n1 | u1 is equal to n2 | u2, continue
+      execution at the location given by the consumer of
+      do-sys. Otherwise set up loop control parameters with
+      index n2 | u2 and limit n1 | u1 and continue
+      executing immediately following ?DO. Anything already
+      on the return stack becomes unavailable until the loop
+      control parameters are discarded. An ambiguous condition
+      exists if n1 | u1 and n2 | u2 are not both of
+      the same type.
+
+See
+
+ 3.2.3.2 Control-flow stack,
+      6.1.0140 +LOOP,
+      6.1.1240 DO,
+      6.1.1680 I,
+6.1.1760 LEAVE,
+      6.1.1800 LOOP,
+      6.1.2380 UNLOOP,
+      A.6.2.0620  ?DO.
+
+Rationale
+
+      Typical use:
+
+         : X ... ?DO ... LOOP ... ;
+
+Testing
+
+DECIMAL
+
+        : qd ?DO I LOOP ;
+T{   789   789 qd ->  }T
+T{ -9876 -9876 qd ->  }T
+T{     5     0 qd -> 0 1 2 3 4 }T
+
+        : qd1 ?DO I 10 +LOOP ;
+T{ 50 1 qd1 -> 1 11 21 31 41 }T
+T{ 50 0 qd1 -> 0 10 20 30 40 }T
+
+        : qd2 ?DO I 3 > IF LEAVE ELSE I THEN LOOP ;
+T{ 5 -1 qd2 -> -1 0 1 2 3 }T
+
+        : qd3 ?DO I 1 +LOOP ;
+T{ 4  4 qd3 ->  }T
+T{ 4  1 qd3 ->  1 2 3 }T
+T{ 2 -1 qd3 -> -1 0 1 }T
+
+        : qd4 ?DO I -1 +LOOP ;
+T{  4 4 qd4 ->  }T
+T{  1 4 qd4 -> 4 3 2  1 }T
+T{ -1 2 qd4 -> 2 1 0 -1 }T
+
+        : qd5 ?DO I -10 +LOOP ;
+T{   1 50 qd5 -> 50 40 30 20 10   }T
+T{   0 50 qd5 -> 50 40 30 20 10 0 }T
+T{ -25 10 qd5 -> 10 0 -10 -20     }T
+
+        VARIABLE qditerations
+VARIABLE qdincrement
+
+        : qd6 ( limit start increment -- )
+           qdincrement !
+   0 qditerations !
+   ?DO
+     1 qditerations +!
+     I
+     qditerations @  6 = IF LEAVE THEN
+     qdincrement @
+   +LOOP qditerations @
+;
+
+        T{  4  4 -1 qd6 ->                   0  }T
+T{  1  4 -1 qd6 ->  4  3  2  1       4  }T
+T{  4  1 -1 qd6 ->  1  0 -1 -2 -3 -4 6  }T
+T{  4  1  0 qd6 ->  1  1  1  1  1  1 6  }T
+T{  0  0  0 qd6 ->                   0  }T
+T{  1  4  0 qd6 ->  4  4  4  4  4  4 6  }T
+T{  1  4  1 qd6 ->  4  5  6  7  8  9 6  }T
+T{  4  1  1 qd6 ->  1  2  3          3  }T
+T{  4  4  1 qd6 ->                   0  }T
+T{  2 -1 -1 qd6 -> -1 -2 -3 -4 -5 -6 6  }T
+T{ -1  2 -1 qd6 ->  2  1  0 -1       4  }T
+T{  2 -1  0 qd6 -> -1 -1 -1 -1 -1 -1 6  }T
+T{ -1  2  0 qd6 ->  2  2  2  2  2  2 6  }T
+T{ -1  2  1 qd6 ->  2  3  4  5  6  7 6  }T
+T{  2 -1  1 qd6 -> -1  0  1          3  }T
+
+6.2.0698
+
+ACTION-OF
+
+ 
+
+CORE EXT
+
+X:deferred
+
+Interpretation
+
+      ( "<spaces>name" -- xt )
+
+      Skip leading spaces and parse name delimited by a space.
+      xt is the execution token that name is set to execute.
+      An ambiguous condition exists if name was not defined by
+      DEFER, or if the name has not been set to execute an
+      xt.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading spaces and parse name delimited by a space.
+      Append the run-time semantics given below to the current
+      definition.  An ambiguous condition exists if name
+      was not defined by DEFER.
+
+Run-time
+
+      ( -- xt )
+
+      xt is the execution token that name is set to execute.
+      An ambiguous condition exists if name has not been
+      set to execute an xt.
+
+      An ambiguous condition exists if POSTPONE, [COMPILE],
+      ['] or ' is applied to ACTION-OF.
+
+See
+
+ 6.2.1173 DEFER,
+      6.2.1175 DEFER!,
+      6.2.1177 DEFER@,
+      6.2.1725 IS.
+
+Implementation
+
+      : ACTION-OF
+   STATE @ IF
+     POSTPONE ['] POSTPONE DEFER@
+   ELSE
+     ' DEFER@
+   THEN ; IMMEDIATE
+
+Testing
+
+      T{ DEFER defer1 ->  }T
+T{ : action-defer1 ACTION-OF defer1 ; ->  }T
+
+      T{ ' * ' defer1 DEFER! ->   }T
+T{          2 3 defer1 -> 6 }T
+T{ ACTION-OF defer1 -> ' * }T
+T{    action-defer1 -> ' * }T
+
+      T{ ' + IS defer1 ->   }T
+T{    1 2 defer1 -> 3 }T
+T{ ACTION-OF defer1 -> ' + }T
+T{    action-defer1 -> ' + }T
+
+6.2.0700
+
+AGAIN
+
+ 
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: dest -- )
+
+      Append the run-time semantics given below to the current
+      definition, resolving the backward reference dest.
+
+Run-time
+
+      ( -- )
+
+      Continue execution at the location specified by dest.
+      If no other control flow words are used, any program code
+      after AGAIN will not be executed.
+
+See
+
+ 6.1.0760 BEGIN,
+      A.6.2.0700  AGAIN.
+
+Rationale
+
+      Typical use:
+      : X
+      ... BEGIN ... AGAIN
+      ... ;
+
+      Unless word-sequence has a way to terminate, this is an
+      endless loop.
+
+6.2.0825
+
+BUFFER:
+
+buffer-colon
+
+CORE EXT
+
+X:buffer
+
+ 
+
+ ( u "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by a space.
+      Create a definition for name, with the execution semantics defined
+      below.  Reserve u address units at an aligned address.
+      Contiguity of this region with any other region is undefined.
+
+name Execution
+
+      ( -- a-addr )
+
+      a-addr is the address of the space reserved by BUFFER: when
+      it defined name.  The program is responsible for initializing the
+      contents.
+
+See
+
+ A.6.2.0825  BUFFER:.
+
+Rationale
+
+      BUFFER: provides a means of defining an uninitialized buffer.
+      In systems that use a single memory space, this can effectively
+      be defined as:
+
+: BUFFER: ( u "<name>" -- ; -- addr )
+   CREATE ALLOT
+;
+
+      However, many systems profit from a separation of uninitialized and
+      initialized data areas.  Such systems can implement BUFFER: so
+      that it allocates memory from a separate uninitialized memory area.
+      Embedded systems can take advantage of the lack of initialization of the
+      memory area while hosted systems are permitted to ALLOCATE
+      a buffer.
+      A system may select a region of memory for performance reasons.
+      A detailed knowledge of the memory allocation within the system
+      is required to provide a version of BUFFER: that can take
+      advantage of the system.
+
+      It should be noted that the memory buffer provided by BUFFER:
+      is not initialized by the system and that if the application requires
+      it to be initialized, it is the responsibility of the application to
+      initialize it.
+
+Implementation
+
+This implementation depends on children of CREATE
+        returning an aligned address.  Other memory location techniques
+        require implementation-specific knowledge of the underlying Forth
+        system.
+
+: BUFFER: \ u "<name>" – ; – addr
+\ Create a buffer of u address units whose address is returned at run time.
+   CREATE ALLOT
+;
+
+Testing
+
+DECIMAL
+T{ 127 CHARS BUFFER: TBUF1 ->  }T
+T{ 127 CHARS BUFFER: TBUF2 ->  }T
+        \ Buffer is aligned
+T{ TBUF1 ALIGNED -> TBUF1 }T
+        \ Buffers do not overlap
+T{ TBUF2 TBUF1 - ABS 127 CHARS < -> <FALSE> }T
+        \ Buffer can be written to
+1 CHARS CONSTANT /CHAR
+: TFULL? ( c-addr n char -- flag )
+   TRUE 2SWAP CHARS OVER + SWAP ?DO
+     OVER I C@ = AND
+   /CHAR +LOOP NIP
+;
+
+        T{ TBUF1 127 CHAR * FILL   ->        }T
+T{ TBUF1 127 CHAR * TFULL? -> <TRUE> }T
+
+        T{ TBUF1 127 0 FILL   ->        }T
+T{ TBUF1 127 0 TFULL? -> <TRUE> }T
+
+6.2.0855
+
+C"
+
+c-quote
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "ccc<quote>" -- )
+
+      Parse ccc delimited by " (double-quote) and
+      append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( -- c-addr )
+
+      Return c-addr, a counted string consisting of the
+      characters ccc. A program shall not alter the returned
+      string.
+
+See
+
+ 3.4.1 Parsing,
+      6.1.2165 S",
+      11.6.1.2165 S",
+      A.6.2.0855  C".
+
+Rationale
+
+      Typical use:
+      : X ...
+      C" ccc"
+      ... ;
+
+      See: A.3.1.3.4 Counted strings.
+
+Testing
+
+      T{ : cq1 C" 123" ; ->  }T
+T{ : cq2 C" " ;    ->  }T
+T{ cq1 COUNT EVALUATE -> 123 }T
+T{ cq2 COUNT EVALUATE ->     }T
+
+6.2.0873
+
+CASE
+
+ 
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- case-sys )
+
+      Mark the start of the
+      CASE...OF...ENDOF...ENDCASE
+      structure. Append the run-time semantics given below to the
+      current definition.
+
+Run-time
+
+      ( -- )
+
+      Continue execution.
+
+See
+
+ 6.2.1342 ENDCASE,
+      6.2.1343 ENDOF,
+      6.2.1950 OF,
+      A.6.2.0873  CASE.
+
+Rationale
+
+      Typical use:
+
+        : X ...
+   CASE
+     test1 OF ... ENDOF
+     testn OF ... ENDOF
+     ... ( default )
+   ENDCASE ...
+;
+
+Testing
+
+: cs1 CASE 1 OF 111 ENDOF
+   2 OF 222 ENDOF
+   3 OF 333 ENDOF
+   >R 999 R>
+   ENDCASE
+;
+
+        T{ 1 cs1 -> 111 }T
+T{ 2 cs1 -> 222 }T
+T{ 3 cs1 -> 333 }T
+T{ 4 cs1 -> 999 }T
+: cs2 >R CASE
+   -1 OF CASE R@ 1 OF 100 ENDOF
+                2 OF 200 ENDOF
+                >R -300 R>
+        ENDCASE
+     ENDOF
+   -2 OF CASE R@ 1 OF -99  ENDOF
+                >R -199 R>
+        ENDCASE
+     ENDOF
+     >R 299 R>
+   ENDCASE R> DROP
+        ;
+
+        T{ -1 1 cs2 ->  100 }T
+T{ -1 2 cs2 ->  200 }T
+T{ -1 3 cs2 -> -300 }T
+T{ -2 1 cs2 ->  -99 }T
+T{ -2 2 cs2 -> -199 }T
+T{  0 2 cs2 ->  299 }T
+
+6.2.0945
+
+COMPILE,
+
+compile-comma
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( xt -- )
+
+      Append the execution semantics of the definition represented
+      by xt to the execution semantics of the current
+      definition.
+
+See
+
+ A.6.2.0945  COMPILE,.
+
+Rationale
+
+      COMPILE, is the compilation equivalent of EXECUTE.
+
+      In traditional threaded-code implementations, compilation is
+      performed by , (comma). This usage is not portable; it
+      doesn't work for subroutine-threaded, native code, or
+      relocatable implementations. Use of COMPILE, is portable.
+
+      In most systems it is possible to implement COMPILE, so
+      it will generate code that is optimized to the same extent as
+      code that is generated by the normal compilation process.
+      However, in some implementations there are two different
+      "tokens" corresponding to a particular definition name:
+      the normal "execution token" that is used while interpreting
+      or with EXECUTE, and another "compilation token" that
+      is used while compiling. It is not always possible to obtain
+      the compilation token from the execution token. In these
+      implementations, COMPILE, might not generate code that
+      is as efficient as normally compiled code.
+
+      The intention is that COMPILE, can be used as follows to write
+      the classic interpreter/compiler loop:
+
+... 										                                                ( c-addr )
+FIND ?DUP IF			                                   	( xt +-1 )
+   STATE @ IF		                                   	( xt +-1 )
+     0> IF
+          EXECUTE
+          ELSE
+          COMPILE,
+          THEN								 	( ??? )
+   ELSE							                                          	( xt +-1 )
+     DROP EXECUTE 		                              	( ??? )
+   THEN
+ELSE 							                                            	( c-addr )
+   ( whatever you do for an undefined word )
+THEN
+...
+
+      Thus the interpretation semantics are left undefined, as COMPILE,
+      will not be executed during interpretation.
+
+Testing
+
+:NONAME DUP + ; CONSTANT dup+
+T{ : q dup+ COMPILE, ; ->  }T
+T{ : as [ q ] ; ->  }T
+T{ 123 as -> 246 }T
+
+6.2.1173
+
+DEFER
+
+ 
+
+CORE EXT
+
+X:deferred
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters.  Parse name delimited by a
+      space.  Create a definition for name with the execution
+      semantics defined below.
+
+name Execution
+
+      ( i×x -- j×x )
+
+      Execute the xt that name is set to execute.
+      An ambiguous condition exists if name has not been
+      set to execute an xt.
+
+See
+
+ 6.2.0698 ACTION-OF,
+      6.2.1175 DEFER!,
+      6.2.1177 DEFER@,
+      6.2.1725 IS.
+
+Implementation
+
+      : DEFER ( "name" -- )
+   CREATE ['] ABORT ,
+DOES> ( ... -- ... )
+   @ EXECUTE ;
+
+Testing
+
+      T{ DEFER defer2 ->   }T
+T{ ' * ' defer2 DEFER! ->  }T
+T{   2 3 defer2 -> 6 }T
+
+      T{ ' + IS defer2 ->   }T
+T{    1 2 defer2 -> 3 }T
+
+6.2.1175
+
+DEFER!
+
+defer-store
+
+CORE EXT
+
+X:deferred
+
+ 
+
+ ( xt2 xt1 -- )
+
+      Set the word xt1 to execute xt2.  An ambiguous
+      condition exists if xt1 is not for a word defined by
+      DEFER.
+
+See
+
+ 6.2.0698 ACTION-OF,
+      6.2.1173 DEFER,
+      6.2.1177 DEFER@,
+      6.2.1725 IS.
+
+Implementation
+
+      : DEFER! ( xt2 xt1 -- )
+   >BODY ! ;
+
+Testing
+
+      T{ DEFER defer3 ->  }T
+
+      T{ ' * ' defer3 DEFER! ->  }T
+T{ 2 3 defer3 -> 6 }T
+
+      T{ ' + ' defer3 DEFER! ->  }T
+T{ 1 2 defer3 -> 3 }T
+
+6.2.1177
+
+DEFER@
+
+defer-fetch
+
+CORE EXT
+
+X:deferred
+
+ 
+
+ ( xt1 -- xt2 )
+
+      xt2 is the execution token xt1 is set to execute.
+      An ambiguous condition exists if xt1 is not
+      the execution token of a word defined by DEFER,
+      or if xt1 has not been set to execute an xt.
+
+See
+
+ 6.2.0698 ACTION-OF,
+      6.2.1173 DEFER,
+      6.2.1175 DEFER!,
+      6.2.1725 IS.
+
+Implementation
+
+      : DEFER@ ( xt1 -- xt2 )
+   >BODY @ ;
+
+Testing
+
+      T{ DEFER defer4 ->  }T
+
+      T{ ' * ' defer4 DEFER! ->  }T
+T{ 2 3 defer4 -> 6 }T
+T{ ' defer4 DEFER@ -> ' * }T
+
+      T{ ' + IS defer4 ->  }T
+T{ 1 2 defer4 -> 3 }T
+T{ ' defer4 DEFER@ -> ' + }T
+
+6.2.1342
+
+ENDCASE
+
+end-case
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: case-sys -- )
+
+      Mark the end of the
+      CASE...OF...ENDOF...ENDCASE
+      structure. Use case-sys to resolve the entire structure.
+      Append the run-time semantics given below to the current
+      definition.
+
+Run-time
+
+      ( x -- )
+
+      Discard the case selector x and continue execution.
+
+See
+
+ 6.2.0873 CASE,
+      6.2.1343 ENDOF,
+      6.2.1950 OF,
+      A.6.2.1342  ENDCASE.
+
+Rationale
+
+      Typical use:
+
+        : X ...
+   CASE
+     test1 OF ... ENDOF
+     testn OF ... ENDOF
+     ... ( default )
+   ENDCASE ...
+;
+
+Testing
+
+      See F.6.2.0873 CASE.
+
+6.2.1343
+
+ENDOF
+
+end-of
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: case-sys1 of-sys -- case-sys2 )
+
+      Mark the end of the OF...ENDOF part of the
+      CASE structure. The next location for a transfer of
+      control resolves the reference given by of-sys. Append
+      the run-time semantics given below to the current definition.
+      Replace case-sys1 with case-sys2 on the
+      control-flow stack, to be resolved by ENDCASE.
+
+Run-time
+
+      ( -- )
+
+      Continue execution at the location specified by the consumer
+      of case-sys2.
+
+See
+
+ 6.2.0873 CASE,
+      6.2.1342 ENDCASE,
+      6.2.1950 OF,
+      A.6.2.1343  ENDOF.
+
+Rationale
+
+      Typical use:
+
+        : X ...
+   CASE
+     test1 OF ... ENDOF
+     testn OF ... ENDOF
+     ... ( default )
+   ENDCASE ...
+;
+
+Testing
+
+      See F.6.2.0873 CASE.
+
+6.2.1350
+
+ERASE
+
+ 
+
+CORE EXT
+
+ 
+
+ ( addr u -- )
+
+      If u is greater than zero, clear all bits in each of
+      u consecutive address units of memory beginning at
+      addr.
+
+6.2.1485
+
+FALSE
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- false )
+
+      Return a false flag.
+
+See
+
+ 3.1.3.1 Flags
+
+Testing
+
+      T{ FALSE -> 0 }T
+T{ FALSE -> <FALSE> }T
+
+6.2.1660
+
+HEX
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- )
+
+      Set contents of BASE to sixteen.
+
+Testing
+
+      See F.6.1.0750 BASE.
+
+6.2.1675
+
+HOLDS
+
+ 
+
+CORE EXT
+
+X:xchar
+
+ 
+
+ ( c-addr u -- )
+
+      Adds the string represented by c-addr u to the pictured numeric
+      output string.  An ambiguous condition exists if HOLDS executes
+      outside of a <# #> delimited number conversion.
+
+See
+
+ 6.1.1670 HOLD.
+
+Implementation
+
+      : HOLDS ( addr u -- )
+   BEGIN DUP WHILE 1- 2DUP +
+      C@ HOLD REPEAT 2DROP ;
+
+Testing
+
+      T{ 0. <# S" Test" HOLDS #> S" Test" COMPARE -> 0 }T
+
+6.2.1725
+
+IS
+
+ 
+
+CORE EXT
+
+X:deferred
+
+Interpretation
+
+      ( xt "<spaces>name" -- )
+
+      Skip leading spaces and parse name delimited by a space.
+      Set name to execute xt.
+
+      An ambiguous condition exists if name was not defined
+      by DEFER.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading spaces and parse name delimited by a space.
+      Append the run-time semantics given below to the current definition.
+      An ambiguous condition exists if name was not defined by
+      DEFER.
+
+Run-time
+
+      ( xt -- )
+
+      Set name to execute xt.
+
+      An ambiguous condition exists if POSTPONE, [COMPILE],
+      ['] or ' is applied to IS.
+
+See
+
+ 6.2.0698 ACTION-OF,
+      6.2.1173 DEFER,
+      6.2.1175 DEFER!,
+      6.2.1177 DEFER@.
+
+Implementation
+
+      : IS
+   STATE @ IF
+     POSTPONE ['] POSTPONE DEFER!
+   ELSE
+     ' DEFER!
+   THEN ; IMMEDIATE
+
+Testing
+
+      T{ DEFER defer5 ->  }T
+T{ : is-defer5 IS defer5 ; ->  }T
+
+      T{ ' * IS defer5 ->  }T
+T{ 2 3 defer5 -> 6 }T
+
+      T{ ' + is-defer5 ->  }T
+T{ 1 2 defer5 -> 3 }T
+
+6.2.1850
+
+MARKER
+
+ 
+
+CORE EXT
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Create a definition for name with the execution
+      semantics defined below.
+
+name Execution
+
+      ( -- )
+
+      Restore all dictionary allocation and search order pointers to
+      the state they had just prior to the definition of name.
+      Remove the definition of name and all subsequent
+      definitions. Restoration of any structures still existing that
+      could refer to deleted definitions or deallocated data space is
+      not necessarily provided. No other contextual information such
+      as numeric base is affected.
+
+See
+
+ 3.4.1 Parsing,
+      15.6.2.1580 FORGET,
+      A.6.2.1850  MARKER.
+
+Rationale
+
+      As dictionary implementations have become more elaborate
+      and in some cases have used multiple address spaces,
+      FORGET has become prohibitively difficult or
+      impossible to implement on many Forth systems. MARKER
+      greatly eases the problem by making it possible for the
+      system to remember "landmark information" in advance that
+      specifically marks the spots where the dictionary may at some
+      future time have to be rearranged.
+
+6.2.1930
+
+NIP
+
+ 
+
+CORE EXT
+
+ 
+
+ ( x1 x2 -- x2 )
+
+      Drop the first item below the top of stack.
+
+6.2.1950
+
+OF
+
+ 
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- of-sys )
+
+      Put of-sys onto the control flow stack. Append the
+      run-time semantics given below to the current definition.
+      The semantics are incomplete until resolved by a consumer
+      of of-sys such as ENDOF.
+
+Run-time
+
+      ( x1 x2 --  |  x1 )
+
+      If the two values on the stack are not equal, discard the
+      top value and continue execution at the location specified
+      by the consumer of of-sys, e.g., following the next
+      ENDOF. Otherwise, discard both values and continue
+      execution in line.
+
+See
+
+ 6.2.0873 CASE,
+      6.2.1342 ENDCASE,
+      6.2.1343 ENDOF,
+      A.6.2.1950  OF.
+
+Rationale
+
+      Typical use:
+
+        : X ...
+   CASE
+     test1 OF ... ENDOF
+     testn OF ... ENDOF
+     ... ( default )
+   ENDCASE ...
+;
+
+Testing
+
+      See F.6.2.0873 CASE.
+
+6.2.2000
+
+PAD
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- c-addr )
+
+      c-addr is the address of a transient region that can
+      be used to hold data for intermediate processing.
+
+See
+
+ 3.3.3.6 Other transient regions,
+      A.6.2.2000  PAD.
+
+Rationale
+
+      PAD has been available as scratch storage for strings
+      since the earliest Forth implementations. It was brought to
+      our attention that many programmers are reluctant to use
+      PAD, fearing incompatibilities with system uses.
+      PAD is specifically intended as a programmer convenience,
+      however, which is why we documented the fact that no standard
+      words use it.
+
+6.2.2008
+
+PARSE
+
+ 
+
+CORE EXT
+
+ 
+
+ ( char "ccc<char>" -- c-addr u )
+
+      Parse ccc delimited by the delimiter char.
+
+      c-addr is the address (within the input buffer) and
+      u is the length of the parsed string. If the parse area
+      was empty, the resulting string has a zero length.
+
+See
+
+ 3.4.1 Parsing,
+      A.6.2.2008  PARSE.
+
+Rationale
+
+      Typical use: char PARSE ccc<char>
+
+      The traditional Forth word for parsing is WORD.
+      PARSE solves the following problems with WORD:
+
+      1) WORD always skips leading delimiters. This
+      behavior is appropriate for use by the text interpreter,
+      which looks for sequences of non-blank characters, but is
+      inappropriate for use by words like ( , .(,
+      and .". Consider the following (flawed) definition
+      of .(:
+
+         : .(
+      [CHAR] )
+      WORD COUNT TYPE
+      ;   IMMEDIATE
+
+      This works fine when used in a line like:
+
+         .( HELLO)    5 .
+
+      but consider what happens if the user enters an empty
+      string:
+
+         .( )    5 .
+
+      The definition of .( shown above would treat the
+      ) as a leading delimiter, skip it, and continue
+      consuming characters until it located another )
+      that followed a non-) character, or until the
+      parse area was empty. In the example shown, the
+      5 .
+      would be treated as part of the string to be printed.
+
+      With PARSE, we could write a correct definition of
+      .(:
+
+         : .(
+      [CHAR] )
+      PARSE TYPE
+      ;   IMMEDIATE
+
+      This definition avoids the "empty string" anomaly.
+
+      2) WORD returns its result as a counted string.
+      This has four bad effects:
+
+      1) The characters accepted by WORD must be
+      copied from the input buffer into a transient buffer,
+      in order to make room for the count character that
+      must be at the beginning of the counted string. The
+      copy step is inefficient, compared to PARSE,
+      which leaves the string in the input buffer and doesn't
+      need to copy it anywhere.
+
+      2) WORD must be careful not to store too many
+      characters into the transient buffer, thus overwriting
+      something beyond the end of the buffer. This adds to
+      the overhead of the copy step. (WORD may have
+      to scan a lot of characters before finding the trailing
+      delimiter.)
+
+      3) The count character limits the length of the string
+      returned by WORD to 255 characters (longer
+      strings can easily be stored in blocks!). This
+      limitation does not exist for PARSE.
+
+      4) The transient buffer is typically overwritten by the
+      next use of WORD.
+
+      The need for WORD has largely been eliminated by
+      PARSE and PARSE-NAME. WORD is
+      retained for backward compatibility.
+
+6.2.2020
+
+PARSE-NAME
+
+ 
+
+CORE EXT
+
+X:parse-name
+
+ 
+
+ ( "<spaces>name<space>" -- c-addr u )
+
+      Skip leading space delimiters. Parse name delimited by a
+      space.
+
+      c-addr is the address of the selected string within the
+      input buffer and u is its length in characters. If the
+      parse area is empty or contains only white space, the resulting
+      string has length zero.
+
+Implementation
+
+      : isspace? ( c -- f )
+   BL 1+ U< ;
+
+      : isnotspace? ( c -- f )
+   isspace? 0= ;
+
+      : xt-skip ( addr1 n1 xt -- addr2 n2 )
+   \ skip all characters satisfying xt ( c -- f )
+   >R
+   BEGIN
+     DUP
+   WHILE
+     OVER C@ R@ EXECUTE
+   WHILE
+     1 /STRING
+   REPEAT THEN
+   R> DROP ;
+
+      : parse-name ( "name" -- c-addr u )
+   SOURCE >IN @ /STRING
+   ['] isspace? xt-skip OVER >R
+   ['] isnotspace? xt-skip ( end-word restlen r: start-word )
+   2DUP 1 MIN + SOURCE DROP - >IN !
+   DROP R> TUCK - ;
+
+Testing
+
+      T{ PARSE-NAME abcd S" abcd" S= -> <TRUE> }T
+T{ PARSE-NAME   abcde   S" abcde" S= -> <TRUE> }T
+
+      \ test empty parse area
+T{ PARSE-NAME 
+
+         NIP -> 0 }T    \ empty line
+T{ PARSE-NAME    
+
+         NIP -> 0 }T    \ line with white space
+
+      T{ : parse-name-test ( "name1" "name2" -- n ) 
+   PARSE-NAME PARSE-NAME S= ; ->  }T
+
+      T{ parse-name-test abcd abcd -> <TRUE> }T
+T{ parse-name-test  abcd   abcd   -> <TRUE> }T
+T{ parse-name-test abcde abcdf -> <FALSE> }T
+T{ parse-name-test abcdf abcde -> <FALSE> }T
+T{ parse-name-test abcde abcde 
+    -> <TRUE> }T
+T{ parse-name-test abcde abcde  
+    -> <TRUE> }T
+         \ line with white space
+
+6.2.2030
+
+PICK
+
+ 
+
+CORE EXT
+
+ 
+
+ ( xu...x1 x0 u -- xu...x1 x0 xu )
+
+      Remove u. Copy the xu to the top of the stack.
+      An ambiguous condition exists if there are less than u+2
+      items on the stack before PICK is executed.
+
+See
+
+ A.6.2.2030  PICK.
+
+Rationale
+
+      0 PICK is equivalent to DUP and
+      1 PICK is equivalent to OVER.
+
+6.2.2125
+
+REFILL
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- flag )
+
+      Attempt to fill the input buffer from the input source,
+      returning a true flag if successful.
+
+      When the input source is the user input device, attempt to
+      receive input into the terminal input buffer. If successful,
+      make the result the input buffer, set >IN to zero, and
+      return true. Receipt of a line containing no characters
+      is considered successful. If there is no input available from
+      the current input source, return false.
+
+      When the input source is a string from EVALUATE, return
+      false and perform no other action.
+
+See
+
+ 7.6.2.2125 REFILL,
+      11.6.2.2125 REFILL,
+      A.6.2.2125  REFILL.
+
+Rationale
+
+      REFILL is designed to behave reasonably for all possible
+      input sources. If the input source is coming from the user,
+      REFILL could still return a false value if, for instance,
+      a communication channel closes so that the system knows that no
+      more input will be available.
+
+6.2.2148
+
+RESTORE-INPUT
+
+ 
+
+CORE EXT
+
+ 
+
+ ( xn ... x1 n -- flag )
+
+      Attempt to restore the input source specification to the state
+      described by x1 through xn. flag is
+      true if the input source specification cannot be so restored.
+
+      An ambiguous condition exists if the input source represented
+      by the arguments is not the same as the current input source.
+
+See
+
+ 15.6.2.1908 N>R, 15.6.2.1940 NR>,
+      A.6.2.2182  SAVE-INPUT.
+
+6.2.2150
+
+ROLL
+
+ 
+
+CORE EXT
+
+ 
+
+ ( xu xu-1 ... x0 u -- xu-1 ... x0 xu )
+
+      Remove u. Rotate u+1 items on the top of the stack.
+      An ambiguous condition exists if there are less than u+2
+      items on the stack before ROLL is executed.
+
+See
+
+ A.6.2.2150  ROLL.
+
+Rationale
+
+      2 ROLL is equivalent to ROT,
+      1 ROLL is equivalent to SWAP and
+      0 ROLL is a null operation.
+
+4ex
+
+6.2.2266
+
+S\"
+
+s-backslash-quote
+
+CORE EXT
+
+X:escaped-strings
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+ ( "ccc<quote>" -- )
+Parse ccc delimited by " (double-quote), using the
+      translation rules below. Append the run-time semantics given below to
+      the current definition.
+
+Translation rules
+
+      Characters are processed one at a time and appended to the compiled
+      string. If the character is a `\' character it is processed by
+      parsing and substituting one or more  characters as follows, where
+      the character after the backslash is case sensitive:
+
+\a	BEL		(alert,		ASCII 7)
+
+\b	BS		(backspace,	ASCII 8)
+
+\e	ESC		(escape,		ASCII 27)
+
+\f	FF		(form feed,	ASCII 12)
+
+\l	LF		(line feed,	ASCII 10)
+
+\m	CR/LF	pair			(ASCII 13, 10)
+
+\n	newline(implementation dependent , e.g., CR/LF, CR, LF, LF/CR)
+
+\q	double-quote (ASCII 34)
+
+\r	CR		(carriage return,	ASCII 13)
+
+\t	HT		(horizontal tab,	ASCII 9)
+
+\v	VT		(vertical tab,		ASCII 11)
+
+\z	NUL		(no character,		ASCII 0)
+
+\"	double-quote (ASCII 34)
+
+\x<hexdigit><hexdigit>
+
+        The resulting character is the conversion of these two hexadecimal
+        digits. An ambiguous conditions exists if \x is not
+        followed by two hexadecimal characters.
+
+\\ backslash itself (ASCII 92)
+
+      An ambiguous condition exists if a \ is placed before any character,
+      other than those defined in here.
+
+Run-time
+
+ ( -- c-addr u )
+Return c-addr and u describing a string consisting of
+      the translation of the characters ccc.  A program shall not
+      alter the returned string.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.0855 C",
+      11.6.1.2165 S",
+      A.6.1.2165 S".
+
+6.2.2182
+
+SAVE-INPUT
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- xn ... x1 n )
+
+      x1 through xn describe the current state of the
+      input source specification for later use by RESTORE-INPUT.
+
+See
+
+ 15.6.2.1908 N>R, 15.6.2.1940 NR>,
+      A.6.2.2182  SAVE-INPUT.
+
+Rationale
+
+      SAVE-INPUT and RESTORE-INPUT allow the same
+      degree of input source repositioning within a text file as is
+      available with BLOCK input. SAVE-INPUT
+      and RESTORE-INPUT "hide the details" of the operations
+      necessary to accomplish this repositioning, and are used the
+      same way with all input sources. This makes it easier for
+      programs to reposition the input source, because they do not
+      have to inspect several variables and take different action
+      depending on the values of those variables.
+
+      SAVE-INPUT and RESTORE-INPUT are intended for
+      repositioning within a single input source; for example, the
+      following scenario is NOT allowed for a Standard Program:
+
+: XX
+   SAVE-INPUT   CREATE
+   S" RESTORE-INPUT" EVALUATE
+   ABORT" couldn't restore input"
+;
+
+      This is incorrect because, at the time RESTORE-INPUT is
+      executed, the input source is the string via EVALUATE,
+      which is not the same input source that was in effect when
+      SAVE-INPUT was executed.
+
+      The following code is allowed:
+
+: XX
+   SAVE-INPUT   CREATE
+   S" .( Hello)" EVALUATE
+   RESTORE-INPUT ABORT" couldn't restore input"
+;
+
+      After EVALUATE returns, the input source specification
+      is restored to its previous state, thus
+      SAVE-
+      INPUT
+      and RESTORE-INPUT are called with the same input source
+      in effect.
+
+      In the above examples, the EVALUATE phrase could have
+      been replaced by a phrase involving INCLUDE-FILE
+      and the same rules would apply.
+
+      The standard does not specify what happens if a program
+      violates the above rules. A Standard System might check for
+      the violation and return an exception indication from
+      RESTORE-INPUT, or it might fail in an unpredictable
+      way.
+
+      The return value from RESTORE-INPUT is primarily
+      intended to report the case where the program attempts to
+      restore the position of an input source whose position cannot
+      be restored. The keyboard might be such an input source.
+
+      Nesting of SAVE-INPUT and RESTORE-INPUT is
+      allowed. For example, the following situation works as
+      expected:
+
+: XX
+   SAVE-INPUT
+     S" f1" INCLUDED
+     \ The file "f1" includes:
+     \    ... SAVE-INPUT ... RESTORE-INPUT ...
+     \ End of file "f1"
+   RESTORE-INPUT   ABORT" couldn't restore input"
+;
+
+      In principle, RESTORE-INPUT could be implemented to
+      "always fail", e.g.:
+
+: RESTORE-INPUT ( x1 ... xn n -- flag )
+   0 ?DO DROP LOOP TRUE
+;
+
+      Such an implementation would not be useful in most cases. It
+      would be preferable for a system to leave SAVE-INPUT
+      and RESTORE-INPUT undefined, rather than to create a
+      useless implementation. In the absence of the words, the
+      application programmer could choose whether or not to create
+      "dummy" implementations or to work-around the problem in
+      some other way.
+
+      Examples of how an implementation might use the return values
+      from SAVE-INPUT to accomplish the save/restore function:
+
+Input Source possible stack values
+
+block			>IN @ BLK @ 2
+
+EVALUATE	>IN @ 1
+
+keyboard		>IN @ 1
+
+text file		>IN @ lo-pos hi-pos 3
+
+      These are examples only; a Standard Program may not assume any
+      particular meaning for the individual stack items returned by
+      SAVE-INPUT.
+
+Testing
+
+Testing with a file source
+VARIABLE siv -1 siv !
+
+        : NeverExecuted
+   ." This should never be executed" ABORT
+;
+
+        11111 SAVE-INPUT
+
+        siv @
+
+        [IF]
+   0 siv !
+   RESTORE-INPUT
+   NeverExecuted
+[ELSE]
+   \ Testing the ELSE part is executed
+   22222
+[THEN]
+
+        T{  -> 11111 0 22222 }T    \ 0 comes from RESTORE-INPUT
+
+        Testing with a string source
+VARIABLE si_inc 0 si_inc !
+
+        : si1
+   si_inc @ >IN +!
+   15 si_inc !
+;
+
+        : s$ S" SAVE-INPUT si1 RESTORE-INPUT 12345" ;
+
+        T{ s$ EVALUATE si_inc @ -> 0 2345 15 }T
+
+        Testing nesting
+: read_a_line
+   REFILL 0=
+   ABORT" REFILL failed"
+;
+
+        0 si_inc !
+2VARIABLE 2res -1. 2res 2!
+
+        : si2
+   read_a_line
+   read_a_line
+   SAVE-INPUT
+   read_a_line
+   read_a_line
+   s$ EVALUATE 2res 2!
+   RESTORE-INPUT
+;
+
+        WARNING: do not delete or insert lines of
+        text after si2 is called otherwise the next test will
+        fail
+
+        si2
+33333                  \ This line should be ignored
+2res 2@ 44444        \ RESTORE-INPUT should return to this line
+
+        55555
+
+        T{  -> 0 0 2345 44444 55555 }T
+
+6.2.2218
+
+SOURCE-ID
+
+source-i-d
+
+CORE EXT
+
+ 
+
+ ( -- 0  |  -1  )
+
+      Identifies the input source as follows:
+
+SOURCE-ID Input source
+
+-1	String (via EVALUATE)
+
+0	User input device
+
+See
+
+ 11.6.1.2218 SOURCE-ID.
+
+4ex
+
+6.2.2295
+
+TO
+
+ 
+
+CORE EXT
+
+Interpretation
+
+      ( i×x "<spaces>name" -- )
+
+      Skip leading spaces and parse name delimited by a space.
+      Perform the "TO name run-time" semantics given in the
+      definition for the defining word of name.
+      An ambiguous condition exists if name was not defined
+      by a word with "TO name run-time" semantics.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading spaces and parse name delimited by a
+      space. Append the "TO name run-time" semantics given
+      in the definition for the defining word	of name to the
+      current definition.
+      An ambiguous condition exists if name was not defined
+      by a word with "TO name run-time" semantics.
+
+Note
+
+      An ambiguous condition exists if any of	POSTPONE,
+      [COMPILE], ' or ['] are applied to
+      TO.
+
+See
+
+ 6.2.2405 VALUE,
+      8.6.2.0435 2VALUE,
+      12.6.2.1628 FVALUE,
+      13.6.1.0086 (LOCAL),
+      A.6.2.2295  TO.
+
+Rationale
+
+      Typical use: x TO name
+
+      Some implementations of TO do not parse; instead they set
+      a mode flag that is tested by the subsequent execution of
+      name.  Standard programs must use TO as if it
+      parses.  Therefore TO and name must be
+      contiguous and on the same line in the source text.
+
+Testing
+
+      See F.6.2.2405  VALUE.
+
+6.2.2298
+
+TRUE
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- true )
+
+      Return a true flag, a single-cell value with all
+      bits set.
+
+See
+
+ 3.1.3.1 Flags,
+      A.6.2.2298  TRUE.
+
+Rationale
+
+      TRUE is equivalent to the phrase
+      0 0=.
+
+Testing
+
+      T{ TRUE -> <TRUE> }T
+T{ TRUE -> 0 INVERT }T
+
+6.2.2300
+
+TUCK
+
+ 
+
+CORE EXT
+
+ 
+
+ ( x1 x2 -- x2 x1 x2 )
+
+      Copy the first (top) stack item below the second stack item.
+
+6.2.2330
+
+U.R
+
+u-dot-r
+
+CORE EXT
+
+ 
+
+ ( u n -- )
+
+      Display u right aligned in a field n characters
+      wide. If the number of characters required to display u
+      is greater than n, all digits are displayed with no leading
+      spaces in a field as wide as necessary.
+
+6.2.2350
+
+U>
+
+u-greater-than
+
+CORE EXT
+
+ 
+
+ ( u1 u2 -- flag )
+
+      flag is true if and only if u1 is greater than
+      u2.
+
+See
+
+ 6.1.0540 >.
+
+6.2.2395
+
+UNUSED
+
+ 
+
+CORE EXT
+
+ 
+
+ ( -- u )
+
+      u is the amount of space remaining in the region addressed
+      by HERE, in address units.
+
+6.2.2405
+
+VALUE
+
+ 
+
+CORE EXT
+
+ 
+
+ ( x "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Create a definition for name with the execution
+      semantics defined below, with an initial value equal to x.
+
+      name is referred to as a "value".
+
+name Execution
+
+      ( -- x )
+
+      Place x on the stack. The value of x is that
+      given when name was created, until the phrase x
+      TO name is executed, causing a new value of
+      x to be assigned to name.
+
+TO name Run-time
+
+      ( x -- )
+
+      Assign the value x to name.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.2295 TO,
+      A.6.2.2405  VALUE.
+
+Rationale
+
+      Typical use:
+
+0 VALUE data
+
+          : EXCHANGE ( n1 -- n2 )
+          data SWAP TO data
+          ;
+
+      EXCHANGE leaves n1 in data and
+      returns the prior value n2.
+
+Testing
+
+      T{  111 VALUE v1 ->  }T
+T{ -999 VALUE v2 ->  }T
+T{ v1 ->  111 }T
+T{ v2 -> -999 }T
+T{ 222 TO v1 ->  }T
+T{ v1 -> 222 }T
+
+      T{ : vd1 v1 ; ->  }T
+T{ vd1 -> 222 }T
+
+      T{ : vd2 TO v2 ; ->  }T
+T{ v2 -> -999 }T
+T{ -333 vd2 ->  }T
+T{ v2 -> -333 }T
+T{ v1 ->  222 }T
+
+6.2.2440
+
+WITHIN
+
+ 
+
+CORE EXT
+
+ 
+
+ ( n1 | u1 n2 | u2 n3 | u3 -- flag )
+
+      Perform a comparison of a test value n1 | u1 with a
+      lower limit n2 | u2 and an upper limit
+      n3 | u3, returning true if either
+      (n2 | u2 <  n3 | u3 and
+      (n2 | u2 <= n1 | u1 and
+      n1 | u1 <  n3 | u3)) or
+      (n2 | u2 >  n3 | u3 and
+      (n2 | u2 <= n1 | u1 or
+      n1 | u1 <  n3 | u3)) is true, returning
+      false otherwise. An ambiguous condition exists
+      n1 | u1, n2 | u2, and n3 | u3 are not
+      all the same type.
+
+See
+
+ A.6.2.2440  WITHIN.
+
+Rationale
+
+      We describe WITHIN without mentioning circular number
+      spaces (an undefined term) or providing the code. Here is a
+      number line with the overflow point (o) at the far right and
+      the underflow point (u) at the far left:
+
+        u---------------o
+
+      There are two cases to consider: either the
+      n2 | u2... n3 | u3 range straddles the overflow/underflow
+      points or it does not. Lets examine the non-straddle case
+      first:
+
+        u-----[.....)-----o
+
+      The [ denotes n2 | u2, the ) denotes n3 | u3,
+      and the dots and [ are numbers WITHIN the range.
+      n3 | u3 is greater than n2 | u2, so the
+      following tests will determine if n1 | u1 is
+      WITHIN n2 | u2 and n3 | u3:
+
+        n2 | u2 <= n1 | u1 and n1 | u1 < n3 | u3.
+
+      In the case where the comparison range straddles the
+      overflow/underflow points:
+
+        u.....)-----[.....o
+
+      n3 | u3 is less than n2 | u2 and the following
+      tests will determine if n1 | u1 is WITHIN
+      n2 | u2 and n3 | u3:
+
+        n2 | u2 <= n1 | u1 or n1 | u1 < n3 | u3.
+
+      WITHIN must work for both signed and unsigned arguments.
+      One obvious implementation does not work:
+
+: WITHIN ( test low high -- flag )
+   >R OVER < 0= ( test flag1 )
+          SWAP R> < ( flag1 flag2 )
+          AND
+;
+
+      Assume two's-complement arithmetic on a 16-bit machine, and
+      consider the following test:
+
+         33000   32000   34000   WITHIN
+
+      The above implementation returns false for that test,
+      even though the unsigned number 33000 is clearly within the
+      range {{32000 ... 34000}}.
+
+      The problem is that, in the incorrect implementation, the
+      signed comparison < gives the wrong answer when 32000
+      is compared to 33000, because when those numbers are treated
+      as signed numbers, 33000 is treated as negative 32536, while
+      32000 remains positive.
+
+      Replacing < with U< in the above implementation
+      makes it work with unsigned numbers, but causes problems with
+      certain signed number ranges; in particular, the test:
+
+1   -5   5   WITHIN
+
+      would give an incorrect answer.
+
+      For two's-complement machines that ignore arithmetic overflow
+      (most machines), the following implementation works in all
+      cases:
+
+: WITHIN ( test low high -- flag )
+          OVER - >R - R> U<
+          ;
+
+6.2.2530
+
+[COMPILE]
+
+bracket-compile
+
+CORE EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Find name. If name has other than default
+      compilation semantics, append them to the current definition;
+      otherwise append the execution semantics of name. An
+      ambiguous condition exists if name is not found.
+
+Note
+
+ This word is obsolescent and is included as a concession to
+      existing implementations.
+
+See
+
+ 3.4.1 Parsing,
+      A.6.2.2530  [COMPILE].
+
+Rationale
+
+      Typical use:
+      : name2 ...
+      [COMPILE] name1
+      ... ;   IMMEDIATE
+
+Testing
+
+      With default compilation semantics
+T{ : [c1] [COMPILE] DUP ; IMMEDIATE ->  }T
+T{ 123 [c1] -> 123 123 }T
+
+      With an immediate word
+T{ : [c2] [COMPILE] [c1] ; ->  }T
+T{ 234 [c2] -> 234 234 }T
+
+      With special compilation semantics
+T{ : [cif] [COMPILE] IF ; IMMEDIATE ->  }T
+T{ : [c3]  [cif] 111 ELSE 222 THEN ; ->  }T
+T{ -1 [c3] -> 111 }T
+T{  0 [c3] -> 222 }T
+
+6.2.2535
+
+\
+
+backslash
+
+CORE EXT
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "ccc<eol>" -- )
+
+      Parse and discard the remainder of the parse area.
+      \ is an immediate word.
+
+See
+
+ 7.6.2.2535 \,
+      A.6.2.2535  \.
+
+Rationale
+
+      Typical use:
+
+5 CONSTANT THAT
+            \   This is a comment about THAT
+
+< Compliance and labeling
+
+The optional Block word set >

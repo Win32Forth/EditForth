@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.1** / build **10** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.1** (`Releases/EditForth-2.3.1-macOS.dmg`). First public release was **v2.0.0**. Highlights since 2.3.0: Ask Forth polish — stream into **`AskForth-N.fth`**, **Agent Enhance Reply**, Sample RAG default, 80-column wrap, compact panel. Requires Ollama + a pulled model (default `gemma4:e4b`). How-to: `Forth/Resources/Docs/Ask-Forth.md`. Prior 2.3.0 introduced Ask Forth; 2.2.1 BYE / Find-Replace.
+Marketing **2.3.2** / build **11** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.2** (`Releases/EditForth-2.3.2-macOS.dmg`). First public release was **v2.0.0**. Highlights in 2.3.2: **Library/Reference** (Forth 2012), **Fetch URLs in Prompt**, forth-standard.org auto-boost, embedded **Web** tabs (**View → Open Web Page…**). Prior 2.3.1: AskForth-N.fth stream, **Agent Enhance Reply**, Sample RAG, 80-column wrap. Requires Ollama + a pulled model (default `gemma4:e4b`). How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ## Why a new project
 

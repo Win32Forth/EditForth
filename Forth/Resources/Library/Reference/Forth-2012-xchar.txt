@@ -1,0 +1,954 @@
+Forth 2012 Standard — xchar
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: The optional Extended-Character word set
+
+< The optional String word set
+
+Rationale >
+
+18 The optional Extended-Character word set
+
+18.1 Introduction
+
+This word set deals with variable width character encodings.  It also
+works with fixed width encodings.
+
+Since the standard specifies ASCII encoding for characters, only
+ASCII-compatible encodings may be used.  Because ASCII compatibility
+has so many benefits, most encodings actually are ASCII compatible.
+The characters beyond the ASCII encoding are called "extended
+characters" (xchars).
+
+All words dealing with strings shall handle xchars when the xchar word
+set is present.  This includes dictionary definitions.  White space
+parsing does not have to treat code points greater than $20 as white
+space.
+
+18.2 Additional terms and notation
+
+18.2.1 Definition of Terms
+
+code point: A member of an extended character set.
+
+18.2.2 Parsed-text notation
+
+Append table 18.1 to table 2.1.
+
+Table 18.1: Parsed text abbreviations
+
+Abbreviation Description
+
+<xchar> the delimiting extended character
+
+See: 2.2.3 Parsed-text notation.
+
+18.3 Additional usage requirements
+
+18.3.1 Data types
+
+Append table 18.2 to table 3.1.
+
+Table 18.2: Data Types
+
+Symbol		Data type Size on stack
+
+pchar		primitive character		1 cell
+
+xchar		extended character			1 cell
+
+xc-addr		xchar-aligned address		1 cell
+
+See: 3.1 Data types.
+
+18.3.1.1 Extended Characters
+
+An extended character (xchar) is the code point of a character within an
+extended character set; on the stack it is a subset of u.  Extended
+characters are stored in memory encoded as one or more primitive characters
+(pchars).
+
+18.3.2 Environmental queries
+
+Append table 18.3 to table 3.4.
+
+Table 18.3: Environmental Query Strings
+
+String  Value data type Constant? Meaning
+
+XCHAR-ENCODING		c-addr u no Returns a printable ASCII string that represents the encoding,
+  and use the preferred MIME name (if any) or the name in the
+  IANA character-set register[1] (RFC-1700) such
+  as "ISO-LATIN-1" or "UTF–8",
+  with the exception of "ASCII", where the alias
+  "ASCII" is preferred.
+
+MAX-XCHAR			u no Maximal value for xchar
+
+XCHAR-MAXMEM		u no Maximal memory consumed by an xchar in address units
+
+  [1]
+    http://www.iana.org/assignments/character-sets
+
+See: 3.2.6 Environmental queries.
+
+18.3.3 Common encodings
+
+Input and files are often encoded iso–latin–1 or utf–8.  The encoding
+depends on settings of the computer system such as the LANG environment
+variable on Unix.  You can use the system consistently only when you do
+not change the encoding, or only use the ASCII subset.
+The typical practice in environments requiring more than one encoding
+is that the base system is ASCII only, and the character set is then
+extended to specify the required encoding.
+
+18.3.4 The Forth text interpreter
+
+In section 3.4.1.3 Text interpreter input number conversion, <cnum> should be redefined to be:
+
+<cnum>		the number is the value of <xchar>
+
+18.3.5 Input and Output
+
+IO words such as
+KEY,
+EMIT,
+TYPE,
+READ-FILE,
+READ-LINE,
+WRITE-FILE, and
+WRITE-LINE
+operate on pchars.  Therefore, it is possible that these words
+read or write incomplete xchars, which are completed in the next
+consecutive operation(s).  The IO system shall combine these pchars
+into a complete xchars on output, or split an xchars into
+pchars on input, and shall not throw a "malformed xchars"
+exception when the combination of these pchars form a valid
+xchars.  -TRAILING-GARBAGE can be used to process
+an incomplete xchars at the end of such an IO operation.
+ACCEPT as input editor may be aware of xchars to
+provide comfort like backspace or cursor movement.
+
+18.4 Additional documentation requirements
+
+18.4.1 System documentation
+
+18.4.1.1 Implementation-defined options
+
+Since Unicode input and display poses a number of challenges like input
+method editors for different languages, left-to-right and right-to-left
+writing, and most fonts contain only a subset of Unicode glyphs,
+systems should document their capabilities.  File IO and in-memory
+string handling should work transparently with xchars.
+
+18.4.1.2 Ambiguous conditions
+
+ the data in memory does not encode a valid xchar
+(18.6.1.2486.50 X-SIZE);
+
+ the xchars value is outside the range of allowed code points of
+the current character set used.
+
+ words improperly used outside
+6.1.0490 <# and 6.1.0040 #>
+(18.6.2.2488.20 XHOLD).
+
+18.4.1.3 Other system documentation
+
+ no additional requirements.
+
+18.4.2 Program documentation
+
+ no additional requirements.
+
+18.5 Compliance and labeling
+
+18.5.1 Forth-2012 systems
+
+The phrase "Providing the Extended-Character word set" shall be
+appended to the label of any Standard System that provides all of
+the Extended-Character word set.
+
+The phrase "Providing name(s) from the Extended-Character
+Extensions word set" shall be appended to the label of any Standard
+System that provides portions of the Extended-Character Extensions
+word set.
+
+The phrase "Providing the Extended-Character Extensions word set"
+shall be appended to the label of any Standard System that provides
+all of the Extended-Character and Extended-Character Extensions
+word sets.
+
+18.5.2 Forth-2012 programs
+
+The phrase "Requiring the Extended-Character word set" shall be
+appended to the label of Standard Programs that require the system
+to provide the Extended-Character word set.
+
+The phrase "Requiring name(s) from the Extended-Character
+Extensions word set" shall be appended to the label of Standard Programs
+that require the system to provide portions of the Extended-Character
+Extensions word set.
+
+The phrase "Requiring the Extended-Character Extensions word set"
+shall be appended to the label of Standard Programs that require the
+system to provide all of the Extended-Character Exception and
+Extended-Character Extensions word sets.
+
+18.6 Glossary
+
+18.6.1 Extended-Character words
+
+18.6.1.2486.50
+
+X-SIZE
+
+ 
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xc-addr u1 -- u2 )
+
+      u2 is the number of pchars used to encode the first xchar
+      stored in the string xc-addr u1.  To calculate the size of
+      the xchar, only the bytes inside the buffer may be accessed.  An
+      ambiguous condition exists if the xchar is incomplete or malformed.
+
+Implementation
+
+      : X-SIZE ( xc-addr u1 -- u2 )
+   0=         IF DROP 0 EXIT THEN
+   \ length of UTF-8 char starting at u8-addr (accesses only u8-addr)
+   C@
+   DUP $80 U< IF DROP 1 EXIT THEN
+   DUP $c0 U< IF -77 THROW   THEN
+   DUP $e0 U< IF DROP 2 EXIT THEN
+   DUP $f0 U< IF DROP 3 EXIT THEN
+   DUP $f8 U< IF DROP 4 EXIT THEN
+   DUP $fc U< IF DROP 5 EXIT THEN
+   DUP $fe U< IF DROP 6 EXIT THEN
+   -77 THROW ;
+
+18.6.1.2487.10
+
+XC!+
+
+x-c-store-plus
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xchar xc-addr1 -- xc-addr2 )
+
+      Stores the xchar at xc-addr1.  xc-addr2
+      points to the first memory location after the stored xchar.
+
+Implementation
+
+      : XC!+ ( xchar xc-addr -- xc-addr' )
+   OVER $80 U< IF TUCK C! CHAR+ EXIT THEN \ special case ASCII
+   >R 0 SWAP $3F
+   BEGIN 2DUP U> WHILE
+     2/ >R DUP $3F AND $80 OR SWAP 6 RSHIFT R>
+   REPEAT $7F XOR 2* OR R>
+   BEGIN OVER $80 U< 0= WHILE TUCK C! CHAR+ REPEAT NIP
+;
+
+18.6.1.2487.15
+
+XC!+?
+
+x-c-store-plus-query
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xchar xc-addr1 u1 -- xc-addr2 u2 flag )
+
+      Stores the xchar into the string buffer specified by
+      xc-addr1 u1.  xc-addr2 u2 is the remaining string
+      buffer.  If the xchar did fit into the buffer, flag
+      is true, otherwise flag is false, and xc-addr2 u2
+      equal xc-addr1 u1.  XC!+? is safe for buffer overflows.
+
+Implementation
+
+      : XC!+? ( xchar xc-addr u -- xc-addr' u' flag )
+   >R OVER XC-SIZE R@ OVER U< IF ( xchar xc-addr1 len r: u1 )
+     \ not enough space
+     DROP NIP R> FALSE
+   ELSE
+     >R XC!+ R> R> SWAP - TRUE
+   THEN ;
+
+Testing
+
+      T{ $ffff PAD 4 XC!+? -> PAD 3 + 1 <TRUE> }T
+
+18.6.1.2487.20
+
+XC,
+
+x-c-comma
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xchar -- )
+
+      Append the encoding of xchar to the dictionary.
+
+See
+
+ 6.1.0860 C,.
+
+Implementation
+
+      : XC, ( xchar -- ) HERE XC!+ DP ! ;
+
+18.6.1.2487.25
+
+XC-SIZE
+
+x-c-size
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xchar -- u )
+
+      u is the number of pchars used to encode xchar in memory.
+
+Implementation
+
+      : XC-SIZE ( xchar -- n )
+   DUP $80 U< IF DROP 1 EXIT THEN \ special case ASCII
+   $800  2 >R
+   BEGIN 2DUP U>= WHILE  5 LSHIFT R> 1+ >R DUP 0= UNTIL THEN
+   2DROP R>
+;
+
+Testing
+
+      This test assumes UTF-8 encoding is being used.
+
+HEX
+T{      0 XC-SIZE -> 1 }T
+T{     7f XC-SIZE -> 1 }T
+T{     80 XC-SIZE -> 2 }T
+T{    7ff XC-SIZE -> 2 }T
+T{    800 XC-SIZE -> 3 }T
+T{   ffff XC-SIZE -> 3 }T
+T{  10000 XC-SIZE -> 4 }T
+T{ 1fffff XC-SIZE -> 4 }T
+
+18.6.1.2487.35
+
+XC@+
+
+x-c-fetch-plus
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xc-addr1 -- xc-addr2 xchar )
+
+      Fetches the xchar at xc-addr1.  xc-addr2
+      points to the first memory location after the retrieved xchar.
+
+Implementation
+
+      : XC@+ ( xc-addr -- xc-addr' u )
+   COUNT DUP $80 U< IF EXIT THEN  \ special case ASCII
+   $7F AND $40 >R
+   BEGIN DUP R@ AND WHILE R@ XOR
+     6 LSHIFT R> 5 LSHIFT >R >R COUNT
+     $3F AND R> OR
+   REPEAT R> DROP
+;
+
+18.6.1.2487.40
+
+XCHAR+
+
+x-char-plus
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xc-addr1 -- xc-addr2 )
+
+      Adds the size of the xchar stored at xc-addr1 to this address,
+      giving xc-addr2.
+
+See
+
+ 6.1.0897 CHAR+.
+
+Implementation
+
+      : XCHAR+ ( xc-addr -- xc-addr' )  XC@+ DROP ;
+
+18.6.1.2488.10
+
+XEMIT
+
+x-emit
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( xchar -- )
+
+      Prints an xchar on the terminal.
+
+See
+
+ 6.1.1320 EMIT
+
+Implementation
+
+      : XEMIT ( xchar -- )
+   DUP $80 U< IF EMIT EXIT THEN \ special case ASCII
+   0 SWAP $3F
+   BEGIN 2DUP U> WHILE
+     2/ >R DUP $3F AND $80 OR SWAP 6 RSHIFT R>
+   REPEAT $7F XOR 2* OR
+   BEGIN DUP $80 U< 0= WHILE EMIT REPEAT DROP
+;
+
+18.6.1.2488.30
+
+XKEY
+
+x-key
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( -- xchar )
+
+      Reads an xchar from the terminal.  This will discard all input
+      events up to the completion of the xchar.
+
+See
+
+ 6.1.1750 KEY.
+
+Implementation
+
+      : XKEY ( -- xchar )
+   KEY DUP $80 U< IF EXIT THEN \ special case ASCII
+   $7F AND $40 >R
+   BEGIN DUP R@ AND WHILE R@ XOR
+     6 LSHIFT R> 5 LSHIFT >R >R KEY
+     $3F AND R> OR
+   REPEAT R> DROP ;
+
+18.6.1.2488.35
+
+XKEY?
+
+x-key-query
+
+XCHAR
+
+X:xchar
+
+ 
+
+ ( -- flag )
+
+      Flag is true when it's possible to do XKEY without
+      blocking.  Subsequent KEY?, KEY,
+      EKEY?, and EKEY may be affected
+      by XKEY?.
+
+See
+
+ 10.6.1.1755 KEY?.
+
+18.6.2 Extended-Character extension words
+
+18.6.2.0145
+
++X/STRING
+
+plus-x-string
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xc-addr1 u1 -- xc-addr2 u2 )
+
+      Step forward by one xchar in the buffer defined by xc-addr1 u1.
+      xc-addr2 u2 is the remaining buffer after stepping over the
+      first xchar in the buffer.
+
+Implementation
+
+      : +X/STRING ( xc-addr1 u1 -- xc-addr2 u2 )
+   OVER DUP XCHAR+ SWAP - /STRING ;
+
+18.6.2.0175
+
+-TRAILING-GARBAGE
+
+minus-trailing-garbage
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xc-addr u1 -- xc-addr u2 )
+
+      Examine the last xchar in the string xc-addr u1 — if the
+      encoding is correct and it represents a full xchar, u2 equals
+      u1, otherwise, u2 represents the string without the
+      last (garbled) xchar.  -TRAILING-GARBAGE does not change this
+      garbled xchar.
+
+Implementation
+
+      : -TRAILING-GARBAGE ( xc-addr u1 -- xc-addr u2 )
+   2DUP + DUP XCHAR- ( addr u1 end1 end2 )
+   2DUP DUP OVER OVER - X-SIZE + = IF \ last xchar ok
+     2DROP
+   ELSE
+     NIP NIP OVER -
+   THEN ;
+
+18.6.2.0895
+
+CHAR
+
+ 
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( "<spaces>name" -- xchar )
+
+      Skip leading space delimiters.  Parse name delimited by a space.
+      Put the value of its first xchar onto the stack.
+
+See
+
+ 6.1.0895 CHAR
+
+Rationale
+
+      The behavior of the extended version of CHAR is fully backward
+      compatible with 6.1.0895 CHAR.
+
+Implementation
+
+      : CHAR ( "name" -- xchar )
+      BL WORD COUNT DROP XC@+ NIP ;
+
+18.6.2.1306.60
+
+EKEY>XCHAR
+
+e-key-to-x-char
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( x -- xchar true  |  x false )
+
+      If the keyboard event x corresponds to an xchar, return the
+      xchar and true.  Otherwise, return x and
+      false.
+
+See
+
+ 10.6.2.1305 EKEY,
+      10.6.2.1306 EKEY>CHAR,
+      10.6.2.1306.40 EKEY>FKEY.
+
+18.6.2.2008
+
+PARSE
+
+ 
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xchar "ccc<xchar>" -- c-addr u )
+
+      Parse ccc in the input stream delimited by xchar.
+
+      c-addr is the address (within the input buffer) and u
+      is the length of the parsed string. If the parse area was empty, the
+      resulting string has a zero length.
+
+See
+
+ 3.4.1 Parsing,
+      6.2.2008 PARSE,
+      A.6.2.2008 PARSE.
+
+18.6.2.2486.70
+
+X-WIDTH
+
+ 
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xc-addr u -- n )
+
+      n is the number of monospace ASCII characters that take the same
+      space to display as the xchar string xc-addr u; assuming a
+      monospaced display font, i.e., xchar width is always an integer multiple
+      of the width of an ASCII character.
+
+Implementation
+
+      : X-WIDTH ( xc-addr u -- n )
+   0 ROT ROT OVER + SWAP ?DO
+     I XC@+ SWAP >R XC-WIDTH +
+   R> I - +LOOP ;
+
+18.6.2.2487.30
+
+XC-WIDTH
+
+x-c-width
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xchar -- n )
+
+      n is the number of monospace ASCII characters that take the same
+      space to display as the xchar; i.e., xchar width is always
+      an integer multiple of the width of an ASCII char.
+
+Implementation
+
+      : wc, ( n low high -- )  1+ , , , ;
+
+      CREATE wc-table \ derived from wcwidth source code, for UCS32
+0  0300  0357 wc,    
+      0  035D  036F wc,    
+      0  0483  0486 wc,
+0  0488  0489 wc,    
+      0  0591  05A1 wc,    
+      0  05A3  05B9 wc,
+0  05BB  05BD wc,    
+      0  05BF  05BF wc,    
+      0  05C1  05C2 wc,
+0  05C4  05C4 wc,    
+      0  0600  0603 wc,    
+      0  0610  0615 wc,
+0  064B  0658 wc,    
+      0  0670  0670 wc,    
+      0  06D6  06E4 wc,
+0  06E7  06E8 wc,    
+      0  06EA  06ED wc,    
+      0  070F  070F wc,
+0  0711  0711 wc,    
+      0  0730  074A wc,    
+      0  07A6  07B0 wc,
+0  0901  0902 wc,    
+      0  093C  093C wc,    
+      0  0941  0948 wc,
+0  094D  094D wc,    
+      0  0951  0954 wc,    
+      0  0962  0963 wc,
+0  0981  0981 wc,    
+      0  09BC  09BC wc,    
+      0  09C1  09C4 wc,
+0  09CD  09CD wc,    
+      0  09E2  09E3 wc,    
+      0  0A01  0A02 wc,
+0  0A3C  0A3C wc,    
+      0  0A41  0A42 wc,    
+      0  0A47  0A48 wc,
+0  0A4B  0A4D wc,    
+      0  0A70  0A71 wc,    
+      0  0A81  0A82 wc,
+0  0ABC  0ABC wc,    
+      0  0AC1  0AC5 wc,    
+      0  0AC7  0AC8 wc,
+0  0ACD  0ACD wc,    
+      0  0AE2  0AE3 wc,    
+      0  0B01  0B01 wc,
+0  0B3C  0B3C wc,    
+      0  0B3F  0B3F wc,    
+      0  0B41  0B43 wc,
+0  0B4D  0B4D wc,    
+      0  0B56  0B56 wc,    
+      0  0B82  0B82 wc,
+0  0BC0  0BC0 wc,    
+      0  0BCD  0BCD wc,    
+      0  0C3E  0C40 wc,
+0  0C46  0C48 wc,    
+      0  0C4A  0C4D wc,    
+      0  0C55  0C56 wc,
+0  0CBC  0CBC wc,    
+      0  0CBF  0CBF wc,    
+      0  0CC6  0CC6 wc,
+0  0CCC  0CCD wc,    
+      0  0D41  0D43 wc,    
+      0  0D4D  0D4D wc,
+0  0DCA  0DCA wc,    
+      0  0DD2  0DD4 wc,    
+      0  0DD6  0DD6 wc,
+0  0E31  0E31 wc,    
+      0  0E34  0E3A wc,    
+      0  0E47  0E4E wc,
+0  0EB1  0EB1 wc,    
+      0  0EB4  0EB9 wc,    
+      0  0EBB  0EBC wc,
+0  0EC8  0ECD wc,    
+      0  0F18  0F19 wc,    
+      0  0F35  0F35 wc,
+0  0F37  0F37 wc,    
+      0  0F39  0F39 wc,    
+      0  0F71  0F7E wc,
+0  0F80  0F84 wc,    
+      0  0F86  0F87 wc,    
+      0  0F90  0F97 wc,
+0  0F99  0FBC wc,    
+      0  0FC6  0FC6 wc,    
+      0  102D  1030 wc,
+0  1032  1032 wc,    
+      0  1036  1037 wc,    
+      0  1039  1039 wc,
+0  1058  1059 wc,    
+      1  0000  1100 wc,    
+      2  1100  115f wc,
+0  1160  11FF wc,    
+      0  1712  1714 wc,    
+      0  1732  1734 wc,
+0  1752  1753 wc,    
+      0  1772  1773 wc,    
+      0  17B4  17B5 wc,
+0  17B7  17BD wc,    
+      0  17C6  17C6 wc,    
+      0  17C9  17D3 wc,
+0  17DD  17DD wc,    
+      0  180B  180D wc,    
+      0  18A9  18A9 wc,
+0  1920  1922 wc,    
+      0  1927  1928 wc,    
+      0  1932  1932 wc,
+0  1939  193B wc,    
+      0  200B  200F wc,    
+      0  202A  202E wc,
+0  2060  2063 wc,    
+      0  206A  206F wc,    
+      0  20D0  20EA wc,
+2  2329  232A wc,    
+      0  302A  302F wc,    
+      2  2E80  303E wc,
+0  3099  309A wc,    
+      2  3040  A4CF wc,    
+      2  AC00  D7A3 wc,
+2  F900  FAFF wc,    
+      0  FB1E  FB1E wc,    
+      0  FE00  FE0F wc,
+0  FE20  FE23 wc,    
+      2  FE30  FE6F wc,    
+      0  FEFF  FEFF wc,
+2  FF00  FF60 wc,    
+      2  FFE0  FFE6 wc,    
+      0  FFF9  FFFB wc,
+0 1D167 1D169 wc,    
+      0 1D173 1D182 wc,    
+      0 1D185 1D18B wc,
+0 1D1AA 1D1AD wc,    
+      2 20000 2FFFD wc,    
+      2 30000 3FFFD wc,
+0 E0001 E0001 wc,    
+      0 E0020 E007F wc,    
+      0 E0100 E01EF wc,
+HERE wc-table - CONSTANT #wc-table
+
+      \ inefficient table walk:
+
+      : XC-WIDTH ( xchar -- n )
+   wc-table #wc-table OVER + SWAP ?DO
+     DUP I 2@ WITHIN IF
+      DROP I 2 CELLS + @ UNLOOP EXIT THEN
+   3 CELLS +LOOP DROP 1 ;
+
+Testing
+
+      T{ $606D XC-WIDTH -> 2 }T
+T{   $41 XC-WIDTH -> 1 }T
+T{ $2060 XC-WIDTH -> 0 }T
+
+18.6.2.2487.45
+
+XCHAR-
+
+x-char-minus
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xc-addr1 -- xc-addr2 )
+
+      Goes backward from xc-addr1 until it finds an xchar so that the
+      size of this xchar added to xc-addr2 gives xc-addr1.
+      There is an ambiguous condition when the encoding doesn't permit reliable
+      backward stepping through the text.
+
+Implementation
+
+      : XCHAR- ( xc-addr -- xc-addr' )
+   BEGIN  1 CHARS - DUP C@ $C0 AND $80 <> UNTIL ;
+
+18.6.2.2488.20
+
+XHOLD
+
+x-hold
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xchar -- )
+
+      Adds xchar to the picture numeric output string.  An ambiguous
+      condition exists if XHOLD executes outside of a <#
+      #> delimited number conversion.
+
+See
+
+ 6.1.1670 HOLD.
+
+Implementation
+
+      CREATE xholdbuf 8 ALLOT
+
+      : XHOLD ( xchar -- )
+      xholdbuf TUCK XC!+ OVER - HOLDS ;
+
+18.6.2.2495
+
+X\STRING-
+
+x-string-minus
+
+XCHAR EXT
+
+X:xchar
+
+ 
+
+ ( xc-addr u1 -- xc-addr u2 )
+
+      Search for the penultimate xchar in the string xc-addr u1.
+      The string xc-addr u2 contains all xchars of
+      xc-addr u1, but the last.  Unlike XCHAR-,
+      X\STRING- can be implemented in encodings where xchar
+      boundaries can only reliably detected when scanning in forward
+      direction.
+
+Implementation
+
+      : X\STRING- ( xc-addr u -- xc-addr u' )
+   OVER + XCHAR- OVER - ;
+
+18.6.2.2520
+
+[CHAR]
+
+bracket-char
+
+XCHAR EXT
+
+X:xchar
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters.  Parse name delimited by a space.
+      Append the run-time semantics given below to the current definition.
+
+Run-time
+
+ ( -- xchar )
+
+      Place xchar, the value of the first xchar of name, on
+      the stack.
+
+See
+
+ 6.1.2520 [CHAR]
+
+Implementation
+
+      : [CHAR] ( "name" -- rt:xchar )
+   CHAR POSTPONE LITERAL ; IMMEDIATE
+
+< The optional String word set
+
+Rationale >

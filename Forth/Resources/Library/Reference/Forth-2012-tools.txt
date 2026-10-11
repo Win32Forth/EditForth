@@ -1,0 +1,1385 @@
+Forth 2012 Standard — tools
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: The optional Programming-Tools word set
+
+< The optional Memory-Allocation word set
+
+The optional Search-Order word set >
+
+15 The optional Programming-Tools word set
+
+15.1 Introduction
+
+This optional word set contains words most often used during the
+development of applications.
+
+15.2 Additional terms and notation
+
+None.
+
+15.3 Additional usage requirements
+
+15.3.1 Data types
+
+A name token is a single-cell value that identifies a named word.
+
+Append table 15.1 to table 3.1.
+
+Table 15.1: Data types
+
+Symbol Data type Size on stack
+
+nt	name token 1 cell
+
+See: A.15.3.1 Name tokens.
+
+15.3.2 The Forth dictionary
+
+A program using the words CODE or ;CODE associated
+with assembler code has an environmental dependency on that
+particular instruction set and assembler notation.
+
+Programs using the words EDITOR or ASSEMBLER require
+the Search Order word set or an equivalent implementation-defined
+capability.
+
+See: 3.3 The Forth dictionary.
+
+15.4 Additional documentation requirements
+
+15.4.1 System documentation
+
+15.4.1.1 Implementation-defined options
+
+ ending sequence for input following
+15.6.2.0470 ;CODE and
+15.6.2.0930 CODE;
+
+ manner of processing input following
+15.6.2.0470 ;CODE and
+15.6.2.0930 CODE;
+
+ search-order capability for
+15.6.2.1300 EDITOR and
+15.6.2.0740 ASSEMBLER
+(15.3.2 The Forth dictionary);
+
+ source and format of display by 15.6.1.2194 SEE.
+
+15.4.1.2 Ambiguous conditions
+
+ deleting the compilation word-list (15.6.2.1580 FORGET);
+
+ fewer than u+1 items on control-flow stack
+(15.6.2.1015 CS-PICK,
+15.6.2.1020 CS-ROLL);
+
+ name can't be found (15.6.2.1580 FORGET, 15.6.2.2264 SYNONYM);
+
+ name not defined via 6.1.1000 CREATE
+(15.6.2.0470 ;CODE);
+
+ 6.1.2033 POSTPONE applied to 15.6.2.2532 [IF];
+
+ reaching the end of the input source before matching
+15.6.2.2531 [ELSE] or 15.6.2.2533 [THEN]
+(15.6.2.2532 [IF]);
+
+ removing a needed definition (15.6.2.1580 FORGET);
+
+ 6.1.1710 IMMEDIATE is applied to a word defined by 15.6.2.2264 SYNONYM;
+
+ 15.6.2.1940 NR> is used with data not stored by 15.6.2.1908 N>R;
+
+ adding to or deleting from the wordlist during the execution of
+15.6.2.2297 TRAVERSE-WORDLIST.
+
+15.4.1.3 Other system documentation
+
+ no additional requirements.
+
+15.4.2 Program documentation
+
+15.4.2.1 Environmental dependencies
+
+ using the words 15.6.2.0470 ;CODE or
+15.6.2.0930 CODE.
+
+15.4.2.2 Other program documentation
+
+ no additional requirements.
+
+15.5 Compliance and labeling
+
+15.5.1 Forth-2012 systems
+
+The phrase "Providing the Programming-Tools word set" shall be
+appended to the label of any Standard System that provides all of
+the Programming-Tools word set.
+
+The phrase "Providing name(s) from the Programming-Tools
+Extensions word set" shall be appended to the label of any Standard
+System that provides portions of the Programming-Tools Extensions
+word set.
+
+The phrase "Providing the Programming-Tools Extensions word set"
+shall be appended to the label of any Standard System that provides
+all of the Programming-Tools and Programming-Tools Extensions word
+sets.
+
+15.5.2 Forth-2012 programs
+
+The phrase "Requiring the Programming-Tools word set" shall be
+appended to the label of Standard Programs that require the system
+to provide the Programming-Tools word set.
+
+The phrase "Requiring name(s) from the Programming-Tools
+Extensions word set" shall be appended to the label of Standard
+Programs that require the system to provide portions of the
+Programming-Tools Extensions word set.
+
+The phrase "Requiring the Programming-Tools Extensions word set"
+shall be appended to the label of Standard Programs that require the
+system to provide all of the Programming-Tools and Programming-Tools
+Extensions word sets.
+
+15.6 Glossary
+
+15.6.1 Programming-Tools words
+
+15.6.1.0220
+
+.S
+
+dot-s
+
+TOOLS
+
+ 
+
+ ( -- )
+
+      Copy and display the values currently on the data stack. The
+      format of the display is implementation-dependent.
+
+      .S may be implemented using pictured numeric output words.
+      Consequently, its use may corrupt the transient region identified
+      by #>.
+
+See
+
+ 3.3.3.6 Other transient regions,
+      A.15.6.1.0220  .S.
+
+Rationale
+
+      .S is a debugging convenience found on almost
+      all Forth systems. It is universally mentioned in Forth texts.
+
+15.6.1.0600
+
+?
+
+question
+
+TOOLS
+
+ 
+
+ ( a-addr -- )
+
+      Display the value stored at a-addr.
+
+      ? may be implemented using pictured numeric output words.
+      Consequently, its use may corrupt the transient region identified
+      by #>.
+
+See
+
+ 3.3.3.6 Other transient regions.
+
+15.6.1.1280
+
+DUMP
+
+ 
+
+TOOLS
+
+ 
+
+ ( addr u -- )
+
+      Display the contents of u consecutive addresses starting
+      at addr. The format of the display is implementation
+      dependent.
+
+      DUMP may be implemented using pictured numeric output
+      words. Consequently, its use may corrupt the transient region
+      identified by #>.
+
+See
+
+ 3.3.3.6 Other transient regions.
+
+15.6.1.2194
+
+SEE
+
+ 
+
+TOOLS
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Display a human-readable representation of the named word's
+      definition. The source of the representation (object-code
+      decompilation, source block, etc.) and the particular form of
+      the display is implementation defined.
+
+      SEE may be implemented using pictured numeric output
+      words. Consequently, its use may corrupt the transient region
+      identified by #>.
+
+See
+
+ 3.3.3.6 Other transient regions,
+      A.15.6.1.2194  SEE.
+
+Rationale
+
+      SEE acts as an on-line form of documentation of
+      words, allowing modification of words by decompiling and
+      regenerating with appropriate changes.
+
+15.6.1.2465
+
+WORDS
+
+ 
+
+TOOLS
+
+ 
+
+ ( -- )
+
+      List the definition names in the first word list of the search
+      order. The format of the display is implementation-dependent.
+
+      WORDS may be implemented using pictured numeric output
+      words. Consequently, its use may corrupt the transient region
+      identified by #>.
+
+See
+
+ 3.3.3.6 Other transient regions,
+      A.15.6.1.2465  WORDS.
+
+Rationale
+
+      WORDS is a debugging convenience found on almost
+      all Forth systems. It is universally referred to in Forth texts.
+
+15.6.2 Programming-Tools extension words
+
+15.6.2.0470
+
+;CODE
+
+semicolon-code
+
+TOOLS EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: colon-sys -- )
+
+      Append the run-time semantics below to the current definition.
+      End the current definition, allow it to be found in the
+      dictionary, and enter interpretation state, consuming
+      colon-sys.
+
+      Subsequent characters in the parse area typically represent
+      source code in a programming language, usually some form of
+      assembly language. Those characters are processed in an
+      implementation-defined manner, generating the corresponding
+      machine code. The process continues, refilling the input buffer
+      as needed, until an implementation-defined ending sequence is
+      processed.
+
+Run-time
+
+      ( -- )
+      ( R: nest-sys -- )
+
+      Replace the execution semantics of the most recent definition
+      with the name execution semantics given below. Return
+      control to the calling definition specified by nest-sys.
+      An ambiguous condition exists if the most recent definition was
+      not defined with CREATE or a user-defined word that
+      calls CREATE.
+
+name Execution
+
+      ( i×x -- j×x )
+
+      Perform the machine code sequence that was generated following
+      ;CODE.
+
+See
+
+ 6.1.1250 DOES>,
+      A.15.6.2.0470  ;CODE.
+
+Rationale
+
+      Typical use:
+      : namex
+      ... <create> ...
+      ;CODE ...
+
+      where namex is a defining word, and <create> is
+      CREATE or any user defined word that calls
+      CREATE.
+
+15.6.2.0702
+
+AHEAD
+
+ 
+
+TOOLS EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Compilation
+
+      ( C: -- orig )
+
+      Put the location of a new unresolved forward reference
+      orig onto the control flow stack. Append the run-time
+      semantics given below to the current definition. The semantics
+      are incomplete until orig is resolved (e.g., by
+      THEN).
+
+Run-time
+
+      ( -- )
+
+      Continue execution at the location specified by the resolution
+      of orig.
+
+Testing
+
+      T{ : pt1 AHEAD 1111 2222 THEN 3333 ; ->  }T
+T{ pt1 -> 3333 }T
+
+15.6.2.0740
+
+ASSEMBLER
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( -- )
+
+      Replace the first word list in the search order with the
+      ASSEMBLER word list.
+
+See
+
+ 16 The optional Search-Order word set.
+
+15.6.2.0830
+
+BYE
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( -- )
+
+      Return control to the host operating system, if any.
+
+15.6.2.0930
+
+CODE
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by a
+      space. Create a definition for name, called a "code
+      definition", with the execution semantics defined below.
+
+      Subsequent characters in the parse area typically represent
+      source code in a programming language, usually some form of
+      assembly language. Those characters are processed in an
+      implementation-defined manner, generating the corresponding
+      machine code. The process continues, refilling the input buffer
+      as needed, until an implementation-defined ending sequence is
+      processed.
+
+name Execution
+
+      ( i×x -- j×x )
+
+      Execute the machine code sequence that was generated following
+      CODE.
+
+See
+
+ 3.4.1 Parsing,
+      A.15.6.2.0930  CODE.
+
+Rationale
+
+      Some Forth systems implement the assembly function by adding
+      an ASSEMBLER word list to the search order,
+      using the text interpreter to parse a postfix assembly
+      language with lexical characteristics similar to Forth source
+      code. Typically, in such systems, assembly ends when a word
+      END-CODE is interpreted.
+
+15.6.2.1015
+
+CS-PICK
+
+c-s-pick
+
+TOOLS EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( C: destu ... orig0 | dest0 -- destu ... orig0 | dest0 destu )
+      ( S: u -- )
+
+      Remove u. Copy destu to the top of the
+      control-flow stack. An ambiguous condition exists if there
+      are less than u+1 items, each of which shall be an
+      orig or dest, on the control-flow stack
+      before CS-PICK is executed.
+
+      If the control-flow stack is implemented using the data stack,
+      u shall be the topmost item on the data stack.
+
+See
+
+ A.15.6.2.1015  CS-PICK.
+
+Rationale
+
+      The intent is to copy a dest on the control-flow
+      stack so that it can be resolved more than once. For example:
+
+\ Conditionally transfer control to beginning of
+\ loop.  This is similar in spirit to C's "continue"
+\ statement.
+
+          : ?REPEAT   ( dest -- dest ) \ Compilation
+       ( flag -- )    \ Execution
+   0 CS-PICK   POSTPONE UNTIL
+; IMMEDIATE
+
+          : XX ( -- ) \ Example use of ?REPEAT
+   BEGIN
+     ...
+   flag ?REPEAT ( Go back to BEGIN if flag is false )
+     ...
+   flag ?REPEAT ( Go back to BEGIN if flag is false )
+     ...
+   flag UNTIL   ( Go back to BEGIN if flag is false )
+;
+
+Testing
+
+: ?repeat
+   0 CS-PICK POSTPONE UNTIL
+; IMMEDIATE
+
+        VARIABLE pt4
+
+        : <= > 0= ;
+
+        T{ : pt5  ( n1 -- ) 
+      pt4 ! 
+      BEGIN 
+        -1 pt4 +! 
+        pt4 @ 4 <= ?repeat    \ Back to BEGIN if false 
+        111 
+        pt4 @ 3 <= ?repeat 
+        222 
+        pt4 @ 2 <= ?repeat 
+        333 
+        pt4 @ 1 = 
+      UNTIL 
+    ; ->  }T
+
+        T{ 6 pt5 -> 111 111 222 111 222 333 111 222 333 }T
+
+15.6.2.1020
+
+CS-ROLL
+
+c-s-roll
+
+TOOLS EXT
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+      ( C: origu | destu origu-1 | destu-1 ... orig0 | dest0 -- origu-1 | destu-1 ... orig0 | dest0 origu | destu )
+
+      ( S: u -- )
+
+      Remove u. Rotate u+1 elements on top of the
+      control-flow stack so that origu | destu is on top of
+      the control-flow stack. An ambiguous condition exists if there
+      are less than u+1 items, each of which shall be an
+      orig or dest, on the control-flow stack before
+      CS-ROLL is executed.
+
+      If the control-flow stack is implemented using the data stack,
+      u shall be the topmost item on the data stack.
+
+See
+
+ A.15.6.2.1020  CS-ROLL.
+
+Rationale
+
+      The intent is to modify the order in which the origs
+      and dests on the control-flow stack are to be resolved
+      by subsequent control-flow words. For example, WHILE
+      could be implemented in terms of IF and
+      CS-ROLL, as follows:
+
+: WHILE   ( dest -- orig dest )
+   POSTPONE IF   1 CS-ROLL
+; IMMEDIATE
+
+Testing
+
+T{ : ?DONE ( dest -- orig dest )     \ Same as WHILE 
+      POSTPONE IF 1 CS-ROLL 
+    ; IMMEDIATE ->  }T
+T{ : pt6 
+      >R 
+      BEGIN 
+        R@ 
+      ?DONE 
+        R@ 
+        R> 1- >R 
+      REPEAT 
+      R> DROP 
+    ; ->  }T
+
+        T{ 5 pt6 -> 5 4 3 2 1 }T
+
+        : mix_up 2 CS-ROLL ; IMMEDIATE    \ cs-rot
+
+        : pt7 ( f3 f2 f1 -- ? )
+   IF 1111 ROT ROT	  		( -- 1111 f3 f2 )		    	( cs: -- o1 )
+    	IF 2222 SWAP			  	( -- 1111 2222 f3 )	  	( cs: -- o1 o2 )
+      		IF															                                      	( cs: -- o1 o2 o3 )
+        			3333 mix_up							( -- 1111 2222 3333 )		( cs: -- o2 o3 o1 )
+      		THEN															                                    	( cs: -- o2 o3 )
+      		4444	   \ Hence failure of first IF comes here and falls through
+    	THEN																                                      	( cs: -- o2 )
+    	5555 		     \ Failure of 3rd IF comes here
+   THEN																                                        	( cs: -- )
+   6666 		       \ Failure of 2nd IF comes here
+   ;
+
+        T{ -1 -1 -1 pt7 -> 1111 2222 3333 4444 5555 6666 }T
+T{  0 -1 -1 pt7 -> 1111 2222 5555 6666           }T
+T{  0  0 -1 pt7 -> 1111 0    6666                }T
+T{  0  0  0 pt7 -> 0    0    4444 5555 6666      }T
+
+        : [1cs-roll] 1 CS-ROLL ; IMMEDIATE
+
+        T{ : pt8 
+      >R 
+      AHEAD 111 
+      BEGIN 222 
+          [1cs-roll] 
+          THEN 
+          333 
+          R> 1- >R 
+          R@ 0< 
+      UNTIL 
+      R> DROP 
+    ; ->  }T
+
+        T{ 1 pt8 -> 333 222 333 }T
+
+15.6.2.1300
+
+EDITOR
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( -- )
+
+      Replace the first word list in the search order with the
+      EDITOR word list.
+
+See
+
+ 16 The optional Search-Order word set.
+
+15.6.2.1580
+
+FORGET
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( "<spaces>name" -- )
+
+      Skip leading space delimiters. Parse name delimited by a
+      space. Find name, then delete name from the
+      dictionary along with all words added to the dictionary after
+      name. An ambiguous condition exists if name cannot
+      be found.
+
+      If the Search-Order word set is present, FORGET searches
+      the compilation word list. An ambiguous condition exists if the
+      compilation word list is deleted.
+
+      An ambiguous condition exists if FORGET removes a word
+      required for correct execution.
+
+Note
+
+ This word is obsolescent and is included as a concession to
+      existing implementations.
+
+See
+
+ 3.4.1 Parsing,
+      A.15.6.2.1580  FORGET.
+
+Rationale
+
+      Typical use:
+      ... FORGET name ...
+
+      FORGET name tries to infer the previous dictionary
+      state from name; this is not always possible.  As a
+      consequence, FORGET name removes name and
+      all following words in the name space.
+
+      See A.6.2.1850 MARKER.
+
+15.6.2.1908
+
+N>R
+
+n-to-r
+
+TOOLS EXT
+
+X:n-to-r
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+ ( i×n +n -- ) ( R: -- j×x +n )
+
+      Remove n+1 items from the data stack and store them for later
+      retrieval by NR>. The return stack may be used to store the
+      data. Until this data has been retrieved by NR>:
+
+ this data will not be overwritten by a subsequent invocation of
+      N>R and
+
+ a program may not access data placed on the return stack before
+      the invocation of N>R.
+
+See
+
+ 15.6.2.1940 NR>,
+      A.15.6.2.1908  N>R.
+
+Rationale
+
+      An implementation may store the stack items in any manner.  It may
+      store them on the return stack, in any order.  A stack-constrained
+      system may prefer to use a buffer to store the items and place a
+      reference to the buffer on the return stack.
+
+See
+
+ 6.2.2182 SAVE-INPUT,
+      6.2.2148 RESTORE-INPUT,
+      16.6.1.1647 GET-ORDER,
+      16.6.1.2197 SET-ORDER.
+
+Implementation
+
+      This implementation depends on the return address being on
+      the return stack.
+
+        : N>R           \ xn .. x1 N -- ; R: -- x1 .. xn n
+
+        \ Transfer N items and count to the return stack.
+
+           DUP                        \ xn .. x1 N N --
+
+           BEGIN
+
+              DUP
+
+           WHILE
+
+              ROT R> SWAP >R >R      \ xn .. N N -- ; R: .. x1 --
+
+              1-                      \ xn .. N 'N -- ; R: .. x1 --
+
+           REPEAT
+
+           DROP                       \ N -- ; R: x1 .. xn --
+
+           R> SWAP >R >R
+
+        ;
+
+Testing
+
+      : TNR1 N>R SWAP NR> ;
+T{ 1 2 10 20 30 3 TNR1 -> 2 1 10 20 30 3 }T
+
+      : TNR2 N>R N>R SWAP NR> NR> ;
+T{ 1 2 10 20 30 3 40 50 2 TNR2 -> 2 1 10 20 30 3 40 50 2 }T
+
+15.6.2.1909.10
+
+NAME>COMPILE
+
+name-to-compile
+
+TOOLS EXT
+
+X:traverse-wordlist
+
+ 
+
+ ( nt -- x xt )
+
+      x xt represents the compilation semantics of the word
+      nt.  The returned xt has the stack effect
+      ( i×x x -- j×x ).  Executing xt consumes
+      x and performs the compilation semantics of the word
+      represented by nt.
+
+See
+
+      A.15.6.2.1909.10 NAME>COMPILE,
+      15.6.2.2297 TRAVERSE-WORDLIST.
+
+Rationale
+
+      In a traditional xt+immediate-flag system, the
+      x xt returned by NAME>COMPILE is
+      typically xt1 xt2, where xt1 is the
+      xt of the word under consideration, and
+      xt2 is the xt of EXECUTE
+      (for immediate words) or COMPILE, (for words
+      with default compilation semantics).
+
+      If you want to POSTPONE nt, you can
+      do so with
+
+NAME>COMPILE SWAP POSTPONE
+          LITERAL COMPILE,
+
+15.6.2.1909.20
+
+NAME>INTERPRET
+
+name-to-interpret
+
+TOOLS EXT
+
+X:traverse-wordlist
+
+ 
+
+ ( nt -- xt | 0 )
+
+      xt represents the interpretation semantics of the word
+      nt.  If nt has no interpretation semantics,
+      NAME>INTERPRET returns 0.
+
+Note
+
+      This standard does not define the interpretation semantics of
+      some words, but systems are allowed to do so.
+
+See
+
+ 15.6.2.2297 TRAVERSE-WORDLIST.
+
+15.6.2.1909.40
+
+NAME>STRING
+
+name-to-string
+
+TOOLS EXT
+
+X:traverse-wordlist
+
+ 
+
+ ( nt -- c-addr u )
+
+      NAME>STRING returns the name of the word nt
+      in the character string c-addr u.  The case of the characters
+      in the string is implementation-dependent.  The buffer containing
+      c-addr u may be transient and valid until the next invocation
+      of NAME>STRING. A program shall not write into the buffer
+      containing the resulting string.
+
+See
+
+ 15.6.2.2297 TRAVERSE-WORDLIST.
+
+15.6.2.1940
+
+NR>
+
+n-r-from
+
+TOOLS EXT
+
+X:n-to-r
+
+Interpretation
+
+      Interpretation semantics for this word are undefined.
+
+Execution
+
+ ( -- i×x +n ) ( R: j×x +n -- )
+
+      Retrieve the items previously stored by an invocation of N>R.
+      n is the number of items placed on the data stack. It is an
+      ambiguous condition if NR> is used with data not stored by
+      N>R.
+
+See
+
+ 15.6.2.1908 N>R, A.15.6.2.1908 N>R.
+
+Implementation
+
+      This implementation depends on the return address being on
+      the return stack.
+
+        : NR> \ -- xn .. x1 N ; R: x1 .. xn N --
+
+        \ Pull N items and count off the return stack.
+
+           R> R> SWAP >R DUP
+
+           BEGIN
+
+              DUP
+
+           WHILE
+
+              R> R> SWAP >R -ROT
+
+              1-
+
+           REPEAT
+
+           DROP
+
+        ;
+
+15.6.2.2250
+
+STATE
+
+ 
+
+TOOLS EXT
+
+ 
+
+ ( -- a-addr )
+
+      Extend the semantics of 6.1.2250 STATE to allow
+      ;CODE to change the value in STATE. A program
+      shall not directly alter the contents of STATE.
+
+See
+
+ 3.4 The Forth text interpreter,
+      6.1.0450 :,
+      6.1.0460 ;,
+      6.1.0670 ABORT,
+6.1.2050 QUIT,
+      6.1.2250 STATE,
+      6.1.2500 [,
+      6.1.2540 ],
+      6.2.0455 :NONAME,
+15.6.2.0470 ;CODE.
+
+15.6.2.2264
+
+SYNONYM
+
+ 
+
+TOOLS EXT
+
+X:synonym
+
+ 
+
+ ( "<spaces>newname" "<spaces>oldname" -- )
+
+      For both strings skip leading space delimiters.  Parse newname
+      and oldname delimited by a space.  Create a definition for
+      newname with the semantics defined below.
+      Newname may be the same as oldname;
+      when looking up oldname, newname shall not be found.
+
+      An ambiguous conditions exists if oldname can not be found or
+      IMMEDIATE is applied to newname.
+
+newname interpretation
+
+      ( i×x -- j×x )
+Perform the interpretation semantics of oldname.
+
+newname compilation
+
+      ( i×x -- j×x )
+Perform the compilation semantics of oldname.
+
+See
+
+ 6.1.1710 IMMEDIATE.
+
+Implementation
+
+The implementation of SYNONYM requires detailed knowledge
+        of the host implementation, which is one reason why it should be
+        standardized.  The implementation below is imperfect and specific
+        to VFX Forth, in particular HIDE, REVEAL and
+        IMMEDIATE? are non-standard words.
+
+: SYNONYM \ "newname" "oldname" --
+\ Create a new definition which redirects to an existing one.
+   CREATE IMMEDIATE
+     HIDE ' , REVEAL
+   DOES>
+     @  STATE @ 0= OVER IMMEDIATE? OR
+     IF EXECUTE ELSE COMPILE, THEN
+;
+
+15.6.2.2297
+
+TRAVERSE-WORDLIST
+
+ 
+
+TOOLS EXT
+
+X:traverse-wordlist
+
+ 
+
+ ( i×x xt wid -- j×x )
+
+      Remove wid and xt from the stack.  Execute
+      xt once for every word in the wordlist wid,
+      passing the name token nt of the word to xt,
+      until the wordlist is exhausted or until xt returns false.
+
+      The invoked xt has the stack effect
+      ( k×x nt -- l×x flag ).
+
+      If flag is true, TRAVERSE-WORDLIST will continue
+      with the next name, otherwise it will return.  TRAVERSE-WORDLIST
+      does not put any items other than nt on the stack when
+      calling xt, so that xt can access and modify the
+      rest of the stack.
+
+      TRAVERSE-WORDLIST may visit words in any order, with one
+      exception: words with the same name are called in the order
+      newest-to-oldest (possibly with other words in between).
+
+      An ambiguous condition exists if words are added to or deleted from
+      the wordlist wid during the execution of
+      TRAVERSE-WORDLIST.
+
+See
+
+ A.15.6.2.2297  TRAVERSE-WORDLIST,
+      15.6.2.1909.40 NAME>STRING,
+15.6.2.1909.20 NAME>INTERPRET,
+      15.6.2.1909.10 NAME>COMPILE.
+
+Rationale
+
+      Typical use:
+
+: WORDS-COUNT ( x nt – x' f )
+          DROP 1+ TRUE
+          ;
+
+0 ' WORDS-COUNT
+          FORTH-WORDLIST
+          TRAVERSE-WORDLIST .
+
+      prints a count of the number of words in the FORTH-WORDLIST.
+
+: ALL-WORDS
+          NAME>STRING CR TYPE TRUE
+          ;
+
+' ALL-WORDS
+          GET-CURRENT
+          TRAVERSE-WORDLIST
+
+      prints the names of words in the current compilation wordlist.
+
+: CONTAINS-STRING
+   			NAME>STRING 2OVER
+          SEARCH IF
+          CR TYPE
+          THEN FALSE ;
+S" COM" ' CONTAINS-STRING
+          GET-CURRENT TRAVERSE-WORDLIST
+
+      prints the name of a word containing the string
+      "COM", if it exists, and then terminates.
+
+15.6.2.2530.30
+
+[DEFINED]
+
+bracket-defined
+
+TOOLS EXT
+
+X:defined
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "<spaces>name ..." -- flag )
+
+      Skip leading space delimiters.  Parse name delimited by a space.
+      Return a true flag if name is the name of a word that can
+      be found (according to the rules in the system's FIND);
+      otherwise return a false flag.
+      [DEFINED] is an immediate word.
+
+Implementation
+
+      : [DEFINED] BL WORD FIND NIP 0<> ; IMMEDIATE
+
+15.6.2.2531
+
+[ELSE]
+
+bracket-else
+
+TOOLS EXT
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "<spaces>name ..." -- )
+
+      Skipping leading spaces, parse and discard space-delimited words
+      from the parse area, including nested occurrences of [IF]
+      ... [THEN] and [IF] ... [ELSE]
+      ...  [THEN], until the word [THEN] has been
+      parsed and discarded. If the parse area becomes exhausted, it is
+      refilled as with REFILL. [ELSE] is an
+      immediate word.
+
+See
+
+ 3.4.1 Parsing,
+      A.15.6.2.2531  [ELSE].
+
+Rationale
+
+      Typical use:
+      ... flag
+      [IF] ...
+      [ELSE] ...
+      [THEN] ...
+
+Implementation
+
+        : [ELSE] ( -- )
+
+            1 BEGIN																		                                      \ level
+
+               BEGIN   BL WORD COUNT   DUP   WHILE	             \ level adr len
+
+                 2DUP S" [IF]"  COMPARE 0= IF			             \ level adr len
+
+                     2DROP 1+														                            \ level'
+
+                  ELSE																	                                   \ level adr len
+
+                    2DUP S" [ELSE]" COMPARE 0= IF	        \ level adr len
+
+                        2DROP 1- DUP IF 1+ THEN		         		\ level'
+
+                    ELSE																	                                		\ level adr len
+
+                        S" [THEN]" COMPARE 0= IF				        		\ level
+
+                           1-																                           			\ level'
+
+                       THEN
+
+                     THEN
+
+                  THEN ?DUP 0=   IF EXIT THEN		             	\ level'
+
+               REPEAT 2DROP														                             	\ level
+
+           REFILL 0= UNTIL													                               \ level
+
+            DROP
+
+        ; IMMEDIATE
+
+15.6.2.2532
+
+[IF]
+
+bracket-if
+
+TOOLS EXT
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( flag | flag "<spaces>name ..." -- )
+
+      If flag is true, do nothing. Otherwise, skipping leading
+      spaces, parse and discard space-delimited words from the parse
+      area, including nested occurrences of [IF] ...
+      [THEN] and [IF] ... [ELSE] ...
+      [THEN], until either the word [ELSE] or the word
+      [THEN] has been parsed and discarded. If the parse area
+      becomes exhausted, it is refilled as with REFILL.
+      [IF] is an immediate word.
+
+      An ambiguous condition exists if [IF] is
+      POSTPONEd, or if the end of the input buffer is
+      reached and cannot be refilled before the terminating
+      [ELSE] or [THEN] is parsed.
+
+See
+
+ 3.4.1 Parsing,
+      A.15.6.2.2532  [IF].
+
+Rationale
+
+      Typical use:
+      ... flag
+      [IF] ...
+      [ELSE] ...
+      [THEN] ...
+
+Implementation
+
+      : [IF] ( flag -- )
+   0= IF POSTPONE [ELSE] THEN
+; IMMEDIATE
+
+15.6.2.2533
+
+[THEN]
+
+bracket-then
+
+TOOLS EXT
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( -- )
+
+      Does nothing. [THEN] is an immediate word.
+
+See
+
+ A.15.6.2.2533  [THEN].
+
+Rationale
+
+      Typical use:
+      ... flag
+      [IF] ...
+      [ELSE] ...
+      [THEN] ...
+
+      Software that runs in several system environments often
+      contains some source code that is environmentally dependent.
+      Conditional compilation — the selective inclusion or
+      exclusion of portions of the source code at compile time —
+      is one technique that is often used to assist in the
+      maintenance of such source code.
+
+      Conditional compilation is sometimes done with "smart
+      comments" — definitions that either skip or do not skip
+      the remainder of the line based on some test. For example:
+
+\ If 16-Bit? contains TRUE, lines preceded by 16BIT\
+\ will be skipped. Otherwise, they will not be skipped.
+
+          VARIABLE 16-BIT?
+
+          : 16BIT\  ( -- )
+          16-BIT? @
+          IF   POSTPONE \   THEN
+; IMMEDIATE
+
+      This technique works on a line by line basis, and is good for
+      short, isolated variant code sequences.
+
+      More complicated conditional compilation problems suggest a
+      nestable method that can encompass more than one source line
+      at a time. The words included in the optional Programming tools
+      extensions word set are useful for this purpose.
+
+Implementation
+
+      : [THEN] ( -- ) ; IMMEDIATE
+
+Testing
+
+      T{ <TRUE>  [IF] 111 [ELSE] 222 [THEN] -> 111 }T
+T{ <FALSE> [IF] 111 [ELSE] 222 [THEN] -> 222 }T
+
+      \ Check words are immediate
+
+	  : tfind BL WORD FIND ;
+
+	  T{ tfind [IF]     NIP -> 1 }T
+T{ tfind [ELSE] NIP -> 1 }T
+T{ tfind [THEN] NIP -> 1 }T
+
+      T{ : pt2 [  0 ] [IF] 1111 [ELSE] 2222 [THEN] ; pt2 -> 2222 }T
+T{ : pt3 [ -1 ] [IF] 3333 [ELSE] 4444 [THEN] ; pt3 -> 3333 }T
+
+      \ Code spread over more than 1 line
+T{ <TRUE>  [IF] 1 
+                 2 
+             [ELSE] 
+                 3 
+                 4 
+             [THEN] -> 1 2 }T
+T{ <FALSE> [IF] 
+                 1 2 
+             [ELSE] 
+                 3 4 
+             [THEN] -> 3 4 }T
+
+      \ Nested
+: <T> <TRUE>  ;
+: <F> <FALSE> :
+T{ <T> [IF] 1 <T> [IF] 2 [ELSE] 3 [THEN] [ELSE] 4 [THEN] -> 1 2 }T
+T{ <F> [IF] 1 <T> [IF] 2 [ELSE] 3 [THEN] [ELSE] 4 [THEN] -> 4 }T
+T{ <T> [IF] 1 <F> [IF] 2 [ELSE] 3 [THEN] [ELSE] 4 [THEN] -> 1 3 }T
+T{ <F> [IF] 1 <F> [IF] 2 [ELSE] 3 [THEN] [ELSE] 4 [THEN] -> 4 }T
+
+15.6.2.2534
+
+[UNDEFINED]
+
+bracket-undefined
+
+TOOLS EXT
+
+X:defined
+
+Compilation
+
+      Perform the execution semantics given below.
+
+Execution
+
+      ( "<spaces>name ..." -- flag )
+
+      Skip leading space delimiters.  Parse name delimited by a space.
+      Return a false flag if name is the name of a word that
+      can be found (according to the rules in the system's FIND);
+      otherwise return a true flag. [UNDEFINED] is an immediate
+      word.
+
+Implementation
+
+      : [UNDEFINED] BL WORD FIND NIP 0= ; IMMEDIATE
+
+< The optional Memory-Allocation word set
+
+The optional Search-Order word set >

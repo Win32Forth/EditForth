@@ -1,0 +1,1470 @@
+Forth 2012 Standard — facility
+Source: forth-standard.org / Forth 200x committee HTML (2014 package).
+For Ask Forth Library reference. See Reference/README.txt.
+
+Forth 200x: The optional Facility word set
+
+< The optional Exception word set
+
+The optional File-Access word set >
+
+10 The optional Facility word set
+
+10.1 Introduction
+
+10.2 Additional terms and notation
+
+None.
+
+10.3 Additional usage requirements
+
+10.3.1 Data types
+
+Append table 10.1 to table 3.1.
+
+Table 10.1: Data types
+
+Symbol Data type Size on stack
+
+struct-sys
+  data structures
+  implementation dependent
+
+10.3.1.1 Structure type
+
+The implementation-dependent data generated upon beginning to compile
+a BEGIN-STRUCTURE ... END-STRUCTURE structure and
+consumed at its close is represented by the symbol struct-sys
+throughout this standard.
+
+10.3.1.2 Character types
+
+Programs that use more than seven bits of a character by
+EKEY have an environmental dependency.
+
+See: 3.1.2 Character types.
+
+10.4 Additional documentation requirements
+
+10.4.1 System documentation
+
+10.4.1.1 Implementation-defined options
+
+ encoding of keyboard events 10.6.2.1305 EKEY);
+
+ duration of a system clock tick;
+
+ repeatability to be expected from execution of 10.6.2.1905 MS.
+
+10.4.1.2 Ambiguous conditions
+
+ 10.6.1.0742 AT-XY operation can't be performed on user output device;
+
+ A name defined by 10.6.2.0763 BEGIN-STRUCTURE is executed before the corresponding 10.6.2.1336 END-STRUCTURE has been executed.
+
+10.4.1.3 Other system documentation
+
+ no additional requirements.
+
+10.4.2 Program documentation
+
+10.4.2.1 Environmental dependencies
+
+ using more than seven bits of a character in 10.6.2.1305 EKEY.
+
+10.4.2.2 Other program documentation
+
+ no additional requirements.
+
+10.5 Compliance and labeling
+
+10.5.1 Forth-2012 systems
+
+The phrase "Providing the Facility word set" shall be appended to
+the label of any Standard System that provides all of the Facility
+word set.
+
+The phrase "Providing name(s) from the Facility Extensions
+word set" shall be appended to the label of any Standard System
+that provides portions of the Facility Extensions word set.
+
+The phrase "Providing the Facility Extensions word set" shall be
+appended to the label of any Standard System that provides all of
+the Facility and Facility Extensions word sets.
+
+10.5.2 Forth-2012 programs
+
+The phrase "Requiring the Facility word set" shall be appended to
+the label of Standard Programs that require the system to provide
+the Facility word set.
+
+The phrase "Requiring name(s) from the Facility Extensions
+word set" shall be appended to the label of Standard Programs that
+require the system to provide portions of the Facility Extensions
+word set.
+
+The phrase "Requiring the Facility Extensions word set" shall be
+appended to the label of Standard Programs that require the system
+to provide all of the Facility and Facility Extensions word sets.
+
+10.6 Glossary
+
+10.6.1 Facility words
+
+10.6.1.0742
+
+AT-XY
+
+at-x-y
+
+FACILITY
+
+ 
+
+ ( u1 u2 -- )
+
+      Perform implementation-dependent steps so that the next
+      character displayed will appear in column u1, row
+      u2 of the user output device, the upper left corner
+      of which is column zero, row zero. An ambiguous condition exists
+      if the operation cannot be performed on the user output device
+      with the specified parameters.
+
+10.6.1.1755
+
+KEY?
+
+key-question
+
+FACILITY
+
+ 
+
+ ( -- flag )
+
+      If a character is available, return true. Otherwise,
+      return false. If non-character keyboard events are
+      available before the first valid character, they are discarded
+      and are subsequently unavailable. The character shall be
+      returned by the next execution of KEY.
+
+      After KEY? returns with a value of true,
+      subsequent executions of KEY? prior to the execution
+      of KEY or EKEY also return true,
+      without discarding keyboard events.
+
+See
+
+ A.10.6.1.1755  KEY?.
+
+Rationale
+
+      The committee has gone around several times on the
+      stack effects. Whatever is decided will violate somebody's
+      practice and penalize some machine. This way doesn't interfere
+      with type-ahead on some systems, while requiring the
+      implementation of a single-character buffer on machines where
+      polling the keyboard inevitably results in the destruction of
+      the character.
+
+      Use of KEY or KEY? indicates that the
+      application does not wish to process non-character events,
+      so they are discarded, in anticipation of eventually receiving
+      a valid character. Applications wishing to handle non-character
+      events must use EKEY and EKEY?. It is possible
+      to mix uses of KEY?/KEY and
+      EKEY?/EKEY within a single application, but
+      the application must use KEY? and KEY only
+      when it wishes to discard non-character events until a valid
+      character is received.
+
+10.6.1.2005
+
+PAGE
+
+ 
+
+FACILITY
+
+ 
+
+ ( -- )
+
+      Move to another page for output. Actual function depends on the
+      output device. On a terminal, PAGE clears the screen and
+      resets the cursor position to the upper left corner. On a
+      printer, PAGE performs a form feed.
+
+10.6.2 Facility extension words
+
+10.6.2.0135
+
++FIELD
+
+plus-field
+
+FACILITY EXT
+
+X:structures
+
+ 
+
+ ( n1 n2 "<spaces>name" -- n3 )
+
+      Skip leading space delimiters.  Parse name delimited
+      by a space.  Create a definition for name with the
+      execution semantics defined below.  Return n3 =
+      n1 + n2 where n1 is the offset
+      in the data structure before +FIELD executes, and
+      n2 is the size of the data to be added to the data
+      structure. n1 and n2 are in address units.
+
+name Execution
+
+      ( addr1 -- addr2 )
+
+      Add n1 to addr1 giving addr2.
+
+See
+
+ 10.6.2.0763 BEGIN-STRUCTURE,
+      10.6.2.1336 END-STRUCTURE,
+10.6.2.0893 CFIELD:,
+      10.6.2.1518 FIELD:,
+      12.6.2.1517 FFIELD:,
+12.6.2.2206.40 SFFIELD:,
+      12.6.2.1207.40 DFFIELD:,
+      A.10.6.2.0135  +FIELD.
+
+Rationale
+
+      +FIELD is not required to align items.  This is
+      deliberate and allows the construction of unaligned data
+      structures for communication with external elements such
+      as a hardware register map or protocol packet.
+      Field alignment has been left to the appropriate
+      xFIELD: definition.
+
+Implementation
+
+      Create a new field within a structure definition
+      of size n bytes.
+
+      : +FIELD  \ n <"name"> -- ; Exec: addr -- 'addr
+   CREATE OVER , +
+   DOES> @ +
+;
+
+10.6.2.0763
+
+BEGIN-STRUCTURE
+
+ 
+
+FACILITY EXT
+
+X:structures
+
+ 
+
+ ( "<spaces>name" -- struct-sys 0 )
+
+      Skip leading space delimiters. Parse name delimited
+      by a space. Create a definition for name with the
+      execution semantics defined below.  Return a struct-sys
+      (zero or more implementation dependent items) that will be
+      used by END-STRUCTURE and an initial offset of 0.
+
+name Execution
+
+      ( -- +n )
+
+      +n is the size in memory expressed in address units of
+      the data structure.  An ambiguous condition exists if
+      name is executed prior to the associated
+      END-STRUCTURE being executed.
+
+See
+
+ 10.6.2.0135 +FIELD,
+      10.6.2.1336 END-STRUCTURE,
+A.10.6.2.0763  BEGIN-STRUCTURE.
+
+Rationale
+
+      There are two schools of thought regarding named data
+      structures: name first and name last.  The name last
+      school can define a named data structure as follows:
+
+0                         \ initial total byte count
+   1 CELLS +FIELD p.x	   \ A single cell filed named p.x
+   1 CELLS +FIELD p.y      \ A single cell field named p.y
+CONSTANT point          \ save structure size
+
+      While the name first school would define the same data
+      structure as:
+
+BEGIN-STRUCTURE point  \ create the named structure
+   1 CELLS +FIELD p.x	   \ A single cell filed named p.x
+   1 CELLS +FIELD p.y      \ A single cell field named p.y
+END-STRUCTURE
+
+      Although many systems provide a name first structure there
+      is no common practice to the words used.  The words
+      BEGIN-STRUCTURE and END-STRUCTURE have been
+      defied as a means of providing a portable notation that does
+      not conflict with existing systems.
+
+      The field defining words (xFIELD: and
+      +FIELD) are defined so they can be used by both
+      schools.  Compatibility between the two schools comes from
+      defining a new stack item struct-sys, which is
+      implementation dependent and can be 0 or more cells.
+      The name first school would provide an address (addr)
+      as the struct-sys parameter, while the name last
+      school would defined struct-sys as being empty.
+
+      Executing the name of the data structure, returns the size of
+      the data structure.  This allows the data stricture to be used
+      within another data structure:
+
+BEGIN-STRUCTURE point  \ -- a-addr 0 ; -- lenp
+   FIELD: p.x		            \ -- a-addr cell
+   FIELD: p.y                  \ -- a-addr cell*2
+END-STRUCTURE
+BEGIN-STRUCTURE rect     \ -- a-addr 0 ; -- lenr
+   point +FIELD r.tlhc      \ -- a-addr cell*2
+   point +FIELD r.brhc      \ -- a-addr cell*4
+END-STRUCTURE
+
+Alignment
+
+  In practice, structures are used for two different purposes
+      with incompatible requirements:
+
+      1) For collecting related internal-use data into a
+      convenient "package" that can be referred to by a
+      single "handle". For this use, alignment is important,
+      so that efficient native fetch and store instructions
+      can be used.
+
+      2) For mapping external data structures like hardware
+      register maps and protocol packets. For this use,
+      automatic alignment is inappropriate, because the
+      alignment of the external data structure often doesn't
+      match the rules for a given processor.
+
+      Many languages cater for the first use, but ignore the
+      second.  This leads to various customized solutions, usage
+      requirements, portability problems, bugs, etc.
+      +FIELD is defined to be non-aligning, while the
+      named field defining words (xFIELD:) are
+      aligning.  This is intentional and allows for both uses.
+
+      The standard currently defines an aligned field defining
+      word for each of the standard data types:
+
+CFIELD:					a character
+
+FIELD:					a native integer (single cell)
+
+FFIELD:	a native float
+
+SFFIELD:	a 32 bit float
+
+DFFIELD:	a 64 bit float
+
+      Although this is a sufficient set, most systems provide
+      facilities to define field defining words for standard
+      data types.
+
+Future
+
+  The following cannot be defined until the required addressing
+      has been defined. The names should be considered reserved
+      until then.
+
+BFIELD: 1 byte (8 bit) field
+
+WFIELD: 16 bit field
+
+LFIELD: 32 bit field
+
+XFIELD: 64 bit field
+
+Implementation
+
+      Begin definition of a new structure. Use in the
+      form BEGIN-STRUCTURE <name>.  At run time
+      <name> returns the size of the structure.
+
+      : BEGIN-STRUCTURE  \ -- addr 0 ; -- size
+   CREATE
+     HERE 0  0 ,      \  mark stack, lay dummy
+   DOES> @             \ -- rec-len
+;
+
+10.6.2.0893
+
+CFIELD:
+
+c-field-colon
+
+FACILITY EXT
+
+X:structures
+
+ 
+
+ ( n1 "<spaces>name" -- n2 )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Offset is the first character aligned value
+      greater than or equal to n1.  n2 = offset + 1
+      character.
+
+      Create a definition for name with the execution semantics
+      given below.
+
+name Execution
+
+      ( addr1 -- addr2 )
+
+      Add the offset calculated during the compile-time action to
+      addr1 giving the address addr2.
+
+See
+
+ 10.6.2.0135 +FIELD,
+      10.6.2.0763 BEGIN-STRUCTURE,
+10.6.2.1336 END-STRUCTURE,
+      A.10.6.2.1518  FIELD:.
+
+10.6.2.1305
+
+EKEY
+
+e-key
+
+FACILITY EXT
+
+ 
+
+ ( -- x )
+
+      Receive one keyboard event x. The encoding of keyboard events
+      is implementation defined.
+
+See
+
+ 6.1.1750 KEY,
+      10.6.1.1755 KEY?,
+      A.10.6.2.1305  EKEY.
+
+Rationale
+
+      For some input devices, such as keyboards, more information is
+      available than can be returned by a single execution of
+      KEY.  EKEY provides a standard word to access a
+      system-dependent set of events.
+
+      EKEY and EKEY? are implementation specific; no
+      assumption can be made regarding the interaction between the
+      pairs EKEY/EKEY? and KEY/KEY?.
+      This standard does not define a timing relationship between
+      KEY? and EKEY?.  Undefined results may be
+      avoided by using only one pairing of KEY/ KEY?
+      or EKEY/EKEY? in a program for each input
+      stream.
+
+      EKEY assumes no particular numerical correspondence
+      between particular event code values and the values
+      representing standard characters.  On some systems, this may
+      allow two separate keys that correspond to the same standard
+      character to be distinguished from one another.  A standard
+      program may only interpret the results of EKEY via the
+      translation words provided for that purpose
+      (EKEY>CHAR and EKEY>FKEY).
+
+      See: A.6.1.1750 KEY, 10.6.2.1306 EKEY>CHAR and
+      10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1306
+
+EKEY>CHAR
+
+e-key-to-char
+
+FACILITY EXT
+
+ 
+
+ ( x -- x false  |  char true )
+
+      If the keyboard event x corresponds to a character in the
+      implementation-defined character set, return that character and
+      true. Otherwise return x and false.
+
+See
+
+ A.10.6.2.1306  EKEY>CHAR.
+
+Rationale
+
+ CHAR -->
+      EKEY>CHAR translates a keyboard event into the
+      corresponding member of the character set, if such a
+      correspondence exists for that event.
+
+      It is possible that several different keyboard events may
+      correspond to the same character, and other keyboard events
+      may correspond to no character.
+
+10.6.2.1306.40
+
+EKEY>FKEY
+
+e-key-to-f-key
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( x -- u flag )
+
+      If the keyboard event x corresponds to a keypress in the
+      implementation-defined special key set, return that key's id
+      u and true. Otherwise return x and
+      false.
+
+Note
+
+      The keyboard may lack some of the keys, or the capability to report
+      them. Programs should be written such that they also work (although
+      less conveniently or with less functionality) if these key numbers
+      cannot be produced.
+
+See
+
+      10.6.2.1305 EKEY,
+      10.6.2.1740.01 K-ALT-MASK,
+      10.6.2.1740.02 K-CTRL-MASK,
+      10.6.2.1740.03 K-DELETE,
+      10.6.2.1740.04 K-DOWN,
+      10.6.2.1740.05 K-END,
+      10.6.2.1740.06 K-F1,
+      10.6.2.1740.07 K-F10,
+      10.6.2.1740.08 K-F11,
+      10.6.2.1740.09 K-F12,
+      10.6.2.1740.10 K-F2,
+      10.6.2.1740.11 K-F3,
+      10.6.2.1740.12 K-F4,
+      10.6.2.1740.13 K-F5,
+      10.6.2.1740.14 K-F6,
+      10.6.2.1740.15 K-F7,
+      10.6.2.1740.16 K-F8,
+      10.6.2.1740.17 K-F9,
+      10.6.2.1740.18 K-HOME,
+      10.6.2.1740.19 K-INSERT,
+      10.6.2.1740.20 K-LEFT,
+      10.6.2.1740.21 K-NEXT,
+      10.6.2.1740.22 K-PRIOR,
+      10.6.2.1740.23 K-RIGHT,
+      10.6.2.1740.24 K-SHIFT-MASK,
+      10.6.2.1740.25 K-UP,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+Rationale
+
+ FKEY -->
+      EKEY produces an abstract cell type for a keyboard
+      event (e.g., a keyboard scan code).  EKEY>FKEY checks
+      if such an event corresponds to a special (non-graphic) key
+      press, and if so, returns a code for the special key press.
+      The encoding of special keys (returned by EKEY>FKEY)
+      may be different from the encoding of these keys as keyboard
+      events (input to EKEY>FKEY).
+
+      Typical Use:
+
+        ... EKEY EKEY>FKEY IF
+   CASE
+     K-UP OF ... ENDOF
+     K-F1 OF ... ENDOF
+     K-LEFT K-SHIFT-MASK OR
+        K-CTRL-MASK OR
+        OF ... ENDOF
+     ...
+   ENDCASE
+ELSE
+   ...
+THEN
+
+      The codes for the special keys are system-dependent, but this
+      standard provides words for getting the key codes for a number
+      of keys:
+
+Word Key      Word Key
+
+K-F1		F1	K-LEFT	cursor left
+
+K-F2		F2	K-RIGHT	cursor right
+
+K-F3		F3	K-UP		cursor up
+
+K-F4		F4	K-DOWN	cursor down
+
+K-F5		F5	K-HOME	home or Pos1
+
+K-F6		F6	K-END	End
+
+K-F7		F7	K-PRIOR	PgUp or Prior
+
+K-F8		F8	K-NEXT	PgDn or Next
+
+K-F9		F9	K-INSERT	Insert
+
+K-F10	F10	K-DELETE	Delete
+
+K-F11	F11
+
+K-F12	F12
+
+      In addition, you can get codes for shifted variants of these
+      keys by ORing with K-SHIFT-MASK, K-CTRL-MASK
+      and/or K-ALT-MASK, e.g. K-CTRL-MASK
+      K-ALT-MASK OR K-DELETE OR.
+      The masks for the shift keys are:
+
+Word 				Key
+
+K-SHIFT-MASK	Shift
+
+K-CTRL-MASK	Ctrl
+
+K-ALT-MASK	Alt
+
+      Note that not all of these keys are available on all systems, and not
+      all combinations of keys and shift keys are available.  Therefore
+      programs should be written such that they continue to work (although
+      less conveniently or with less functionality) if these key combinations
+      cannot be produced.
+
+Implementation
+
+ FKEY -->
+      The implementation is closely tied to the implementation
+      of EKEY and therefore unportable.
+
+Testing
+
+ FKEY -->
+
+: TFKEY" ( "ccc<quote>" -- u flag )
+    CR ." Please press " POSTPONE ." EKEY EKEY>FKEY ;
+
+        T{ TFKEY" <left>"  -> K-LEFT  <TRUE> }T
+T{ TFKEY" <right>" -> K-RIGHT <TRUE> }T
+T{ TFKEY" <up>"    -> K-UP    <TRUE> }T
+T{ TFKEY" <down>"  -> K-DOWN  <TRUE> }T
+T{ TFKEY" <home>"  -> K-HOME  <TRUE> }T
+T{ TFKEY" <end>"   -> K-END   <TRUE> }T
+T{ TFKEY" <prior>" -> K-PRIOR <TRUE> }T
+T{ TFKEY" <next>"  -> K-NEXT  <TRUE> }T
+
+        T{ TFKEY" <F1>"  -> K-F1  <TRUE> }T
+T{ TFKEY" <F2>"  -> K-F2  <TRUE> }T
+T{ TFKEY" <F3>"  -> K-F3  <TRUE> }T
+T{ TFKEY" <F4>"  -> K-F4  <TRUE> }T
+T{ TFKEY" <F5>"  -> K-F5  <TRUE> }T
+T{ TFKEY" <F6>"  -> K-F6  <TRUE> }T
+T{ TFKEY" <F7>"  -> K-F7  <TRUE> }T
+T{ TFKEY" <F8>"  -> K-F8  <TRUE> }T
+T{ TFKEY" <F9>"  -> K-F9  <TRUE> }T
+T{ TFKEY" <F10>" -> K-F10 <TRUE> }T
+T{ TFKEY" <F11>" -> K-F11 <TRUE> }T
+T{ TFKEY" <F11>" -> K-F12 <TRUE> }T
+
+        T{ TFKEY" <shift-left>" -> K-LEFT K-SHIFT-MASK OR <TRUE> }T
+T{ TFKEY" <ctrl-left>"  -> K-LEFT K-CTRL-MASK  OR <TRUE> }T
+T{ TFKEY" <alt-left>"   -> K-LEFT K-ALT-MASK   OR <TRUE> }T
+
+        T{ TFKEY" <a>" SWAP EKEY>CHAR -> <FALSE> CHAR a <TRUE> }T
+
+10.6.2.1307
+
+EKEY?
+
+e-key-question
+
+FACILITY EXT
+
+ 
+
+ ( -- flag )
+
+      If a keyboard event is available, return true. Otherwise
+      return false. The event shall be returned by the next
+      execution of EKEY.
+
+      After EKEY? returns with a value of true,
+      subsequent executions of EKEY? prior to the execution of
+      KEY, KEY? or EKEY also return
+      true, referring to the same event.
+
+10.6.2.1325
+
+EMIT?
+
+emit-question
+
+FACILITY EXT
+
+ 
+
+ ( -- flag )
+
+      flag is true if the user output device is ready to
+      accept data and the execution of EMIT in place of
+      EMIT? would not have suffered an indefinite delay. If
+      the device status is indeterminate, flag is true.
+
+See
+
+ A.10.6.2.1325  EMIT?.
+
+Rationale
+
+      An indefinite delay is a device related condition, such as
+      printer off-line, that requires operator intervention before
+      the device will accept new data.
+
+10.6.2.1336
+
+END-STRUCTURE
+
+ 
+
+FACILITY EXT
+
+X:structures
+
+ 
+
+ ( struct-sys +n -- )
+
+      Terminate definition of a structure started by
+      BEGIN-STRUCTURE.
+
+See
+
+ 10.6.2.0135 +FIELD,
+      10.6.2.0763 BEGIN-STRUCTURE.
+
+Implementation
+
+      Terminate definition of a structure.
+
+      : END-STRUCTURE  \ addr n --
+   SWAP ! ;          \ set len
+
+10.6.2.1518
+
+FIELD:
+
+field-colon
+
+FACILITY EXT
+
+X:structures
+
+ 
+
+ ( n1 "<spaces>name" -- n2 )
+
+      Skip leading space delimiters. Parse name delimited by
+      a space. Offset is the first cell aligned value greater
+      than or equal to n1.  n2 = offset + 1 cell.
+
+      Create a definition for name with the execution semantics
+      given below.
+
+name Execution
+
+      ( addr1 -- addr2 )
+
+      Add the offset calculated during the compile-time action
+      to addr1 giving the address addr2.
+
+See
+
+ 10.6.2.0135 +FIELD,
+      10.6.2.0763 BEGIN-STRUCTURE,
+10.6.2.1336 END-STRUCTURE,
+      A.10.6.2.1518  FIELD:.
+
+Rationale
+
+      Create an aligned single-cell field in a data structure.
+
+      The various xFIELD: words provide for different
+      alignment and size allocation.
+
+      The xFIELD: words could be defined as:
+
+        : FIELD:      ( n1 "name" -- n2 ; addr1 -- addr2 )    ALIGNED   1 CELLS   +FIELD ;
+
+        : CFIELD:    ( n1 "name" -- n2 ; addr1 -- addr2 )              1 CHARS   +FIELD ;
+
+        : FFIELD:   ( n1 "name" -- n2 ; addr1 -- addr2 )    FALIGNED  1 FLOATS  +FIELD ;
+
+        : SFFIELD:  ( n1 "name" -- n2 ; addr1 -- addr2 )    SFALIGNED  1 SFLOATS  +FIELD ;
+
+        : DFFIELD:  ( n1 "name" -- n2 ; addr1 -- addr2 )    DFALIGNED  1 DFLOATS  +FIELD ;
+
+10.6.2.1740.01
+
+K-ALT-MASK
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Mask for the Alt key, that can be ORed with the
+      key value to produce a value that the sequence EKEY
+      EKEY>FKEY may produce when the user presses the
+      corresponding key combination.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.02
+
+K-CTRL-MASK
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Mask for the Ctrl key, that can be ORed with the
+      key value to produce a value that the sequence EKEY
+      EKEY>FKEY may produce when the user presses the
+      corresponding key combination.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.03
+
+K-DELETE
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "Delete" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.04
+
+K-DOWN
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "cursor down" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.05
+
+K-END
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "End" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.06
+
+K-F1
+
+k-f-1
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F1" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.07
+
+K-F10
+
+k-f-10
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F10" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.08
+
+K-F11
+
+k-f-11
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F11" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.09
+
+K-F12
+
+k-f-12
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F12" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.10
+
+K-F2
+
+k-f-2
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F2" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.11
+
+K-F3
+
+k-f-3
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F3" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.12
+
+K-F4
+
+k-f-4
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F4" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.13
+
+K-F5
+
+k-f-5
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F5" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.14
+
+K-F6
+
+k-f-6
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F6" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.15
+
+K-F7
+
+k-f-7
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F7" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.16
+
+K-F8
+
+k-f-8
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F8" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.17
+
+K-F9
+
+k-f-9
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "F9" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.18
+
+K-HOME
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "home" or "Pos1" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.19
+
+K-INSERT
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "Insert" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.20
+
+K-LEFT
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "cursor left" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.21
+
+K-NEXT
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "PgDn" (Page Down) or "Next" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.22
+
+K-PRIOR
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "PgUp" (Page Up) or "Prior" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.23
+
+K-RIGHT
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "cursor right" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.24
+
+K-SHIFT-MASK
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Mask for the Shift key, that can be ORed with the
+      key value to produce a value that the sequence EKEY
+      EKEY>FKEY may produce when the user presses the
+      corresponding key combination.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1740.25
+
+K-UP
+
+ 
+
+FACILITY EXT
+
+X:ekeys
+
+ 
+
+ ( -- u )
+
+      Leaves the value u that the sequence EKEY
+      EKEY>FKEY would produce when the user presses the
+      "cursor up" key.
+
+See
+
+ 10.6.2.1306.40 EKEY>FKEY,
+      A.10.6.2.1306.40 EKEY>FKEY.
+
+10.6.2.1905
+
+MS
+
+ 
+
+FACILITY EXT
+
+ 
+
+ ( u -- )
+
+      Wait at least u milliseconds.
+
+Note
+
+      The actual length and variability of the time period depends
+      upon the implementation-defined resolution of the system clock
+      and upon other system and computer characteristics beyond the
+      scope of this standard.
+
+See
+
+ A.10.6.2.1905  MS.
+
+Rationale
+
+      Although their frequencies vary, every system has a clock.
+      Since many programs need to time intervals, this word is
+      offered. Use of milliseconds as an internal unit of time is
+      a practical "least common denominator" external unit. It
+      is assumed implementors will use "clock ticks" (whatever
+      size they are) as an internal unit and convert as appropriate.
+
+10.6.2.2292
+
+TIME&DATE
+
+time-and-date
+
+FACILITY EXT
+
+ 
+
+ ( -- +n1 +n2 +n3 +n4 +n5 +n6 )
+
+      Return the current time and date.
+      +n1 is the second {0...59},
+      +n2 is the minute {0...59},
+      +n3 is the hour {0...23},
+      +n4 is the day {1...31},
+      +n5 is the month {1...12} and
+      +n6 is the year (e.g., 1991).
+
+See
+
+ A.10.6.2.2292  TIME&DATE.
+
+Rationale
+
+      Most systems have a real-time clock/calendar.
+      This word gives portable access to it.
+
+< The optional Exception word set
+
+The optional File-Access word set >

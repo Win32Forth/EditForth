@@ -1,6 +1,6 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply workflow polished in **2.3.1**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**.
 
 ## Requirements (local models)
 
@@ -19,12 +19,13 @@ ollama pull gemma4:e4b
 
 ## Basic workflow
 
-1. Open **View → Ask Forth** (⌥⌘A).  
+1. Show the Ask Forth panel: trailing **sidebar** button on the tab bar, **View → Show Ask Forth**, or **⌥⌘A**. Hide the same way (or the sidebar button in the panel header) while you edit results in `AskForth-N.fth`.  
 2. Type a question in **Prompt**, or select editor text and click **Capture Selected to Prompt**.  
 3. Optionally leave **Include Library context** on (default folder **`~/Documents/EditForth/Library/Sample`**; **Library…** to change).  
-4. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
-5. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
-6. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
+4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
+5. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
+6. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
+7. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
 
 Typical pattern: a broad Ask (“Make me a small database”) often produces a full but flawed draft; **Agent Enhance Reply** usually yields a much better second section in the same file.
 
@@ -39,7 +40,22 @@ Turn on **Show Agent Transcript** (beside the button) if you want to read the ev
 
 ## Library context
 
-Library search does **not** send the whole tree. It scores `.fth` files for tokens in your prompt and includes only the top excerpts. Default folder: **`Library/Sample`**.
+Library search does **not** send the whole tree. It scores `.fth` / `.txt` files for tokens in your prompt and includes only the top excerpts. Default folder: **`Library/Sample`**.
+
+In addition, Ask Forth always also searches **`Library/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
+
+## Fetch URLs in Prompt
+
+When enabled (default), Ask and Agent Enhance Reply:
+
+1. Scan the **Prompt** for up to four `http`/`https` URLs, download each page, strip HTML to text, and include capped excerpts.  
+2. **Auto-boost from forth-standard.org** when the Prompt looks like a word lookup — e.g. `` `OPEN-FILE` ``, “what does DUP do”, or a short prompt that names a standard word. EditForth resolves words via `Library/Reference/Forth-2012-word-urls.json` and fetches the live standard page (up to three words).
+
+Status notes look like `· Web 1 page(s) · Standard DUP`. Turn the toggle off to stay fully offline aside from Ollama itself.
+
+## Web browser tab
+
+**View → Open Web Page…** (⇧⌘L) opens an embedded browser tab (default [forth-standard.org](https://forth-standard.org/)). Use **Back** / **Forward** at the top left of that editor chrome, follow links in-page, and **Send to Ask Forth** to append the current URL to the Prompt (and show the Ask panel). More ideas: repo root `ASKFORTHMORE.md`.
 
 ## Streaming
 
