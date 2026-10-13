@@ -14,13 +14,17 @@ struct OpenAICompatibleClient: LLMClient {
     var baseURL: URL
     /// Called per request so Keychain / env updates apply without rebuilding the client.
     var apiKeyProvider: @Sendable () -> String?
+    /// Sampling temperature (`temperature` field on chat/completions).
+    var temperature: Double
 
     init(
         baseURL: URL = URL(string: AskForthLLMSettings.defaultOpenAIBaseURL)!,
-        apiKeyProvider: @escaping @Sendable () -> String? = { AskForthLLMSettings.resolveAPIKey() }
+        apiKeyProvider: @escaping @Sendable () -> String? = { AskForthLLMSettings.resolveAPIKey() },
+        temperature: Double = AskForthLLMSettings.defaultTemperature
     ) {
         self.baseURL = baseURL
         self.apiKeyProvider = apiKeyProvider
+        self.temperature = AskForthLLMSettings.clampTemperature(temperature)
     }
 
     func ping() async -> Bool {
@@ -110,7 +114,10 @@ struct OpenAICompatibleClient: LLMClient {
         var body: [String: Any] = [
             "model": model,
             "stream": stream,
-            "messages": messages.map { encodeMessage($0) }
+            "messages": messages.map { encodeMessage($0) },
+            // mlx_lm / LM Studio often default to a short cap; raise for full Forth listings.
+            "max_tokens": LLMGenerationLimits.maxCompletionTokens,
+            "temperature": temperature
         ]
         if let tools, !tools.isEmpty {
             body["tools"] = tools.map { encodeTool($0) }

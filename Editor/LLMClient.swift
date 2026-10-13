@@ -8,6 +8,12 @@
 
 import Foundation
 
+/// Shared completion budget for Ask Forth backends (Ollama `num_predict`, OpenAI `max_tokens`).
+/// Local servers often default much lower and cut off long Forth listings mid-definition.
+enum LLMGenerationLimits {
+    static let maxCompletionTokens = 8192
+}
+
 enum LLMClientError: LocalizedError {
     case unreachable(String)
     case badStatus(Int, String)

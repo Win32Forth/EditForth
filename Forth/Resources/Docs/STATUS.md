@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.3.3** (build **12**) — shipped  
+**Current:** **2.3.4** (build **13**) — working tree (unreleased)  
 
 **Last updated:** 2026-10-13
+
+---
+
+## v2.3.4 — Ask Forth model profiles (unreleased)
+
+**Version strings:** marketing **2.3.4**, build **13** (EditForth + companion 64Forth lockstep). Not yet shipped as a DMG/tag; last public release remains **v2.3.3**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.4 === Oct 13, 2026 12:29 PM ===
+```
+
+### Highlights (working tree)
+
+- **Model profiles** — named saved setups (Ollama + OpenAI-compatible) with panel picker + **Models…** dialog; per-profile Base URL and Keychain API key; migrates legacy single Provider/Model/key and seeds **Ollama gemma4:e4b**, **SpaceXAI grok-4.7**, **Local mlx :1234**.
+- **Temperature** — per-profile slider (default **0.3**, range 0…2); sent on every Ask / Enhance (`options.temperature` / `temperature`).
+- **Completion budget** — **8192** tokens (`max_tokens` / `num_predict`) so long Forth listings are less likely to truncate mid-definition.
+- **Swift 6 isolation cleanups** — AskForthToolAgent / ForthAgentRunner / OpenAI key resolve / DockController MainActor warnings addressed.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ---
 

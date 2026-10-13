@@ -34,11 +34,14 @@ final class AIAssistantModel: ObservableObject {
     @Published var useToolAgent: Bool
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
+    /// Active profile id (panel picker). Details edited in Models….
+    @Published var activeProfileID: UUID
+    @Published var profiles: [AskForthModelProfile]
+    /// Convenience mirrors of the active profile (Ask path + status strings).
     @Published var modelName: String
     @Published var provider: AskForthLLMProvider
-    /// Base URL for OpenAI-compatible (editable in panel).
     @Published var openAIBaseURLString: String
-    /// Draft API key field (not written until Save).
+    /// Draft API key for the Models sheet (active or selected profile).
     @Published var apiKeyDraft: String = ""
     @Published var apiKeyStatus: String = ""
 
@@ -53,9 +56,12 @@ final class AIAssistantModel: ObservableObject {
     private var client: LLMClient
 
     init(client: LLMClient? = nil) {
-        let provider = AskForthLLMSettings.provider
-        self.provider = provider
-        self.openAIBaseURLString = AskForthLLMSettings.openAIBaseURLString
+        let list = AskForthLLMSettings.ensureProfiles()
+        let active = AskForthLLMSettings.activeProfile
+        self.profiles = list
+        self.activeProfileID = active.id
+        self.provider = active.provider
+        self.openAIBaseURLString = active.resolvedBaseURLString
         self.modelName = AskForthLLMSettings.activeModel
         self.client = client ?? AskForthLLMSettings.makeClient()
         if UserDefaults.standard.object(forKey: Self.libraryRAGKey) == nil {
@@ -78,58 +84,68 @@ final class AIAssistantModel: ObservableObject {
 
     var providerLabel: String { client.providerName }
 
+    var activeProfileCaption: String {
+        profiles.first(where: { $0.id == activeProfileID })?.caption
+            ?? AskForthLLMSettings.activeProfile.caption
+    }
+
     var askOutputFileName: String? {
         askOutputFileURL?.lastPathComponent
     }
 
-    var modelFieldPlaceholder: String {
-        switch provider {
-        case .ollama: return AskForthLLMSettings.defaultOllamaModel
-        case .openAICompatible: return AskForthLLMSettings.defaultOpenAIModel
-        }
+    /// Reload profiles from disk after the Models sheet closes or edits.
+    func reloadProfilesFromSettings() {
+        profiles = AskForthLLMSettings.loadProfiles()
+        let active = AskForthLLMSettings.activeProfile
+        activeProfileID = active.id
+        applyActiveProfileToState(rebuildClient: true)
+        refreshAPIKeyStatus(for: active.id)
     }
 
-    func persistModelName() {
-        AskForthLLMSettings.activeModel = modelName
+    /// Switch the active saved profile (panel picker).
+    func selectProfile(id: UUID) {
+        guard profiles.contains(where: { $0.id == id }) else { return }
+        AskForthLLMSettings.selectProfile(id: id)
+        activeProfileID = id
+        applyActiveProfileToState(rebuildClient: true)
+        refreshAPIKeyStatus(for: id)
+        let name = profiles.first(where: { $0.id == id })?.name ?? "profile"
+        status = "Model profile: \(name)."
     }
 
-    /// Persist the model under the *current* provider, switch provider, load that provider’s model.
-    func selectProvider(_ newProvider: AskForthLLMProvider) {
-        AskForthLLMSettings.activeModel = modelName
-        AskForthLLMSettings.provider = newProvider
-        AskForthLLMSettings.openAIBaseURLString = openAIBaseURLString
-        provider = newProvider
+    private func applyActiveProfileToState(rebuildClient: Bool) {
+        let active = AskForthLLMSettings.activeProfile
+        provider = active.provider
         modelName = AskForthLLMSettings.activeModel
-        client = AskForthLLMSettings.makeClient()
-        refreshAPIKeyStatus()
-        status = "Provider: \(provider.menuTitle)."
-    }
-
-    func persistOpenAIBaseURL() {
-        AskForthLLMSettings.openAIBaseURLString = openAIBaseURLString
-        if provider == .openAICompatible {
+        openAIBaseURLString = active.resolvedBaseURLString
+        if rebuildClient {
             client = AskForthLLMSettings.makeClient()
         }
     }
 
-    func refreshAPIKeyStatus() {
-        if AskForthLLMSettings.hasKeychainAPIKey {
+    func refreshAPIKeyStatus(for profileID: UUID? = nil) {
+        let id = profileID ?? activeProfileID
+        let profile = profiles.first(where: { $0.id == id }) ?? AskForthLLMSettings.activeProfile
+        guard profile.provider == .openAICompatible else {
+            apiKeyStatus = ""
+            return
+        }
+        if AskForthLLMSettings.hasKeychainAPIKey(for: id) {
             apiKeyStatus = "Key saved in Keychain"
         } else if ProcessInfo.processInfo.environment["XAI_API_KEY"]?.isEmpty == false {
             apiKeyStatus = "Using XAI_API_KEY from environment"
-        } else if provider == .openAICompatible {
-            apiKeyStatus = "No API key — Save one or export XAI_API_KEY"
         } else {
-            apiKeyStatus = ""
+            apiKeyStatus = "No API key — Save one or export XAI_API_KEY"
         }
     }
 
-    func saveAPIKeyDraft() {
+    func saveAPIKeyDraft(for profileID: UUID? = nil) {
+        let id = profileID ?? activeProfileID
         do {
-            try AskForthLLMSettings.saveAPIKey(apiKeyDraft)
+            try AskForthLLMSettings.saveAPIKey(apiKeyDraft, for: id)
             apiKeyDraft = ""
-            refreshAPIKeyStatus()
-            if provider == .openAICompatible {
+            refreshAPIKeyStatus(for: id)
+            if id == activeProfileID, provider == .openAICompatible {
                 client = AskForthLLMSettings.makeClient()
             }
             status = "API key saved."
@@ -138,11 +154,15 @@ final class AIAssistantModel: ObservableObject {
         }
     }
 
-    func clearAPIKey() {
+    func clearAPIKey(for profileID: UUID? = nil) {
+        let id = profileID ?? activeProfileID
         do {
-            try AskForthLLMSettings.deleteAPIKey()
+            try AskForthLLMSettings.deleteAPIKey(for: id)
             apiKeyDraft = ""
-            refreshAPIKeyStatus()
+            refreshAPIKeyStatus(for: id)
+            if id == activeProfileID {
+                client = AskForthLLMSettings.makeClient()
+            }
             status = "API key cleared."
         } catch {
             status = error.localizedDescription
@@ -257,8 +277,6 @@ final class AIAssistantModel: ObservableObject {
     ) {
         guard !isBusy else { return }
 
-        persistModelName()
-        persistOpenAIBaseURL()
         persistLibraryRAG()
         persistURLFetch()
         persistWebSearch()
@@ -266,10 +284,11 @@ final class AIAssistantModel: ObservableObject {
         // If the user pasted a key but forgot Save, persist it before the request.
         if provider == .openAICompatible,
            !apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            saveAPIKeyDraft()
+            saveAPIKeyDraft(for: activeProfileID)
         }
-        // Rebuild client in case Base URL / key changed.
+        // Rebuild client from the active profile.
         client = AskForthLLMSettings.makeClient()
+        applyActiveProfileToState(rebuildClient: false)
         isBusy = true
         status = busyStatus
         reply = ""
@@ -282,12 +301,14 @@ final class AIAssistantModel: ObservableObject {
         let useTools = useToolAgent
         let urlSource = prompt
         let providerSnapshot = provider
+        let baseURLSnapshot = openAIBaseURLString
+        let profileIDSnapshot = activeProfileID
 
         Task {
-            if providerSnapshot == .openAICompatible, !AskForthLLMSettings.hasAPIKey {
+            if providerSnapshot == .openAICompatible, !AskForthLLMSettings.hasAPIKey(for: profileIDSnapshot) {
                 await MainActor.run {
                     self.isBusy = false
-                    self.status = "No API key — paste one and click Save (or export XAI_API_KEY)."
+                    self.status = "No API key — open Models…, paste a key, and click Save (or export XAI_API_KEY)."
                 }
                 return
             }
@@ -299,7 +320,7 @@ final class AIAssistantModel: ObservableObject {
                     case .ollama:
                         self.status = "Ollama is not reachable at 127.0.0.1:11434."
                     case .openAICompatible:
-                        self.status = "Cannot reach \(AskForthLLMSettings.openAIBaseURLString) (network). Check Base URL and connectivity."
+                        self.status = "Cannot reach \(baseURLSnapshot) (network). Check Base URL in Models… and connectivity."
                     }
                 }
                 return
@@ -392,9 +413,8 @@ final class AIAssistantModel: ObservableObject {
                     self.status = "Searching Library…"
                 }
                 let settings = ForthLibraryRAGSettings.load()
-                let rag = await Task.detached(priority: .userInitiated) {
-                    ForthLibraryRAG.retrieve(for: ragQuery, settings: settings)
-                }.value
+                // ForthLibraryRAG is MainActor-isolated (module default); do not Task.detached it.
+                let rag = ForthLibraryRAG.retrieve(for: ragQuery, settings: settings)
                 if !rag.isEmpty {
                     let block = rag.contextBlock(maxChars: settings.maxChars)
                     if !block.isEmpty {

@@ -15,7 +15,8 @@ enum SixtyFourForthLocator {
     /// **Debug:** sibling Products, then newest `EditForth-*` DerivedData Debug,
     /// then project-local `DerivedData/*/Build/Products/Debug/64Forth.app`.
     /// **Release:** sibling, then `/Applications/64Forth.app` (never Debug DerivedData).
-    static func locateApp() -> URL? {
+    /// File-system only — `nonisolated` so headless `--agent` can call from off the main actor.
+    nonisolated static func locateApp() -> URL? {
         let fm = FileManager.default
 
         func existsApp(_ url: URL) -> URL? {
@@ -86,7 +87,7 @@ enum SixtyFourForthLocator {
     }
 
     /// `Contents/MacOS/64Forth` inside the located app, if executable.
-    static func locateBinary() -> URL? {
+    nonisolated static func locateBinary() -> URL? {
         guard let app = locateApp() else { return nil }
         let exe = app.appendingPathComponent("Contents/MacOS/64Forth")
         guard FileManager.default.isExecutableFile(atPath: exe.path) else { return nil }

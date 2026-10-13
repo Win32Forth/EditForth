@@ -134,20 +134,27 @@ enum ForthAgentRunner {
             proc.standardOutput = outPipe
             proc.standardError = errPipe
 
-            let lock = NSLock()
-            var resumed = false
-            func finish(_ result: Result<ForthAgentResult, Error>) {
-                lock.lock()
-                defer { lock.unlock() }
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(with: result)
+            final class ResumeOnce: @unchecked Sendable {
+                private let lock = NSLock()
+                private var resumed = false
+                private let continuation: CheckedContinuation<ForthAgentResult, Error>
+                init(_ continuation: CheckedContinuation<ForthAgentResult, Error>) {
+                    self.continuation = continuation
+                }
+                func finish(_ result: Result<ForthAgentResult, Error>) {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    guard !resumed else { return }
+                    resumed = true
+                    continuation.resume(with: result)
+                }
             }
+            let gate = ResumeOnce(continuation)
 
             do {
                 try proc.run()
             } catch {
-                finish(.failure(ForthAgentError.launchFailed(error.localizedDescription)))
+                gate.finish(.failure(ForthAgentError.launchFailed(error.localizedDescription)))
                 return
             }
 
@@ -155,7 +162,7 @@ enum ForthAgentRunner {
                 if proc.isRunning {
                     proc.terminate()
                 }
-                finish(.failure(ForthAgentError.timedOut(timeout)))
+                gate.finish(.failure(ForthAgentError.timedOut(timeout)))
             }
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
 
@@ -174,7 +181,7 @@ enum ForthAgentRunner {
                     binaryPath: executable.path,
                     workingDirectory: workingDirectory
                 )
-                finish(.success(result))
+                gate.finish(.success(result))
             }
         }
     }

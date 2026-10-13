@@ -187,7 +187,7 @@ struct DockedConsoleView: NSViewRepresentable {
         }
 
         func recall(up: Bool) {
-            guard let tv = textView, !history.isEmpty else { return }
+            guard textView != nil, !history.isEmpty else { return }
             if up {
                 if historyIndex < 0 { historyIndex = history.count - 1 }
                 else if historyIndex > 0 { historyIndex -= 1 }

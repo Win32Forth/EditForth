@@ -90,9 +90,9 @@ Emitter works well but is noisy on the console.
 
 ---
 
-## 5. Ask Forth (local AI) — **shipped 2.3.0 … 2.3.3**
+## 5. Ask Forth (local AI) — **shipped 2.3.0 … 2.3.3; profiles in 2.3.4 tree**
 
-Trailing inspector (**View → Ask Forth**, ⌥⌘A). **Ollama** (default) or **OpenAI-compatible** HTTP via `LLMClient` (default Ollama model `gemma4:e4b`). Flow: **Capture Selected to Prompt** → **Ask** → stream into **`~/Documents/EditForth/AskForth/AskForth-N.fth`** (80-column wrap) → **Agent Enhance Reply** (headless `--agent` with Autoload, then append **Agent Enhanced Reply**). Library RAG defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012); indexes `.fth`/`.txt`/`.md`/`.swift`. **Fetch URLs in Prompt** + forth-standard.org boost; opt-in **Include web search** (DuckDuckGo Lite); opt-in **Tool agent** (Ollama tools); **View → Open Web Page** (⇧⌘L) omnibox. Live load via status **INCLUDE**. User doc: `Forth/Resources/Docs/Ask-Forth.md`. More ideas: `ASKFORTHMORE.md`.
+Trailing inspector (**View → Ask Forth**, ⌥⌘A). **Saved model profiles** (panel picker + **Models…**): Ollama or OpenAI-compatible HTTP, per-profile Base URL / Keychain key / Temperature (default 0.3); default Ollama tag `gemma4:e4b`. Flow: **Capture Selected to Prompt** → **Ask** → stream into **`~/Documents/EditForth/AskForth/AskForth-N.fth`** (80-column wrap; up to **8192** completion tokens) → **Agent Enhance Reply** (headless `--agent` with Autoload, then append **Agent Enhanced Reply**). Library RAG defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012); indexes `.fth`/`.txt`/`.md`/`.swift`. **Fetch URLs in Prompt** + forth-standard.org boost; opt-in **Include web search** (DuckDuckGo Lite); opt-in **Tool agent** (Ollama tools); **View → Open Web Page** (⇧⌘L) omnibox. Live load via status **INCLUDE**. User doc: `Forth/Resources/Docs/Ask-Forth.md`. More ideas: `ASKFORTHMORE.md`.
 
 ## 6. Suggested order of attack
 

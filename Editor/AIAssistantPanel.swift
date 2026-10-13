@@ -21,12 +21,11 @@ struct AIAssistantPanel: View {
     @State private var promptHeight = 40.0
     @State private var promptDragStart: CGFloat?
     @State private var showLibrarySettings = false
+    @State private var showModelsSettings = false
     /// Last path component of the Library RAG folder (Library button title).
     @State private var libraryFolderLeaf = ""
     /// Full Library RAG folder path (Library button tooltip).
     @State private var libraryFolderPath = ""
-    /// When true, API key draft is shown in clear text so paste/prefix can be checked.
-    @State private var revealAPIKey = false
 
     /// About two lines of monospaced body text.
     private static let promptMinHeight: CGFloat = 36
@@ -70,14 +69,23 @@ struct AIAssistantPanel: View {
                 storedPromptHeight = Double(promptHeight)
             }
             refreshLibraryFolderLeaf()
+            model.reloadProfilesFromSettings()
         }
         .onChange(of: showLibrarySettings) { _, isOpen in
             if !isOpen {
                 refreshLibraryFolderLeaf()
             }
         }
+        .onChange(of: showModelsSettings) { _, isOpen in
+            if !isOpen {
+                model.reloadProfilesFromSettings()
+            }
+        }
         .sheet(isPresented: $showLibrarySettings) {
             LibraryRAGSettingsSheet()
+        }
+        .sheet(isPresented: $showModelsSettings) {
+            AskForthModelsSettingsSheet(model: model)
         }
     }
 
@@ -121,90 +129,36 @@ struct AIAssistantPanel: View {
                 """
                 Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
 
-                Provider: Ollama (local) or OpenAI-compatible HTTP (default SpaceXAI / xAI at api.x.ai/v1). Hover the Provider and Model controls for details. Model names are stored separately per provider.
+                Pick a saved model profile below (Ollama, SpaceXAI, local mlx, …). Use Models… to add or edit names, base URLs, and per-profile API keys.
                 """
             )
-
-            HStack(spacing: 6) {
-                Text("Provider")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker("", selection: Binding(
-                    get: { model.provider },
-                    set: { model.selectProvider($0) }
-                )) {
-                    ForEach(AskForthLLMProvider.allCases) { p in
-                        Text(p.menuTitle).tag(p)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 200)
-                .help(model.provider.help)
-            }
-
-            if model.provider == .openAICompatible {
-                HStack(spacing: 6) {
-                    Text("Base URL")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField(AskForthLLMSettings.defaultOpenAIBaseURL, text: $model.openAIBaseURLString)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.caption, design: .monospaced))
-                        .onSubmit { model.persistOpenAIBaseURL() }
-                        .help("OpenAI-compatible root, usually https://api.x.ai/v1. Other servers that speak /v1/chat/completions also work.")
-                }
-                HStack(spacing: 6) {
-                    Text("API key")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Group {
-                        if revealAPIKey {
-                            TextField("paste key, then Save", text: $model.apiKeyDraft)
-                        } else {
-                            SecureField("paste key, then Save", text: $model.apiKeyDraft)
-                        }
-                    }
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.caption, design: .monospaced))
-                    .help("Paste your full xAI key (include the xai- prefix if the console shows it). Use Show to verify. Then click Save.")
-                    Button(revealAPIKey ? "Hide" : "Show") {
-                        revealAPIKey.toggle()
-                    }
-                    .font(.caption)
-                    .help(revealAPIKey
-                          ? "Hide the key (black dots again)"
-                          : "Show the pasted key in clear text so you can check the xai- prefix")
-                    Button("Save") {
-                        model.saveAPIKeyDraft()
-                        revealAPIKey = false
-                    }
-                    .font(.caption)
-                    .disabled(model.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("Store the pasted API key in the Keychain")
-                    Button("Clear") { model.clearAPIKey() }
-                        .font(.caption)
-                        .disabled(!AskForthLLMSettings.hasKeychainAPIKey)
-                        .help("Remove the Keychain API key")
-                }
-                if !model.apiKeyStatus.isEmpty {
-                    Text(model.apiKeyStatus)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
 
             HStack(spacing: 6) {
                 Text("Model")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField(model.modelFieldPlaceholder, text: $model.modelName)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.caption, design: .monospaced))
-                    .onSubmit { model.persistModelName() }
-                    .help(model.provider == .ollama
-                          ? "Ollama tag you have pulled (e.g. gemma4:e4b). Must match a model in the Ollama app."
-                          : "OpenAI-compatible model id (e.g. grok-4.7 for SpaceXAI / xAI).")
+                Picker("", selection: Binding(
+                    get: { model.activeProfileID },
+                    set: { model.selectProfile(id: $0) }
+                )) {
+                    ForEach(model.profiles) { profile in
+                        Text(profile.name).tag(profile.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                .help("Saved Ask Forth profiles. Switch anytime; details stay in Models….")
+                Button("Models…") {
+                    showModelsSettings = true
+                }
+                .font(.caption)
+                .help("Add, rename, or edit model profiles (provider, model id, Base URL, API key).")
             }
+            Text(model.activeProfileCaption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .help("Active profile provider and endpoint / model summary.")
 
             HStack(spacing: 8) {
                 Toggle("Include Library context", isOn: $model.includeLibraryContext)
@@ -376,6 +330,316 @@ struct AIAssistantPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+// MARK: - Model profiles sheet
+
+private struct AskForthModelsSettingsSheet: View {
+    @ObservedObject var model: AIAssistantModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var profiles: [AskForthModelProfile] = []
+    @State private var selectedID: UUID?
+    @State private var revealAPIKey = false
+    @State private var draftKey = ""
+    @State private var keyStatus = ""
+    @State private var formError = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Ask Forth models")
+                .font(.title2.weight(.semibold))
+
+            Text("Save named profiles for Ollama and OpenAI-compatible endpoints. The Ask Forth panel picker switches among these without retyping Base URL or model id. Each OpenAI-compatible profile has its own Keychain API key.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Profiles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    List(selection: $selectedID) {
+                        ForEach(profiles) { profile in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(profile.name)
+                                    .font(.body)
+                                Text(profile.caption)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .tag(profile.id)
+                        }
+                    }
+                    .frame(minWidth: 200, maxWidth: 240, minHeight: 220)
+                    .listStyle(.bordered)
+
+                    HStack(spacing: 8) {
+                        Button("Add") { addProfile() }
+                        Button("Duplicate") { duplicateSelected() }
+                            .disabled(selectedID == nil)
+                        Button("Delete") { deleteSelected() }
+                            .disabled(selectedID == nil || profiles.count <= 1)
+                    }
+                    .font(.caption)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    if let binding = selectedBinding {
+                        profileEditor(binding)
+                    } else {
+                        Text("Select a profile to edit.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+
+            if !formError.isEmpty {
+                Text(formError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    commitAndDismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.top, 4)
+        }
+        .padding(20)
+        // Tall enough for OpenAI fields (Base URL + API key + Temperature) with room to grow.
+        .frame(width: 720, height: 560)
+        .onAppear {
+            profiles = AskForthLLMSettings.loadProfiles()
+            selectedID = model.activeProfileID
+            if selectedID == nil {
+                selectedID = profiles.first?.id
+            }
+            refreshKeyUI()
+        }
+        .onChange(of: selectedID) { _, _ in
+            draftKey = ""
+            revealAPIKey = false
+            refreshKeyUI()
+            formError = ""
+        }
+    }
+
+    private var selectedBinding: Binding<AskForthModelProfile>? {
+        guard let id = selectedID,
+              let idx = profiles.firstIndex(where: { $0.id == id }) else { return nil }
+        return $profiles[idx]
+    }
+
+    @ViewBuilder
+    private func profileEditor(_ binding: Binding<AskForthModelProfile>) -> some View {
+        let profile = binding.wrappedValue
+        VStack(alignment: .leading, spacing: 10) {
+            labeledField("Name") {
+                TextField("Profile name", text: binding.name)
+                    .textFieldStyle(.roundedBorder)
+            }
+            labeledField("Provider") {
+                Picker("", selection: binding.provider) {
+                    ForEach(AskForthLLMProvider.allCases) { p in
+                        Text(p.menuTitle).tag(p)
+                    }
+                }
+                .labelsHidden()
+                .help(profile.provider.help)
+            }
+            labeledField("Model") {
+                TextField(
+                    profile.provider == .ollama
+                        ? AskForthLLMSettings.defaultOllamaModel
+                        : AskForthLLMSettings.defaultOpenAIModel,
+                    text: binding.model
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .help(profile.provider == .ollama
+                      ? "Ollama tag you have pulled (e.g. gemma4:e4b)."
+                      : "OpenAI-compatible model id or full local MLX path.")
+            }
+            labeledField("Temperature") {
+                HStack(spacing: 10) {
+                    Slider(
+                        value: Binding(
+                            get: { binding.wrappedValue.temperature },
+                            set: { binding.wrappedValue.temperature = AskForthLLMSettings.clampTemperature($0) }
+                        ),
+                        in: AskForthLLMSettings.temperatureRange,
+                        step: 0.05
+                    )
+                    Text(String(format: "%.2f", profile.temperature))
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
+                .help("Lower (e.g. 0.2–0.4) for steadier Forth; higher for more variety. EditForth default is 0.3. Sent on every Ask / Enhance request so the server default is not used.")
+            }
+            if profile.provider == .openAICompatible {
+                labeledField("Base URL") {
+                    TextField(AskForthLLMSettings.defaultOpenAIBaseURL, text: binding.baseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .help("OpenAI-compatible root, e.g. https://api.x.ai/v1 or http://127.0.0.1:1234/v1.")
+                }
+                labeledField("API key") {
+                    HStack(spacing: 8) {
+                        Group {
+                            if revealAPIKey {
+                                TextField("paste key, then Save", text: $draftKey)
+                            } else {
+                                SecureField("paste key, then Save", text: $draftKey)
+                            }
+                        }
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        Button(revealAPIKey ? "Hide" : "Show") {
+                            revealAPIKey.toggle()
+                        }
+                        Button("Save") {
+                            saveKey(for: profile.id)
+                        }
+                        .disabled(draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Clear") {
+                            clearKey(for: profile.id)
+                        }
+                        .disabled(!AskForthLLMSettings.hasKeychainAPIKey(for: profile.id))
+                    }
+                }
+                if !keyStatus.isEmpty {
+                    Text(keyStatus)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func labeledField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private func refreshKeyUI() {
+        guard let id = selectedID,
+              let profile = profiles.first(where: { $0.id == id }),
+              profile.provider == .openAICompatible else {
+            keyStatus = ""
+            return
+        }
+        if AskForthLLMSettings.hasKeychainAPIKey(for: id) {
+            keyStatus = "Key saved in Keychain for this profile"
+        } else if ProcessInfo.processInfo.environment["XAI_API_KEY"]?.isEmpty == false {
+            keyStatus = "No Keychain key — XAI_API_KEY env will be used if set"
+        } else {
+            keyStatus = "No API key for this profile"
+        }
+    }
+
+    private func saveKey(for id: UUID) {
+        do {
+            try AskForthLLMSettings.saveAPIKey(draftKey, for: id)
+            draftKey = ""
+            revealAPIKey = false
+            refreshKeyUI()
+            formError = ""
+        } catch {
+            formError = error.localizedDescription
+        }
+    }
+
+    private func clearKey(for id: UUID) {
+        do {
+            try AskForthLLMSettings.deleteAPIKey(for: id)
+            draftKey = ""
+            refreshKeyUI()
+            formError = ""
+        } catch {
+            formError = error.localizedDescription
+        }
+    }
+
+    private func addProfile() {
+        persistProfiles()
+        let profile = AskForthModelProfile(
+            name: "New profile",
+            provider: .ollama,
+            model: AskForthLLMSettings.defaultOllamaModel
+        )
+        profiles.append(profile)
+        selectedID = profile.id
+        persistProfiles()
+    }
+
+    private func duplicateSelected() {
+        guard let id = selectedID,
+              let src = profiles.first(where: { $0.id == id }) else { return }
+        persistProfiles()
+        var copy = src
+        copy.id = UUID()
+        copy.name = src.name.hasSuffix(" copy") ? src.name : "\(src.name) copy"
+        profiles.append(copy)
+        selectedID = copy.id
+        if src.provider == .openAICompatible,
+           let key = AskForthLLMSettings.resolveAPIKey(for: src.id),
+           AskForthLLMSettings.hasKeychainAPIKey(for: src.id) {
+            // Copy Keychain secret only when it came from Keychain (not env-only).
+            try? AskForthLLMSettings.saveAPIKey(key, for: copy.id)
+        }
+        persistProfiles()
+        refreshKeyUI()
+    }
+
+    private func deleteSelected() {
+        guard let id = selectedID, profiles.count > 1 else { return }
+        profiles.removeAll { $0.id == id }
+        AskForthLLMSettings.saveProfiles(profiles)
+        try? AskForthLLMSettings.deleteAPIKey(for: id)
+        if AskForthLLMSettings.activeProfileID == id {
+            AskForthLLMSettings.activeProfileID = profiles.first?.id
+        }
+        selectedID = AskForthLLMSettings.activeProfileID ?? profiles.first?.id
+        refreshKeyUI()
+    }
+
+    private func persistProfiles() {
+        // Normalize empty names.
+        for i in profiles.indices {
+            let trimmed = profiles[i].name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                profiles[i].name = profiles[i].provider == .ollama
+                    ? "Ollama \(profiles[i].model)"
+                    : "OpenAI \(profiles[i].model)"
+            }
+        }
+        AskForthLLMSettings.saveProfiles(profiles)
+        if let id = selectedID {
+            AskForthLLMSettings.selectProfile(id: id)
+        }
+    }
+
+    private func commitAndDismiss() {
+        persistProfiles()
+        model.reloadProfilesFromSettings()
+        dismiss()
     }
 }
 

@@ -13,9 +13,15 @@ struct OllamaClient: LLMClient {
 
     /// Override for tests; default is the local daemon.
     var baseURL: URL
+    /// Sampling temperature (`options.temperature`).
+    var temperature: Double
 
-    init(baseURL: URL = URL(string: "http://127.0.0.1:11434")!) {
+    init(
+        baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
+        temperature: Double = AskForthLLMSettings.defaultTemperature
+    ) {
         self.baseURL = baseURL
+        self.temperature = AskForthLLMSettings.clampTemperature(temperature)
     }
 
     func ping() async -> Bool {
@@ -85,7 +91,12 @@ struct OllamaClient: LLMClient {
         var body: [String: Any] = [
             "model": model,
             "stream": stream,
-            "messages": messages.map { encodeMessage($0) }
+            "messages": messages.map { encodeMessage($0) },
+            // Avoid short Modelfile / daemon defaults cutting off long Forth answers.
+            "options": [
+                "num_predict": LLMGenerationLimits.maxCompletionTokens,
+                "temperature": temperature
+            ]
         ]
         if let tools, !tools.isEmpty {
             body["tools"] = tools.map { encodeTool($0) }

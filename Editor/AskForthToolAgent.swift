@@ -78,7 +78,7 @@ enum AskForthToolAgent {
         system: String,
         user: String,
         model: String,
-        onStatus: @escaping @MainActor (String) -> Void,
+        onStatus: @escaping (String) -> Void,
         onDelta: @escaping @Sendable (String) async -> Void
     ) async throws -> RunResult {
         var messages: [LLMChatMessage] = [
@@ -91,7 +91,8 @@ enum AskForthToolAgent {
 
         for round in 1...maxRounds {
             rounds = round
-            await onStatus("Tool agent round \(round)…")
+            // Module default isolation is MainActor — no await needed for sync status updates.
+            onStatus("Tool agent round \(round)…")
             let reply = try await client.chat(
                 messages: messages,
                 tools: toolDefinitions,
@@ -106,7 +107,7 @@ enum AskForthToolAgent {
                     toolCallCount += 1
                     let argSummary = summarizeArgs(call.argumentsJSON)
                     transcriptLines.append("→ \(call.name)(\(argSummary))")
-                    await onStatus("Tool: \(call.name)…")
+                    onStatus("Tool: \(call.name)…")
                     let resultText = await execute(call: call)
                     let capped = String(resultText.prefix(maxToolResultChars))
                     let preview = capped
@@ -133,7 +134,7 @@ enum AskForthToolAgent {
         }
 
         // Cap hit: one more turn without tools to force an answer.
-        await onStatus("Tool agent finishing…")
+        onStatus("Tool agent finishing…")
         messages.append(.user("Tool budget exhausted. Answer now using the tool results already provided. Do not call tools."))
         let final = try await client.chat(
             messages: messages,
@@ -198,9 +199,9 @@ enum AskForthToolAgent {
             let query = stringArg(args, "query") ?? ""
             guard !query.isEmpty else { return "Error: missing query" }
             let settings = ForthLibraryRAGSettings.load()
-            let rag = await Task.detached(priority: .userInitiated) {
-                ForthLibraryRAG.retrieve(for: query, settings: settings)
-            }.value
+            // retrieve is MainActor-isolated under SWIFT_DEFAULT_ACTOR_ISOLATION;
+            // call it directly (same as the rest of the tool agent).
+            let rag = ForthLibraryRAG.retrieve(for: query, settings: settings)
             if rag.isEmpty {
                 return "Library: no hits for “\(query)”."
             }

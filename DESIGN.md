@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.3** / build **12** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.3** (`Releases/EditForth-2.3.3-macOS.dmg`). First public release was **v2.0.0**. Since 2.3.2: opt-in **Include web search** (DuckDuckGo Lite), **Tool agent** (Ollama tools), **OpenAI-compatible** Ask Forth provider (dual with Ollama), Library RAG `.md`/`.swift` + project-folder roots, AskForth output folder UX. Shipped in 2.3.2: **Library/Reference**, **Fetch URLs in Prompt**, forth-standard.org boost, **Web** tabs. Requires Ollama + a pulled model (default `gemma4:e4b`), or an OpenAI-compatible endpoint. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+Marketing **2.3.4** / build **13** for both targets (EditForth + companion 64Forth). Working tree **2.3.4** (unreleased); last shipped DMG/tag **v2.3.3** (`Releases/EditForth-2.3.3-macOS.dmg`). First public release was **v2.0.0**. Tree since 2.3.3: **model profiles** (picker + Models…, per-profile Keychain keys, Temperature default 0.3), **8192** completion tokens. Shipped in 2.3.3: web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG. Requires Ollama + a pulled model (default `gemma4:e4b`), or an OpenAI-compatible endpoint. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ## Why a new project
 

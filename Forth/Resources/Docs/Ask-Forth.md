@@ -1,12 +1,12 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, and **8192** completion tokens in **2.3.4**.
 
 ## Requirements (providers)
 
-Ask Forth talks to a pluggable **`LLMClient`**. Choose **Provider** in the panel:
+Ask Forth talks to a pluggable **`LLMClient`** through **saved model profiles**. Use the panel **Model** picker to switch; open **Models…** to add or edit name, provider, model id, **Temperature**, Base URL, and per-profile API key. Temperature defaults to **0.3** (steadier code than typical server defaults ~0.7–0.8) and is sent on every Ask / Enhance request.
 
-### Ollama (local) — default
+### Ollama (local)
 
 Talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`). Without Ollama running and a model installed, **Ask** / **Agent Enhance Reply** report that the model is unreachable.
 
@@ -17,19 +17,23 @@ Talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`)
 ollama pull gemma4:e4b
 ```
 
-3. Leave Ollama running, then use EditForth.
+3. Leave Ollama running, then pick an Ollama profile in Ask Forth (starter: **Ollama gemma4:e4b**).
 
-**Default model:** **`gemma4:e4b`**. Also useful: **`gemma4:12b`**, **`gemma4:31b-cloud`**.
+**Default model tag:** **`gemma4:e4b`**. Also useful: **`gemma4:12b`**, **`gemma4:31b-cloud`**.
 
-### OpenAI-compatible (SpaceXAI / xAI and others)
+### OpenAI-compatible (SpaceXAI / local mlx / others)
 
-Uses HTTP **`/v1/chat/completions`** (OpenAI-compatible). Default **Base URL** is SpaceXAI / xAI: **`https://api.x.ai/v1`**. You can point Base URL at any server that speaks the same dialect (LM Studio, etc.).
+Uses HTTP **`/v1/chat/completions`**. In **Models…**, set **Base URL** (SpaceXAI default **`https://api.x.ai/v1`**; local mlx often **`http://127.0.0.1:1234/v1`**).
 
-1. Create an API key (for xAI: [console.x.ai](https://console.x.ai) → API Keys).  
-2. In Ask Forth, choose **OpenAI-compatible**, paste the key, click **Save** (Keychain). Or export **`XAI_API_KEY`** in the environment before launching EditForth.  
-3. Set **Model** (default **`grok-4.7`** for SpaceXAI).
+1. Create an API key when needed (for xAI: [console.x.ai](https://console.x.ai) → API Keys).  
+2. In **Models…**, paste the key for that profile and click **Save** (Keychain **per profile**). Or export **`XAI_API_KEY`** before launch (SpaceXAI fallback). Local servers often use a dummy key such as **`local`**.  
+3. Set **Model** (e.g. **`grok-4.7`**, or a full on-disk MLX path for mlx_lm.server).
+
+First launch migrates your previous Provider / Model / Base URL / key into profiles and adds starters **Ollama gemma4:e4b**, **SpaceXAI grok-4.7**, and **Local mlx :1234** when appropriate.
 
 Streaming and Tool agent use the same OpenAI tools message shape. Cloud use needs network access and incurs provider charges.
+
+Ask / Agent Enhance Reply request up to **8192** completion tokens (`max_tokens` on OpenAI-compatible; `options.num_predict` on Ollama) so long Forth listings are less likely to stop mid-definition. Turn **Include web search** off for “write me a program” prompts unless you need live web hits.
 
 To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root **`FORTH-FINETUNE.md`** — that is separate from the xAI API.
 

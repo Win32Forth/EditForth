@@ -139,7 +139,10 @@ final class DockController {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            self?.handleUserMovedDockedWindow()
+            // Delivered on the main queue; assumeIsolated matches that without a Task hop.
+            MainActor.assumeIsolated {
+                self?.handleUserMovedDockedWindow()
+            }
         }
     }
 

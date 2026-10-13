@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.3** / build **12** (shipped). Web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
+**Baseline:** **2.3.4** / build **13** (unreleased); last ship **2.3.3** / build **12**. Model profiles + Temperature + 8192 completion budget in **2.3.4** tree; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
 **Updated:** 2026-10-13.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
