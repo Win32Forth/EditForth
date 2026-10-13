@@ -100,6 +100,14 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 Cloud tags such as `gemma4:31b-cloud` may *feel* better informed; that is **not** the same as EditForth-controlled, visible web context.
 
+### Provider backends
+
+Ask Forth **Provider** picker: **Ollama (local)** or **OpenAI-compatible** (`OpenAICompatibleClient` → `/v1/chat/completions`). Default OpenAI-compatible Base URL is SpaceXAI / xAI (`https://api.x.ai/v1`); API key in Keychain or `XAI_API_KEY`. Models stored per provider (`gemma4:e4b` vs `grok-4.7`).
+
+### Fine-tuning (local, not xAI)
+
+To teach a Gemma-class model **64Forth habits**, use MLX LoRA on Mac → GGUF → `ollama create`, then point Ask Forth at the new tag. Plan + seed JSONL: repo root **`FORTH-FINETUNE.md`** and **`finetune/`**. xAI credits are not required for that path.
+
 ---
 
 ## 2. HTML viewing in the editor (and link clicking)
@@ -108,7 +116,7 @@ Cloud tags such as `gemma4:31b-cloud` may *feel* better informed; that is **not*
 
 Yes. EditForth already hosts multiple tab kinds (source, compare-with-disk, etc.). A **Web / HTML tab** (WKWebView) is a normal macOS pattern: open a URL or local HTML file in a tab beside `.fth` buffers.
 
-**Implemented:** `WebSession` / `WebBrowserView`; **View → Open Web Page…** (⇧⌘L); Back / Forward / URL / Reload / **Send to Ask Forth**; link clicks navigate in-tab (`http`/`https`/`file`/`about`).
+**Implemented:** `WebSession` / `WebBrowserView`; **View → Open Web Page** (⇧⌘L) opens forth-standard.org and focuses the address field (no dialog); omnibox Search-or-URL (DuckDuckGo when not a host); Back / Forward / Go / Reload / **Send to Ask Forth**; link clicks navigate in-tab (`http`/`https`/`file`/`about`).
 
 ### What would be useful
 

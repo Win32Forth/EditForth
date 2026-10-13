@@ -42,3 +42,10 @@ Forth/Resources/Library/Emitter/EmitterSmoke/*.app/
 Forth/Resources/Library/Emitter/EmitterSmoke/Gfx.app/
 Forth/Resources/Library/PI/*.app/
 Forth/Resources/Library/PI/*.img
+
+# Fine-tune local artifacts (weights, adapters, GGUF — keep examples/ + scripts/)
+finetune/models/
+finetune/adapters/
+finetune/fused_model/
+finetune/*.gguf
+finetune/Modelfile

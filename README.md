@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.3.3** (build **12**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG is `Releases/EditForth-2.3.2-macOS.dmg` (tag **v2.3.2**); tree is **2.3.3**/build **12** (unreleased). First public release was **v2.0.0**.
+**Version:** **2.3.3** (build **12**) for both `EditForth.app` and companion `64Forth.app`. Latest shipped DMG is `Releases/EditForth-2.3.3-macOS.dmg` (tag **v2.3.3**). First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -16,7 +16,7 @@ I don't particularly like having to do this, but as far as I know there is no ot
 
 If you don't agree with me, and can provide sufficient evidence that Ask Forth or AskForth are already being used by your company, I will happily release my copyright. 
 
-**View → Ask Forth** (⌥⌘A) opens a trailing panel that talks to a local **[Ollama](https://ollama.com)** model. You must install Ollama and pull a model before Ask or Agent Enhance Reply will return answers:
+**View → Ask Forth** (⌥⌘A) opens a trailing panel. Default provider is local **[Ollama](https://ollama.com)**; you can also choose **OpenAI-compatible** (SpaceXAI / xAI, LM Studio, etc.). For Ollama, install it and pull a model before Ask or Agent Enhance Reply will return answers:
 
 ```bash
 ollama pull gemma4:e4b
@@ -24,7 +24,7 @@ ollama pull gemma4:e4b
 
 Leave Ollama running. The panel default is **`gemma4:e4b`**. Other tags that work: **`gemma4:12b`** (better answers, much more memory) and **`gemma4:31b-cloud`** (fast cloud path — not fully local).
 
-Typical use: open **Ask Forth**, ask a question, and watch a new `~/Documents/EditForth/AskForth-N.fth` tab fill as the reply **streams** (wrapped at 80 columns). **Agent Enhance Reply** improves that answer in one click (appends an **Agent Enhanced Reply** section). Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample` and also searches **`Library/Reference`** (Forth 2012). Optional **Fetch URLs in Prompt** and **View → Open Web Page…** (⇧⌘L) bring web pages into Ask. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
+Typical use: open **Ask Forth**, ask a question, and watch a new `~/Documents/EditForth/AskForth/AskForth-N.fth` tab fill as the reply **streams** (wrapped at 80 columns). **Agent Enhance Reply** improves that answer in one click (appends an **Agent Enhanced Reply** section). Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample` and also searches **`Library/Reference`** (Forth 2012). Optional **Fetch URLs in Prompt** and **View → Open Web Page** (⇧⌘L) bring web pages into Ask. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
 
 ## Not eForth
 

@@ -288,10 +288,10 @@ final class WorkspaceModel: ObservableObject {
         return tab
     }
 
-    /// Create `~/Documents/EditForth/AskForth-N.fth` (next free N), write `initialText`, and open it.
+    /// Create `~/Documents/EditForth/AskForth/AskForth-N.fth` (next free N), write `initialText`, and open it.
     @discardableResult
     func createAskForthFile(initialText: String) -> EditorTab? {
-        let dir = ForthMenuSupport.userTreeURL
+        let dir = ForthMenuSupport.userTreeURL.appendingPathComponent("AskForth", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
@@ -547,24 +547,10 @@ final class WorkspaceModel: ObservableObject {
         return session
     }
 
-    /// Ask for a URL (default forth-standard.org) and open a Web tab.
-    func promptOpenWebPage() {
-        let alert = NSAlert()
-        alert.messageText = "Open Web Page"
-        alert.informativeText = "Enter an http(s) URL to open in an EditForth browser tab."
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel")
-        let field = NSTextField(string: "https://forth-standard.org/")
-        field.frame = NSRect(x: 0, y: 0, width: 420, height: 24)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-        var s = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return }
-        if !s.contains("://") { s = "https://" + s }
-        guard let url = URL(string: s) else { return }
-        _ = openWeb(url: url)
+    /// Open (or focus) the default Web tab and put the keyboard in the address / search field.
+    func openWebPage() {
+        let session = openWeb(url: WebSession.defaultHomeURL)
+        session.requestAddressFocus()
     }
 
     private func bindWeb(_ session: WebSession) {

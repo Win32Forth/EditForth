@@ -46,7 +46,11 @@ struct ContentView: View {
     private static let editorMinHeight: CGFloat = 120
     private static let splitMinPaneWidth: CGFloat = 160
     private static let aiPanelMinWidth: CGFloat = 260
-    private static let aiPanelMaxWidth: CGFloat = 640
+
+    /// Ask Forth may grow until the editor pane still has `splitMinPaneWidth`.
+    private static func aiPanelMaxWidth(forWindowWidth width: CGFloat) -> CGFloat {
+        max(Self.aiPanelMinWidth, width - EditorHSplitter.width - Self.splitMinPaneWidth)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -55,10 +59,7 @@ struct ContentView: View {
                 geo.size.height - Self.editorMinHeight - ConsoleSplitter.height
             )
             let clampedConsole = min(max(consoleHeight, Self.consoleMinHeight), maxConsole)
-            let aiMaxW = min(
-                Self.aiPanelMaxWidth,
-                max(Self.aiPanelMinWidth, geo.size.width * 0.55)
-            )
+            let aiMaxW = Self.aiPanelMaxWidth(forWindowWidth: geo.size.width)
             let clampedAIWidth = min(max(aiPanelWidth, Self.aiPanelMinWidth), aiMaxW)
 
             VStack(spacing: 0) {
@@ -96,8 +97,8 @@ struct ContentView: View {
                 .onAppear {
                     aiPanelWidth = max(storedAIPanelWidth, Self.aiPanelMinWidth)
                 }
-                .onChange(of: geo.size.width) { _, _ in
-                    let cap = min(Self.aiPanelMaxWidth, max(Self.aiPanelMinWidth, geo.size.width * 0.55))
+                .onChange(of: geo.size.width) { _, newWidth in
+                    let cap = Self.aiPanelMaxWidth(forWindowWidth: newWidth)
                     if aiPanelWidth > cap {
                         aiPanelWidth = cap
                         storedAIPanelWidth = Double(cap)

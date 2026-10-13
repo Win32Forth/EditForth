@@ -1,25 +1,29 @@
 # 64Forth development status
 
-**Current:** **2.3.3** (build **12**) — working tree (unreleased)  
+**Current:** **2.3.3** (build **12**) — shipped  
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-13
 
 ---
 
-## v2.3.3 — Ask Forth web search (unreleased)
+## v2.3.3 — Ask Forth providers, tools, and Library source RAG
 
-**Version strings:** marketing **2.3.3**, build **12** (EditForth + companion 64Forth lockstep). Not yet shipped as a DMG/tag; last public release remains **v2.3.2**.
+**Version strings:** marketing **2.3.3**, build **12** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.3** (`Releases/EditForth-2.3.3-macOS.dmg`). Replaces **v2.3.2**.
 
 **Console header stamp:**
 
 ```text
-=== 64Forth 2.3.3 === Oct 11, 2026 6:00 PM ===
+=== 64Forth 2.3.3 === Oct 13, 2026 8:51 AM ===
 ```
 
-### Highlights (working tree)
+### Highlights
 
 - **Include web search** — opt-in (default off) DuckDuckGo Lite search from the Prompt; injects hit titles / URLs / snippets into Ask / Agent Enhance Reply; `\ Web search:` audit lines in `AskForth-N.fth`.
-- **Tool agent** — opt-in (default off) Ollama tool loop (`web_search`, `fetch_url`, `library_search`); transcript + `\ Tool agent:` audit lines. Needs a tools-capable model (e.g. `gemma4:e4b`).
+- **Tool agent** — opt-in (default off) tool loop (`web_search`, `fetch_url`, `library_search`); transcript + `\ Tool agent:` audit lines. Needs a tools-capable model (e.g. `gemma4:e4b`).
+- **OpenAI-compatible provider** — panel Provider picker: Ollama (local) or OpenAI-compatible HTTP (default SpaceXAI `https://api.x.ai/v1`, Keychain API key / `XAI_API_KEY`, model e.g. `grok-4.7`). Also works with local LM Studio / mlx_lm (`http://127.0.0.1:1234/v1`, dummy key `local`).
+- **Library RAG** — indexes `.md` / `.swift` as well as Forth/text; point **Library…** at the EditForth project (or `Editor/`) for app/UI questions; skips heavy dirs (`.git`, `DerivedData`, `finetune`, build products). Library button title shows the folder leaf; wider settings sheet.
+- **Ask Forth UX** — answers under `~/Documents/EditForth/AskForth/`; **Output** opens that folder in Finder; Capture / Output / toggle hover tips; streaming scroll stays put while reading; Ask panel can widen with the window.
+- **Web omnibox** — **View → Open Web Page** (⇧⌘L) address field navigates hosts or searches DuckDuckGo.
 - How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning: `ASKFORTHMORE.md` §1.2–1.4.
 
 ---
@@ -39,7 +43,7 @@
 - **Library/Reference** — Forth 2012 standard chapters (`.txt`) for Ask Forth RAG; always searched alongside the chosen Library folder (default Sample).
 - **Fetch URLs in Prompt** — optional (default on): fetch `http`/`https` links from the Prompt, strip HTML to text, inject capped excerpts into Ask / Agent Enhance Reply.
 - **forth-standard.org auto-boost** — word-lookup prompts also fetch matching live standard pages via `Forth-2012-word-urls.json`.
-- **Web browser tabs** — **View → Open Web Page…** (⇧⌘L): WKWebView with Back / Forward / URL / Reload / **Send to Ask Forth**.
+- **Web browser tabs** — **View → Open Web Page** (⇧⌘L): WKWebView with Back / Forward / Search-or-URL omnibox / Reload / **Send to Ask Forth** (no URL dialog).
 - How-to: `Forth/Resources/Docs/Ask-Forth.md`. Planning notes: repo root `ASKFORTHMORE.md`.
 
 ---
@@ -56,7 +60,7 @@
 
 ### Highlights
 
-- **Ask streams into `AskForth-N.fth`** under `~/Documents/EditForth` (no Reply box). Body text is word-wrapped at **80 columns**.
+- **Ask streams into `AskForth-N.fth`** under `~/Documents/EditForth/AskForth/` (no Reply box). Body text is word-wrapped at **80 columns**.
 - **Agent Enhance Reply** — one click: headless `64Forth --agent` with Autoload, then append an **Agent Enhanced Reply** section to the same file. Live load via status **INCLUDE** after hand-edit.
 - Library RAG defaults to **`Library/Sample`**. Streaming Ollama replies. Compact help panels; **Capture Selected to Prompt**; **Ask** beside the status row.
 - How-to: `Forth/Resources/Docs/Ask-Forth.md`.

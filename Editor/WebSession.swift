@@ -21,6 +21,11 @@ final class WebSession: NSObject, Identifiable, ObservableObject {
     @Published var canGoBack = false
     @Published var canGoForward = false
     @Published var isLoading = false
+    /// When true, the browser chrome should focus (and select) the address field.
+    @Published var pendingAddressFocus = false
+
+    /// Default home page for **View → Open Web Page**.
+    static let defaultHomeURL = URL(string: "https://forth-standard.org/")!
 
     init(url: URL) {
         let config = WKWebViewConfiguration()
@@ -56,15 +61,51 @@ final class WebSession: NSObject, Identifiable, ObservableObject {
         webView.reload()
     }
 
-    /// Load whatever is in the address field (adds https:// if no scheme).
+    func requestAddressFocus() {
+        pendingAddressFocus = true
+    }
+
+    /// Omnibox: navigate if the field looks like a URL / host; otherwise DuckDuckGo search.
     func loadAddressField() {
-        var s = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let s = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return }
-        if !s.contains("://") {
-            s = "https://" + s
-        }
-        guard let url = URL(string: s) else { return }
+        guard let url = Self.urlForAddressField(s) else { return }
         load(url)
+    }
+
+    /// Resolve address-bar text to a navigation URL (https host or DuckDuckGo search).
+    static func urlForAddressField(_ raw: String) -> URL? {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+
+        if let url = URL(string: s),
+           let scheme = url.scheme?.lowercased(),
+           ["http", "https", "file", "about"].contains(scheme) {
+            return url
+        }
+
+        if looksLikeNavigableHost(s) {
+            let withScheme = s.contains("://") ? s : "https://" + s
+            return URL(string: withScheme)
+        }
+
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=")
+        let encoded = s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+        return URL(string: "https://duckduckgo.com/?q=\(encoded)")
+    }
+
+    /// Host-like (no spaces): `forth-standard.org`, `localhost:8080`, `127.0.0.1`.
+    private static func looksLikeNavigableHost(_ s: String) -> Bool {
+        if s.contains(where: { $0.isWhitespace }) { return false }
+        let lower = s.lowercased()
+        if lower == "localhost" || lower.hasPrefix("localhost:") { return true }
+        if lower.hasPrefix("127.0.0.1") { return true }
+        // Domain or dotted host with optional path/query (no spaces).
+        guard s.contains(".") else { return false }
+        // Reject a lone trailing dot.
+        if s.hasSuffix(".") && s.filter({ $0 == "." }).count == 1 { return false }
+        return true
     }
 
     private func refreshChrome() {

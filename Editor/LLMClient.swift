@@ -17,7 +17,7 @@ enum LLMClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unreachable(let detail):
-            return "Cannot reach the language model (\(detail)). Is Ollama running?"
+            return "Cannot reach the language model (\(detail))."
         case .badStatus(let code, let body):
             let snippet = body.trimmingCharacters(in: .whitespacesAndNewlines)
             let short = snippet.isEmpty ? "" : ": \(String(snippet.prefix(180)))"

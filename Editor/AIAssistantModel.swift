@@ -12,8 +12,6 @@ import Combine
 
 @MainActor
 final class AIAssistantModel: ObservableObject {
-    static let defaultModelKey = "aiAssistantModel"
-    static let defaultModel = "gemma4:e4b"
     static let libraryRAGKey = "aiAssistantLibraryRAG"
     static let urlFetchKey = "aiAssistantURLFetch"
     static let webSearchKey = "aiAssistantWebSearch"
@@ -37,6 +35,12 @@ final class AIAssistantModel: ObservableObject {
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
     @Published var modelName: String
+    @Published var provider: AskForthLLMProvider
+    /// Base URL for OpenAI-compatible (editable in panel).
+    @Published var openAIBaseURLString: String
+    /// Draft API key field (not written until Save).
+    @Published var apiKeyDraft: String = ""
+    @Published var apiKeyStatus: String = ""
 
     /// Tab / path that receives streamed Ask / Fix output.
     private(set) var askOutputTabID: UUID?
@@ -46,13 +50,14 @@ final class AIAssistantModel: ObservableObject {
 
     private static let askFileWrapWidth = 80
 
-    private let client: LLMClient
+    private var client: LLMClient
 
-    init(client: LLMClient = OllamaClient()) {
-        self.client = client
-        let stored = UserDefaults.standard.string(forKey: Self.defaultModelKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        self.modelName = (stored?.isEmpty == false) ? stored! : Self.defaultModel
+    init(client: LLMClient? = nil) {
+        let provider = AskForthLLMSettings.provider
+        self.provider = provider
+        self.openAIBaseURLString = AskForthLLMSettings.openAIBaseURLString
+        self.modelName = AskForthLLMSettings.activeModel
+        self.client = client ?? AskForthLLMSettings.makeClient()
         if UserDefaults.standard.object(forKey: Self.libraryRAGKey) == nil {
             self.includeLibraryContext = true
         } else {
@@ -68,6 +73,7 @@ final class AIAssistantModel: ObservableObject {
         // Default off (slower; model-driven browsing).
         self.useToolAgent = UserDefaults.standard.bool(forKey: Self.toolAgentKey)
         self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
+        refreshAPIKeyStatus()
     }
 
     var providerLabel: String { client.providerName }
@@ -76,8 +82,71 @@ final class AIAssistantModel: ObservableObject {
         askOutputFileURL?.lastPathComponent
     }
 
+    var modelFieldPlaceholder: String {
+        switch provider {
+        case .ollama: return AskForthLLMSettings.defaultOllamaModel
+        case .openAICompatible: return AskForthLLMSettings.defaultOpenAIModel
+        }
+    }
+
     func persistModelName() {
-        UserDefaults.standard.set(modelName, forKey: Self.defaultModelKey)
+        AskForthLLMSettings.activeModel = modelName
+    }
+
+    /// Persist the model under the *current* provider, switch provider, load that provider’s model.
+    func selectProvider(_ newProvider: AskForthLLMProvider) {
+        AskForthLLMSettings.activeModel = modelName
+        AskForthLLMSettings.provider = newProvider
+        AskForthLLMSettings.openAIBaseURLString = openAIBaseURLString
+        provider = newProvider
+        modelName = AskForthLLMSettings.activeModel
+        client = AskForthLLMSettings.makeClient()
+        refreshAPIKeyStatus()
+        status = "Provider: \(provider.menuTitle)."
+    }
+
+    func persistOpenAIBaseURL() {
+        AskForthLLMSettings.openAIBaseURLString = openAIBaseURLString
+        if provider == .openAICompatible {
+            client = AskForthLLMSettings.makeClient()
+        }
+    }
+
+    func refreshAPIKeyStatus() {
+        if AskForthLLMSettings.hasKeychainAPIKey {
+            apiKeyStatus = "Key saved in Keychain"
+        } else if ProcessInfo.processInfo.environment["XAI_API_KEY"]?.isEmpty == false {
+            apiKeyStatus = "Using XAI_API_KEY from environment"
+        } else if provider == .openAICompatible {
+            apiKeyStatus = "No API key — Save one or export XAI_API_KEY"
+        } else {
+            apiKeyStatus = ""
+        }
+    }
+
+    func saveAPIKeyDraft() {
+        do {
+            try AskForthLLMSettings.saveAPIKey(apiKeyDraft)
+            apiKeyDraft = ""
+            refreshAPIKeyStatus()
+            if provider == .openAICompatible {
+                client = AskForthLLMSettings.makeClient()
+            }
+            status = "API key saved."
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    func clearAPIKey() {
+        do {
+            try AskForthLLMSettings.deleteAPIKey()
+            apiKeyDraft = ""
+            refreshAPIKeyStatus()
+            status = "API key cleared."
+        } catch {
+            status = error.localizedDescription
+        }
     }
 
     func persistLibraryRAG() {
@@ -189,10 +258,18 @@ final class AIAssistantModel: ObservableObject {
         guard !isBusy else { return }
 
         persistModelName()
+        persistOpenAIBaseURL()
         persistLibraryRAG()
         persistURLFetch()
         persistWebSearch()
         persistToolAgent()
+        // If the user pasted a key but forgot Save, persist it before the request.
+        if provider == .openAICompatible,
+           !apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            saveAPIKeyDraft()
+        }
+        // Rebuild client in case Base URL / key changed.
+        client = AskForthLLMSettings.makeClient()
         isBusy = true
         status = busyStatus
         reply = ""
@@ -204,13 +281,26 @@ final class AIAssistantModel: ObservableObject {
         let useWebSearch = includeWebSearch
         let useTools = useToolAgent
         let urlSource = prompt
+        let providerSnapshot = provider
 
         Task {
+            if providerSnapshot == .openAICompatible, !AskForthLLMSettings.hasAPIKey {
+                await MainActor.run {
+                    self.isBusy = false
+                    self.status = "No API key — paste one and click Save (or export XAI_API_KEY)."
+                }
+                return
+            }
             let reachable = await client.ping()
             guard reachable else {
                 await MainActor.run {
                     self.isBusy = false
-                    self.status = "Ollama is not reachable at 127.0.0.1:11434."
+                    switch providerSnapshot {
+                    case .ollama:
+                        self.status = "Ollama is not reachable at 127.0.0.1:11434."
+                    case .openAICompatible:
+                        self.status = "Cannot reach \(AskForthLLMSettings.openAIBaseURLString) (network). Check Base URL and connectivity."
+                    }
                 }
                 return
             }
@@ -413,8 +503,8 @@ final class AIAssistantModel: ObservableObject {
         let wrapped = Self.wrapToWidth(body, width: Self.askFileWrapWidth)
         tab.text = prefix + wrapped
         tab.isDirty = true
-        let end = (tab.text as NSString).length
-        tab.selection = NSRange(location: end, length: 0)
+        // Do not move selection to end on every chunk — that forces the editor to
+        // fight the user when they scroll up to read while Ask / Enhance streams.
     }
 
     /// Word-wrap each existing line to `width` columns (hard-break only if a word is longer).

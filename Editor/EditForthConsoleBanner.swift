@@ -11,7 +11,7 @@ import Foundation
 
 enum EditForthConsoleBanner {
     /// Update when finishing a version (with MARKETING_VERSION / docs).
-    static let stamp = "Oct 11, 2026 6:00 PM"
+    static let stamp = "Oct 13, 2026 8:51 AM"
 
     /// e.g. `=== EditForth 2.0.2 === Oct 6, 2026 9:29 PM ===\n`
     static var text: String {

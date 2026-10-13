@@ -11,6 +11,7 @@ import WebKit
 struct WebBrowserView: View {
     @ObservedObject var session: WebSession
     var onSendToAskForth: () -> Void
+    @FocusState private var addressFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,15 +36,18 @@ struct WebBrowserView: View {
                 .help("Forward")
                 .accessibilityLabel("Forward")
 
-                TextField("URL", text: $session.address)
+                TextField("Search or enter address", text: $session.address)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+                    .focused($addressFocused)
+                    .help("Type a URL (forth-standard.org) or a search (OPEN-FILE Forth) and press Return / Go")
                     .onSubmit { session.loadAddressField() }
 
                 Button("Go") {
                     session.loadAddressField()
                 }
                 .disabled(session.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Open the address, or search DuckDuckGo when the field is not a URL")
 
                 Button {
                     session.reload()
@@ -77,6 +81,19 @@ struct WebBrowserView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { applyPendingAddressFocus() }
+        .onChange(of: session.pendingAddressFocus) { _, pending in
+            if pending { applyPendingAddressFocus() }
+        }
+    }
+
+    private func applyPendingAddressFocus() {
+        guard session.pendingAddressFocus else { return }
+        session.pendingAddressFocus = false
+        // Defer so the tab chrome exists before focusing.
+        DispatchQueue.main.async {
+            addressFocused = true
+        }
     }
 }
 

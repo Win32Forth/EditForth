@@ -21,6 +21,12 @@ struct AIAssistantPanel: View {
     @State private var promptHeight = 40.0
     @State private var promptDragStart: CGFloat?
     @State private var showLibrarySettings = false
+    /// Last path component of the Library RAG folder (Library button title).
+    @State private var libraryFolderLeaf = ""
+    /// Full Library RAG folder path (Library button tooltip).
+    @State private var libraryFolderPath = ""
+    /// When true, API key draft is shown in clear text so paste/prefix can be checked.
+    @State private var revealAPIKey = false
 
     /// About two lines of monospaced body text.
     private static let promptMinHeight: CGFloat = 36
@@ -63,10 +69,30 @@ struct AIAssistantPanel: View {
             if stored != Double(promptHeight) {
                 storedPromptHeight = Double(promptHeight)
             }
+            refreshLibraryFolderLeaf()
+        }
+        .onChange(of: showLibrarySettings) { _, isOpen in
+            if !isOpen {
+                refreshLibraryFolderLeaf()
+            }
         }
         .sheet(isPresented: $showLibrarySettings) {
             LibraryRAGSettingsSheet()
         }
+    }
+
+    private func refreshLibraryFolderLeaf() {
+        let path = ForthLibraryRAGSettings.load().folderPath
+        libraryFolderPath = path
+        let leaf = URL(fileURLWithPath: path, isDirectory: true).lastPathComponent
+        libraryFolderLeaf = leaf.isEmpty ? "—" : leaf
+    }
+
+    /// Open `~/Documents/EditForth/AskForth` in Finder (create if missing).
+    private func openAskForthOutputFolder() {
+        let dir = ForthMenuSupport.userTreeURL.appendingPathComponent("AskForth", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
     }
 
     // MARK: - Chat (prompt only — reply lives in AskForth-N.fth)
@@ -93,46 +119,126 @@ struct AIAssistantPanel: View {
 
             askForthHelpPanel(
                 """
-                Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
+                Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
 
-                The Model entered here must be an Ollama compatible model that you have already downloaded and selected for use in the Ollama app for a conversation. Cloud based Models compatible with Ollama can also be used.
+                Provider: Ollama (local) or OpenAI-compatible HTTP (default SpaceXAI / xAI at api.x.ai/v1). Hover the Provider and Model controls for details. Model names are stored separately per provider.
                 """
             )
+
+            HStack(spacing: 6) {
+                Text("Provider")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: Binding(
+                    get: { model.provider },
+                    set: { model.selectProvider($0) }
+                )) {
+                    ForEach(AskForthLLMProvider.allCases) { p in
+                        Text(p.menuTitle).tag(p)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 200)
+                .help(model.provider.help)
+            }
+
+            if model.provider == .openAICompatible {
+                HStack(spacing: 6) {
+                    Text("Base URL")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField(AskForthLLMSettings.defaultOpenAIBaseURL, text: $model.openAIBaseURLString)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.caption, design: .monospaced))
+                        .onSubmit { model.persistOpenAIBaseURL() }
+                        .help("OpenAI-compatible root, usually https://api.x.ai/v1. Other servers that speak /v1/chat/completions also work.")
+                }
+                HStack(spacing: 6) {
+                    Text("API key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Group {
+                        if revealAPIKey {
+                            TextField("paste key, then Save", text: $model.apiKeyDraft)
+                        } else {
+                            SecureField("paste key, then Save", text: $model.apiKeyDraft)
+                        }
+                    }
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.caption, design: .monospaced))
+                    .help("Paste your full xAI key (include the xai- prefix if the console shows it). Use Show to verify. Then click Save.")
+                    Button(revealAPIKey ? "Hide" : "Show") {
+                        revealAPIKey.toggle()
+                    }
+                    .font(.caption)
+                    .help(revealAPIKey
+                          ? "Hide the key (black dots again)"
+                          : "Show the pasted key in clear text so you can check the xai- prefix")
+                    Button("Save") {
+                        model.saveAPIKeyDraft()
+                        revealAPIKey = false
+                    }
+                    .font(.caption)
+                    .disabled(model.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Store the pasted API key in the Keychain")
+                    Button("Clear") { model.clearAPIKey() }
+                        .font(.caption)
+                        .disabled(!AskForthLLMSettings.hasKeychainAPIKey)
+                        .help("Remove the Keychain API key")
+                }
+                if !model.apiKeyStatus.isEmpty {
+                    Text(model.apiKeyStatus)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             HStack(spacing: 6) {
                 Text("Model")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("gemma4:e4b", text: $model.modelName)
+                TextField(model.modelFieldPlaceholder, text: $model.modelName)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.caption, design: .monospaced))
                     .onSubmit { model.persistModelName() }
+                    .help(model.provider == .ollama
+                          ? "Ollama tag you have pulled (e.g. gemma4:e4b). Must match a model in the Ollama app."
+                          : "OpenAI-compatible model id (e.g. grok-4.7 for SpaceXAI / xAI).")
             }
 
             HStack(spacing: 8) {
                 Toggle("Include Library context", isOn: $model.includeLibraryContext)
                     .font(.caption)
-                    .help("Search the configured Library folder for matching .fth excerpts and add them to Ask / Enhance")
+                    .help("Leave on for everyday Ask. Pulls matching .fth/.txt/.md/.swift from Library… (default Sample) plus always Library/Reference (Forth 2012). Point Library… at the EditForth project for app/UI questions. Best when you want answers that match local samples, docs, and source.")
                     .onChange(of: model.includeLibraryContext) { _, _ in
                         model.persistLibraryRAG()
                     }
-                Button("Library…") {
+                Button {
                     showLibrarySettings = true
+                } label: {
+                    Text(libraryFolderLeaf.isEmpty ? "Library…" : "\(libraryFolderLeaf)…")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .font(.caption)
-                .help("Folder path, snippet count, context lines, and max characters")
+                .help(
+                    libraryFolderPath.isEmpty
+                        ? "Choose which Library folder to search, and tweak snippet count / context lines / max characters."
+                        : "Library folder: \(libraryFolderPath)\nClick to change folder or snippet limits."
+                )
+                Spacer(minLength: 0)
             }
 
             Toggle("Fetch URLs in Prompt", isOn: $model.fetchURLsInPrompt)
                 .font(.caption)
-                .help("Fetch http(s) links in the Prompt, and auto-fetch forth-standard.org pages when the Prompt looks like a word lookup (`DUP`, “what does OPEN-FILE”)")
+                .help("Leave on when the Prompt has http(s) links, or for word lookups (`DUP`, “what does OPEN-FILE”) so forth-standard.org can auto-boost. Turn off to stay offline aside from Ollama. Ignored while Tool agent is on.")
                 .onChange(of: model.fetchURLsInPrompt) { _, _ in
                     model.persistURLFetch()
                 }
 
             Toggle("Include web search", isOn: $model.includeWebSearch)
                 .font(.caption)
-                .help("Opt-in: search the web (DuckDuckGo Lite, no API key) using the Prompt text and add top hit titles, URLs, and snippets to Ask / Agent Enhance Reply. Default off. Ignored when Tool agent is on (the model calls web_search itself).")
+                .help("Turn on only when Library isn’t enough (obscure topics, “how do others do X”). Searches DuckDuckGo Lite and adds top hits — default off, uses the network. Disabled while Tool agent is on (the model can call web_search itself).")
                 .onChange(of: model.includeWebSearch) { _, _ in
                     model.persistWebSearch()
                 }
@@ -140,7 +246,7 @@ struct AIAssistantPanel: View {
 
             Toggle("Tool agent", isOn: $model.useToolAgent)
                 .font(.caption)
-                .help("Opt-in: Ollama tool loop — the model may call web_search, fetch_url, or library_search before answering. Slower. Default off. Requires a tools-capable model (e.g. gemma4:e4b). Turn on Show Agent Transcript to see tool steps.")
+                .help("Turn on when you want the model to decide to search, fetch a URL, or dig in Library before answering. Slower; needs a tools-capable model (e.g. gemma4:e4b). Use Show Agent Transcript to see tool steps. Default off — skip for ordinary Ask.")
                 .onChange(of: model.useToolAgent) { _, _ in
                     model.persistToolAgent()
                 }
@@ -148,11 +254,20 @@ struct AIAssistantPanel: View {
             Button("Capture Selected to Prompt") {
                 model.captureSelectedToPrompt(from: workspace)
             }
+            .help("Select some text from a source file and this button will copy and paste it into the Prompt window for evaluation by Ask Forth")
             .disabled(model.isBusy)
 
-            Text("Prompt")
+            HStack(spacing: 8) {
+                Text("Prompt")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button("Output") {
+                    openAskForthOutputFolder()
+                }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .help("Show the Ask Forth output folder. Ask Forth result files accumulate and should be cleaned up occasionally.")
+            }
             TextEditor(text: $model.prompt)
                 .font(.system(.body, design: .monospaced))
                 .scrollContentBackground(.hidden)
@@ -231,10 +346,11 @@ struct AIAssistantPanel: View {
                     model.evalReplyAndAgentFix(workspace: workspace)
                 }
                 .disabled(model.isBusy || model.reply.isEmpty)
-                .help("Eval the latest Ask Forth reply via 64Forth --agent (Autoload on), then append an Agent Enhanced Reply section to the same file")
+                .help("After Ask: run the reply in a headless 64Forth --agent (Autoload on), then ask the model to improve it and append “Agent Enhanced Reply” to the same AskForth file. Does not type into the live console — use INCLUDE after you edit.")
 
                 Toggle("Show Agent Transcript", isOn: $model.showAgentTranscript)
                     .font(.caption)
+                    .help("Show the headless --agent eval output and Tool agent steps (→ web_search / ← …). Turn on when debugging Enhance or Tool agent; leave off to save panel space.")
                     .onChange(of: model.showAgentTranscript) { _, _ in
                         model.persistShowAgentTranscript()
                     }
@@ -274,7 +390,7 @@ private struct LibraryRAGSettingsSheet: View {
             Text("Library context")
                 .font(.title2.weight(.semibold))
 
-            Text("Ask Forth searches this folder for .fth / .txt excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. Library/Reference (Forth 2012 Standard text) is always searched too. Only the top-scoring snippets are sent — not the whole tree.")
+            Text("Ask Forth searches this folder for .fth / .txt / .md / .swift excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. You can point at the EditForth project (Editor/, Docs/) for app questions — heavy folders like .git, DerivedData, and finetune are skipped. Library/Reference (Forth 2012 Standard text) is always searched too when your folder is under Library. Only the top-scoring snippets are sent — not the whole tree.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -338,7 +454,7 @@ private struct LibraryRAGSettingsSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 560)
+        .frame(width: 660)
     }
 
     private func stepperField(

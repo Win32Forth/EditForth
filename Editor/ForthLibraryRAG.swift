@@ -2,7 +2,7 @@
 //  ForthLibraryRAG.swift
 //  EditForth
 //
-//  Lightweight Library retrieval for Ask Forth: score .fth hits for query
+//  Lightweight Library retrieval for Ask Forth: score .fth/.md/.swift hits for query
 //  tokens and return capped source snippets (not embeddings).
 //
 
@@ -41,10 +41,14 @@ struct ForthLibraryRAGResult: Sendable {
 
 enum ForthLibraryRAG {
     private static let skipDirNames: Set<String> = [
-        ".git", "DerivedData", "PI", "VED64", "__pycache__"
+        ".git", "DerivedData", "PI", "VED64", "__pycache__",
+        // EditForth / Xcode project trees (safe to point Library… at the repo root)
+        "finetune", "Build", "build", ".build", "xcuserdata",
+        "Pods", "node_modules", "models", "adapters", "fused_model",
     ]
     private static let sourceExtensions: Set<String> = [
-        "fth", "fs", "4th", "f", "txt"
+        "fth", "fs", "4th", "f", "txt",
+        "md", "swift",
     ]
     /// Same Forth-ish token characters as TextMatch / Whole Word.
     private static let wordChars = CharacterSet.alphanumerics.union(

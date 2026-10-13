@@ -166,10 +166,11 @@ struct SixtyFourEditApp: App {
                 Toggle(showAIAssistant ? "Hide Ask Forth" : "Show Ask Forth", isOn: $showAIAssistant)
                     .keyboardShortcut("a", modifiers: [.command, .option])
 
-                Button("Open Web Page…") {
-                    workspace.promptOpenWebPage()
+                Button("Open Web Page") {
+                    workspace.openWebPage()
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+                .help("Open an embedded browser tab (forth-standard.org). Type a URL or search in the address field.")
 
                 Divider()
 

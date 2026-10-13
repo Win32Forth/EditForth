@@ -205,12 +205,36 @@ struct EditorTextView: NSViewRepresentable {
 
         let textChanged = tv.string != text
         if textChanged {
-            // Replacing the string resets caret/scroll; restore afterward unless goto wins.
+            let oldText = tv.string
+            // Ask Forth / Enhance rewrite the same buffer often. A full `string =`
+            // resets the clip to the top; async needsRestore then races the next
+            // chunk and fights the user mid-scroll. In-place growth: pin scroll
+            // synchronously (follow only when already near the bottom). Tab switch
+            // / unrelated reload: fall back to saved selection + topVisibleLine.
+            let inPlace = Self.isLikelyInPlaceTextUpdate(old: oldText, new: text)
             context.coordinator.suppressSave = true
             tv.string = text
             context.coordinator.suppressSave = false
-            context.coordinator.needsRestore = true
             context.coordinator.lineNumberRuler?.invalidate()
+            if inPlace, gotoLine == nil {
+                let wasNearBottom = Self.isNearBottom(scroll)
+                let savedTop = max(1, topVisibleLine)
+                context.coordinator.suppressSave = true
+                if wasNearBottom {
+                    let len = (tv.string as NSString).length
+                    let end = NSRange(location: len, length: 0)
+                    tv.setSelectedRange(end)
+                    tv.scrollRangeToVisible(end)
+                } else {
+                    _ = Coordinator.scroll(tv, soTopLineIs: savedTop)
+                }
+                context.coordinator.suppressSave = false
+                context.coordinator.needsRestore = false
+                context.coordinator.captureViewState(from: tv)
+            } else {
+                // Replacing the string resets caret/scroll; restore afterward unless goto wins.
+                context.coordinator.needsRestore = true
+            }
         }
         tv.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         tv.isEditable = !isViewMode
@@ -314,6 +338,24 @@ struct EditorTextView: NSViewRepresentable {
         if let len = highlightLen, len > 0, let off = highlightOff, off >= 0 { return true }
         if let name = highlightName, !name.isEmpty { return true }
         return false
+    }
+
+    /// True when `new` looks like an edit of the same buffer (stream / typing), not a tab switch.
+    private static func isLikelyInPlaceTextUpdate(old: String, new: String) -> Bool {
+        if old.isEmpty { return true }
+        if new.isEmpty { return false }
+        let n = min(96, min(old.count, new.count))
+        guard n > 0 else { return false }
+        return old.prefix(n) == new.prefix(n)
+    }
+
+    /// Same idea as the console transcript: follow only if the user is already near the end.
+    private static func isNearBottom(_ scroll: NSScrollView) -> Bool {
+        let clip = scroll.contentView.bounds
+        let docHeight = scroll.documentView?.bounds.height ?? 0
+        if docHeight <= clip.height + 1 { return true }
+        let maxY = max(0, docHeight - clip.height)
+        return clip.origin.y >= maxY - 48
     }
 
     private func finishGoto(

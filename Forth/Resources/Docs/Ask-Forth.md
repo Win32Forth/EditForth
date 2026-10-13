@@ -1,10 +1,14 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**.
 
-## Requirements (local models)
+## Requirements (providers)
 
-Ask Forth talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`). Without Ollama running and a model installed, **Ask** and **Agent Enhance Reply** will report that the model is unreachable.
+Ask Forth talks to a pluggable **`LLMClient`**. Choose **Provider** in the panel:
+
+### Ollama (local) — default
+
+Talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`). Without Ollama running and a model installed, **Ask** / **Agent Enhance Reply** report that the model is unreachable.
 
 1. Install the **Ollama** app (or CLI) from https://ollama.com  
 2. Pull a model, for example:
@@ -15,7 +19,19 @@ ollama pull gemma4:e4b
 
 3. Leave Ollama running, then use EditForth.
 
-**Default model** in the panel is **`gemma4:e4b`**. Other tags that work: **`gemma4:12b`** (heavier) and **`gemma4:31b-cloud`** (fast cloud path — not fully local).
+**Default model:** **`gemma4:e4b`**. Also useful: **`gemma4:12b`**, **`gemma4:31b-cloud`**.
+
+### OpenAI-compatible (SpaceXAI / xAI and others)
+
+Uses HTTP **`/v1/chat/completions`** (OpenAI-compatible). Default **Base URL** is SpaceXAI / xAI: **`https://api.x.ai/v1`**. You can point Base URL at any server that speaks the same dialect (LM Studio, etc.).
+
+1. Create an API key (for xAI: [console.x.ai](https://console.x.ai) → API Keys).  
+2. In Ask Forth, choose **OpenAI-compatible**, paste the key, click **Save** (Keychain). Or export **`XAI_API_KEY`** in the environment before launching EditForth.  
+3. Set **Model** (default **`grok-4.7`** for SpaceXAI).
+
+Streaming and Tool agent use the same OpenAI tools message shape. Cloud use needs network access and incurs provider charges.
+
+To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root **`FORTH-FINETUNE.md`** — that is separate from the xAI API.
 
 ## Basic workflow
 
@@ -25,7 +41,7 @@ ollama pull gemma4:e4b
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
 5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
 6. Optionally turn on **Tool agent** (default **off**). The model may call `web_search`, `fetch_url`, or `library_search` before answering (Ollama tools; needs a tools-capable model such as `gemma4:e4b`). Slower; use **Show Agent Transcript** to see tool steps. When Tool agent is on, automatic URL fetch / web search are skipped.  
-7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
+7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
 8. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
 9. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
 
@@ -42,9 +58,13 @@ Turn on **Show Agent Transcript** (beside the button) if you want to read the ev
 
 ## Library context
 
-Library search does **not** send the whole tree. It scores `.fth` / `.txt` files for tokens in your prompt and includes only the top excerpts. Default folder: **`Library/Sample`**.
+Library search does **not** send the whole tree. It scores `.fth` / `.txt` / `.md` / `.swift` files for tokens in your prompt and includes only the top excerpts. Default folder: **`Library/Sample`**.
 
-In addition, Ask Forth always also searches **`Library/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
+Use **Library…** to point at another folder. For EditForth app / UI / debugger questions, choose the EditForth project root (or `Editor/`) so Ask can see Swift sources and Docs. Heavy folders (`.git`, `DerivedData`, `finetune`, `Build`, `.build`, `xcuserdata`, `Pods`, `node_modules`, model weights) are skipped.
+
+In addition, when your folder is under **Library**, Ask Forth also searches **`Library/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
+
+For app-source questions, turn **Fetch URLs in Prompt** off so the model stays on local excerpts instead of inventing generic shortcuts from the web.
 
 ## Fetch URLs in Prompt
 
@@ -73,13 +93,13 @@ Default **off**. When on, Ask and Agent Enhance Reply run an Ollama **tool loop*
 |------|----------------|
 | `web_search` | DuckDuckGo Lite search → titles / URLs / snippets |
 | `fetch_url` | Fetch one http(s) page → plain text excerpt |
-| `library_search` | Score Library (+ Reference) `.fth` / `.txt` excerpts |
+| `library_search` | Score Library (+ Reference) `.fth` / `.txt` / `.md` / `.swift` excerpts |
 
 Status notes look like `· Tools 2 call(s)/2 round(s)`. The AskForth file gets `\ Tool agent:` audit lines. Turn on **Show Agent Transcript** to read `→ tool(…)` / `← …` steps. Automatic **Fetch URLs** / **Include web search** are disabled while Tool agent is on (the model calls those tools itself). Passive **Include Library context** still runs when enabled.
 
 ## Web browser tab
 
-**View → Open Web Page…** (⇧⌘L) opens an embedded browser tab (default [forth-standard.org](https://forth-standard.org/)). Use **Back** / **Forward** at the top left of that editor chrome, follow links in-page, and **Send to Ask Forth** to append the current URL to the Prompt (and show the Ask panel). More ideas: repo root `ASKFORTHMORE.md`.
+**View → Open Web Page** (⇧⌘L) opens an embedded browser tab on [forth-standard.org](https://forth-standard.org/) and focuses the address field — no URL dialog. Type a URL (`gforth.org`) or a search (`OPEN-FILE Forth`) and press Return / **Go** (searches use DuckDuckGo). Use **Back** / **Forward**, follow links in-page, and **Send to Ask Forth** to append the current URL to the Prompt. More ideas: repo root `ASKFORTHMORE.md`.
 
 ## Streaming
 

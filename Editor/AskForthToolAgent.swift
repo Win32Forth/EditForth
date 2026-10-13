@@ -42,7 +42,7 @@ enum AskForthToolAgent {
         ),
         LLMToolDefinition(
             name: "library_search",
-            description: "Search the EditForth Library folder (and Reference) for matching Forth/.txt excerpts. Prefer this for local samples and the Forth 2012 standard text.",
+            description: "Search the configured Library folder (and Reference when under Library) for matching .fth/.txt/.md/.swift excerpts. Prefer this for local samples, docs, app source, and the Forth 2012 standard text.",
             parametersJSONSchema: [
                 "type": "object",
                 "properties": [
