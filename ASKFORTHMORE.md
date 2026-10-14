@@ -27,7 +27,7 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 - ~~Auto-rebuild index when Library folder mtimes drift~~ — **done** (`needsRefresh` / `ensureFresh` on Ask + Library Save).  
 - ~~Setup banner + auto-pull nomic + Prepare…~~ — **done** (`AskForthOllamaBootstrap.swift`, `AskForthLibraryPrepare`; tree **2.3.6**).  
 - ~~AskForth-N.fth `\\` … `{` header with model / Library settings~~ — **done** (tree **2.3.6**).  
-- Ship 2.3.6 in next public EditForth release when ready.
+- ~~Ship 2.3.6~~ — **done** (tag **v2.3.6**).
 
 ---
 
