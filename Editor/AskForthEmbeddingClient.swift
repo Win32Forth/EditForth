@@ -37,13 +37,14 @@ enum AskForthEmbeddingError: LocalizedError {
 /// Local Ollama embedding HTTP client (`POST /api/embed`).
 struct AskForthEmbeddingClient: Sendable {
     /// Default model: Nomic text embeddings (~274 MB, 768-d).
-    static let defaultModel = "nomic-embed-text"
+    nonisolated static let defaultModel = "nomic-embed-text"
+    nonisolated static let defaultBaseURL = URL(string: "http://127.0.0.1:11434")!
 
     var baseURL: URL
     var model: String
 
-    init(
-        baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
+    nonisolated init(
+        baseURL: URL = AskForthEmbeddingClient.defaultBaseURL,
         model: String = AskForthEmbeddingClient.defaultModel
     ) {
         self.baseURL = baseURL
@@ -51,12 +52,12 @@ struct AskForthEmbeddingClient: Sendable {
     }
 
     /// Nomic document prefix for indexed chunks.
-    static func documentText(_ body: String) -> String {
+    nonisolated static func documentText(_ body: String) -> String {
         "search_document: \(body)"
     }
 
     /// Nomic query prefix for Ask prompts.
-    static func queryText(_ body: String) -> String {
+    nonisolated static func queryText(_ body: String) -> String {
         "search_query: \(body)"
     }
 

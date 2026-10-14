@@ -1,6 +1,6 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**; **AskForth header** (`\\` … `{` with model / temperature / checked options), orange **setup banner**, and **nomic auto-pull / Prepare…** in **2.3.6**.
 
 ## Requirements (providers)
 
@@ -8,16 +8,18 @@ Ask Forth talks to a pluggable **`LLMClient`** through **saved model profiles**.
 
 ### Ollama (local)
 
-Talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`). Without Ollama running and a model installed, **Ask** / **Agent Enhance Reply** report that the model is unreachable.
+Talks to **[Ollama](https://ollama.com)** on this Mac (`http://127.0.0.1:11434`). Without Ollama running and a model installed, **Ask** / **Agent Enhance Reply** cannot answer with a local profile.
 
-1. Install the **Ollama** app (or CLI) from https://ollama.com  
-2. Pull a model, for example:
+1. Install the **Ollama** app (or CLI) from https://ollama.com and leave it running.  
+2. Pull a **chat** model (EditForth does **not** auto-download multi‑GB chat models):
 
 ```bash
 ollama pull gemma4:e4b
 ```
 
-3. Leave Ollama running, then pick an Ollama profile in Ask Forth (starter: **Ollama gemma4:e4b**).
+3. Pick an Ollama profile in Ask Forth (starter: **Ollama gemma4:e4b**).
+
+When you open Ask Forth, an orange **setup banner** appears if Ollama is down or the selected chat model is missing (with the exact `ollama pull …` command).
 
 **Default chat model tag:** **`gemma4:e4b`**. Also useful: **`qwen2.5-coder:7b`**, **`gemma4:12b`**, **`gemma4:31b-cloud`**. Create or pick a profile in **Models…** for the tag you pulled.
 
@@ -68,7 +70,7 @@ To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
 5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
 6. Optionally turn on **Tool agent** (default **off**). The model may call `web_search`, `fetch_url`, or `library_search` before answering (Ollama tools; needs a tools-capable model such as `gemma4:e4b`). Slower; use **Show Agent Transcript** to see tool steps. When Tool agent is on, automatic URL fetch / web search are skipped.  
-7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth/AskForth-N.fth`**, writes a `\ Ask Forth` comment header with your prompt, and **streams the model reply into that tab**.  
+7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth/AskForth-N.fth`**, writes an F-PC block-comment header (`\\` … `{`) with the active **model**, **temperature**, any checked options (**Include Library context** with Library path / retrieve mode / max snippets / context lines / max characters, **Fetch URLs**, **web search**, **Tool agent**), and a **Prompt:** section, then **streams the model reply into that tab**.  
 8. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
 9. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
 
@@ -109,13 +111,21 @@ For app-source questions, turn **Fetch URLs in Prompt** off so the model stays o
 
 **Chat model ≠ embedding model.** Profiles (gemma / Qwen / SpaceXAI / mlx) write the answer. Hybrid and Semantic retrieve call local Ollama **`nomic-embed-text`** (~274 MB, 768-dimensional vectors) only to find relevant Library chunks — even when chat uses SpaceXAI or `mlx_lm.server` on port 1234.
 
-**One-time setup**
+**First-run (automatic)**
+
+The DMG does **not** ship an embed index. When you open Ask Forth with Library on and **Hybrid/Semantic**:
+
+1. If Ollama is running and **`nomic-embed-text`** is missing, EditForth **auto-pulls** it via Ollama’s API (~274 MB; progress in the setup banner / status).  
+2. EditForth then **builds the Library index in the background** (Sample + always Reference). A full first build can take ~30+ seconds.  
+3. **Ask does not wait** for that first build — it uses **keyword** Library retrieve until the index is ready, then later Asks use Hybrid/Semantic.
+
+You can also use Library… → **Prepare…** (pull + index) or **Rebuild Index…** (full re-embed). Manual pull is still fine:
 
 ```bash
 ollama pull nomic-embed-text
 ```
 
-Leave Ollama running. In Ask Forth → **Library…** → **Rebuild Index…**. EditForth chunks the configured Library folder **plus always `Library/Reference`**, embeds each chunk with the Nomic document prefix, and stores the index at:
+Index file:
 
 `~/Library/Application Support/EditForth/AskForthEmbedIndex/library-embed-v1.json`
 
@@ -123,11 +133,9 @@ Typical Sample + Reference size is on the order of hundreds of chunks and a few�
 
 **When the index updates**
 
-- **Automatic:** before Hybrid/Semantic Ask (and after **Library…** Save if the folder changed or the index is stale), EditForth incrementally re-embeds added/changed files and drops removed ones. Status may show `Library index out of date — updating…`.  
-- **Manual:** **Rebuild Index…** forces a full refresh (useful after a large Library edit or if auto-update failed).  
-- Also rebuild after switching embedding model tags (rare; default stays `nomic-embed-text`).
-
-Incremental rebuilds reuse unchanged files by mtime/size.
+- **Automatic background:** on Ask Forth open, after Library… Save when the folder/files drift, and when Ask notices a stale index (kicks prepare; does not block the reply).  
+- **Manual:** **Prepare…** or **Rebuild Index…**.  
+- Incremental updates reuse unchanged files by mtime/size.
 
 **Stack-effects cheat sheet**
 

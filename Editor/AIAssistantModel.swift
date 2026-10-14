@@ -46,6 +46,8 @@ final class AIAssistantModel: ObservableObject {
     /// Draft API key for the Models sheet (active or selected profile).
     @Published var apiKeyDraft: String = ""
     @Published var apiKeyStatus: String = ""
+    /// Setup / Library prepare tip shown under the Ask Forth help panel (Ollama, models, index).
+    @Published var setupBanner: String = ""
 
     /// Tab / path that receives streamed Ask / Fix output.
     private(set) var askOutputTabID: UUID?
@@ -93,6 +95,70 @@ final class AIAssistantModel: ObservableObject {
 
     var askOutputFileName: String? {
         askOutputFileURL?.lastPathComponent
+    }
+
+    /// Refresh Ollama/chat/Library setup tips and start background embed prepare when needed.
+    func prepareAskForthEnvironment() {
+        Task { await refreshSetupBanner() }
+        guard includeLibraryContext else { return }
+        let settings = ForthLibraryRAGSettings.load()
+        guard settings.retrieveMode != .keyword else { return }
+        AskForthLibraryPrepare.startIfNeeded(settings: settings) { [weak self] note in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.applyLibraryPrepareProgress(note)
+            }
+        }
+    }
+
+    /// Orange banner shows only in-progress / failure notes — never “Indexed / ready” completion text.
+    private func applyLibraryPrepareProgress(_ note: String) async {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        let isCompletion =
+            trimmed.isEmpty
+            || lower.hasPrefix("indexed ")
+            || lower.contains("index ready")
+            || lower.hasPrefix("library index ready")
+        if isCompletion {
+            await refreshSetupBanner()
+            return
+        }
+        setupBanner = trimmed
+        if !isBusy {
+            status = trimmed
+        }
+        if !AskForthLibraryPrepare.isBusy {
+            await refreshSetupBanner()
+        }
+    }
+
+    func refreshSetupBanner() async {
+        var parts: [String] = []
+        if let chat = await AskForthOllamaBootstrap.chatSetupBanner(
+            provider: provider,
+            chatModel: modelName
+        ) {
+            parts.append(chat)
+        }
+        let settings = ForthLibraryRAGSettings.load()
+        if includeLibraryContext {
+            let store = ForthLibraryEmbedIndex.load()
+            let indexPresent = store.map { !$0.isEmpty } ?? false
+            let chunkCount = store?.chunks.count ?? 0
+            let indexReady = indexPresent
+                && !(ForthLibraryEmbedIndex.needsRefresh(settings: settings))
+            // Only warn when Library embed setup is incomplete or updating — never a green/ready toast.
+            if let lib = await AskForthOllamaBootstrap.libraryEmbedSetupBanner(
+                retrieveMode: settings.retrieveMode,
+                indexReady: indexReady,
+                indexPresent: indexPresent,
+                chunkCount: chunkCount
+            ) {
+                parts.append(lib)
+            }
+        }
+        setupBanner = parts.joined(separator: "\n")
     }
 
     /// Reload profiles from disk after the Models sheet closes or edits.
@@ -379,7 +445,7 @@ final class AIAssistantModel: ObservableObject {
             let prepared: Bool = await MainActor.run {
                 switch destination {
                 case .newAskFile(let askPrompt):
-                    let header = Self.askFileHeader(prompt: askPrompt)
+                    let header = self.askFileHeader(prompt: askPrompt)
                     guard let tab = workspace.createAskForthFile(initialText: header) else {
                         self.isBusy = false
                         self.status = "Could not create AskForth file."
@@ -469,6 +535,7 @@ final class AIAssistantModel: ObservableObject {
                 let rag = await ForthLibraryRAG.retrieveAsync(
                     for: ragQuery,
                     settings: settings,
+                    embedClient: AskForthEmbeddingClient(),
                     embedProgress: { note in
                         Task { @MainActor in
                             self.status = note
@@ -787,11 +854,44 @@ final class AIAssistantModel: ObservableObject {
         askStreamBodyStart = safeStart + (block as NSString).length
     }
 
-    private static func askFileHeader(prompt: String) -> String {
-        var lines = ["\\ Ask Forth", "\\"]
+    /// F-PC block comment (`\\` … `{`) with Ask settings and the user Prompt.
+    private func askFileHeader(prompt: String) -> String {
+        let profile = profiles.first(where: { $0.id == activeProfileID })
+            ?? AskForthLLMSettings.activeProfile
+        let model = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let temperature = String(format: "%.2f", profile.temperature)
+
+        var lines: [String] = [
+            "\\\\ Ask Forth",
+            "\\ Model: \(model.isEmpty ? "(none)" : model)",
+            "\\ Temperature: \(temperature)",
+        ]
+
+        if includeLibraryContext {
+            let settings = ForthLibraryRAGSettings.load()
+            lines.append("\\ Include Library context: on")
+            lines.append("\\ Library: \(settings.folderPath)")
+            lines.append("\\ Retrieve mode: \(settings.retrieveMode.displayName)")
+            lines.append("\\ Max snippets: \(settings.maxSnippets)")
+            lines.append("\\ Context lines: \(settings.contextLines)")
+            lines.append("\\ Max characters: \(settings.maxChars)")
+        }
+        if fetchURLsInPrompt {
+            lines.append("\\ Fetch URLs in Prompt: on")
+        }
+        if includeWebSearch {
+            lines.append("\\ Include web search: on")
+        }
+        if useToolAgent {
+            lines.append("\\ Tool agent: on")
+        }
+
+        lines.append("\\")
+        lines.append("\\ Prompt:")
         for raw in prompt.split(separator: "\n", omittingEmptySubsequences: false) {
             lines.append("\\ \(raw)")
         }
+        lines.append("{")
         lines.append("")
         lines.append("")
         return lines.joined(separator: "\n")

@@ -17,7 +17,7 @@ enum ForthLibraryRetrieveMode: String, CaseIterable, Codable, Sendable {
     /// Blend embedding similarity with keyword scores (default).
     case hybrid
 
-    var displayName: String {
+    nonisolated var displayName: String {
         switch self {
         case .keyword: return "Keyword"
         case .semantic: return "Semantic"
@@ -25,7 +25,7 @@ enum ForthLibraryRetrieveMode: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    var statusLabel: String {
+    nonisolated var statusLabel: String {
         switch self {
         case .keyword: return "keyword"
         case .semantic: return "embed"
@@ -35,14 +35,14 @@ enum ForthLibraryRetrieveMode: String, CaseIterable, Codable, Sendable {
 }
 
 struct ForthLibraryRAGSettings: Equatable, Sendable {
-    static let folderKey = "aiAssistantLibraryFolder"
-    static let maxSnippetsKey = "aiAssistantLibraryMaxSnippets"
-    static let contextLinesKey = "aiAssistantLibraryContextLines"
-    static let maxCharsKey = "aiAssistantLibraryMaxChars"
-    static let retrieveModeKey = "aiAssistantLibraryRetrieveMode"
+    nonisolated static let folderKey = "aiAssistantLibraryFolder"
+    nonisolated static let maxSnippetsKey = "aiAssistantLibraryMaxSnippets"
+    nonisolated static let contextLinesKey = "aiAssistantLibraryContextLines"
+    nonisolated static let maxCharsKey = "aiAssistantLibraryMaxChars"
+    nonisolated static let retrieveModeKey = "aiAssistantLibraryRetrieveMode"
 
     /// Default search root: Sample (clocks, GRAPHICS demos). Library… can point elsewhere.
-    static var defaultFolderPath: String {
+    nonisolated static var defaultFolderPath: String {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents/EditForth/Library/Sample", isDirectory: true)
             .path
@@ -54,7 +54,8 @@ struct ForthLibraryRAGSettings: Equatable, Sendable {
     var maxChars: Int
     var retrieveMode: ForthLibraryRetrieveMode
 
-    static func load() -> ForthLibraryRAGSettings {
+    /// Safe from any isolation (UserDefaults is thread-safe; used as default args off the main actor).
+    nonisolated static func load() -> ForthLibraryRAGSettings {
         let d = UserDefaults.standard
         let folder = d.string(forKey: folderKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let snippets = d.object(forKey: maxSnippetsKey) as? Int
@@ -71,7 +72,7 @@ struct ForthLibraryRAGSettings: Equatable, Sendable {
         )
     }
 
-    func save() {
+    nonisolated func save() {
         let d = UserDefaults.standard
         d.set(folderPath, forKey: Self.folderKey)
         d.set(maxSnippets, forKey: Self.maxSnippetsKey)
@@ -80,11 +81,11 @@ struct ForthLibraryRAGSettings: Equatable, Sendable {
         d.set(retrieveMode.rawValue, forKey: Self.retrieveModeKey)
     }
 
-    var folderURL: URL {
+    nonisolated var folderURL: URL {
         URL(fileURLWithPath: folderPath, isDirectory: true)
     }
 
-    private static func clamp(_ v: Int, min: Int, max: Int) -> Int {
+    nonisolated private static func clamp(_ v: Int, min: Int, max: Int) -> Int {
         Swift.min(Swift.max(v, min), max)
     }
 }

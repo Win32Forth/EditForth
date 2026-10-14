@@ -129,8 +129,8 @@ enum AskForthLLMSettings {
     static let openAIBaseURLKey = "aiAssistantOpenAIBaseURL"
     private static let legacyKeychainAccount = "openaiCompatibleAPIKey"
 
-    static let defaultOllamaModel = "gemma4:e4b"
-    static let defaultOpenAIModel = "grok-4.7"
+    nonisolated static let defaultOllamaModel = "gemma4:e4b"
+    nonisolated static let defaultOpenAIModel = "grok-4.7"
     /// Coding-friendly default (Ollama/OpenAI often default ~0.7–0.8 when unset).
     static let defaultTemperature: Double = 0.3
     static let temperatureRange: ClosedRange<Double> = 0...2

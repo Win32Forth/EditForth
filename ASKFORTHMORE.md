@@ -15,7 +15,7 @@ Related: `Forth/Resources/Docs/Ask-Forth.md`, `ROADMAP.md` §5, `Library/Referen
 
 Any “web access” would mean **EditForth fetches** pages or search hits on the Mac, then **injects capped text into the LLM prompt** (same seam as Library RAG), with an explicit user opt-in where privacy matters.
 
-### Embedding RAG (nomic-embed-text) — **done (shipped 2.3.5)**
+### Embedding RAG (nomic-embed-text) — **done (shipped 2.3.5; setup UX in 2.3.6)**
 
 **Idea:** Add a tiny local embedding model so Library retrieve matches meaning (paraphrases → ANS stack effects), then ground the chat model on those excerpts.
 
@@ -25,7 +25,9 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 - ~~Short `Stack-effects-cheatsheet.txt`~~ — **done** (`Library/Reference/Stack-effects-cheatsheet.txt`).  
 - ~~Auto-rebuild index when Library folder mtimes drift~~ — **done** (`needsRefresh` / `ensureFresh` on Ask + Library Save).  
-- Ship in next public EditForth release when ready.
+- ~~Setup banner + auto-pull nomic + Prepare…~~ — **done** (`AskForthOllamaBootstrap.swift`, `AskForthLibraryPrepare`; tree **2.3.6**).  
+- ~~AskForth-N.fth `\\` … `{` header with model / Library settings~~ — **done** (tree **2.3.6**).  
+- Ship 2.3.6 in next public EditForth release when ready.
 
 ---
 

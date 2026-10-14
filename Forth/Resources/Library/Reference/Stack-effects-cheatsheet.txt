@@ -44,6 +44,35 @@ CHARS       ( n1 -- n2 )
 FILL        ( c-addr u char -- )
 ERASE       ( addr u -- )       fill with zero
 
+ALLOCATE / ALLOT / VALUE — do not confuse these
+----------------------------------------------
+ALLOT       ( n -- )            advances HERE in the dictionary
+CREATE xxx  n ALLOT             dictionary buffer named xxx (preferred
+                                for fixed Sample/AskForth buffers)
+
+ALLOCATE    ( u -- a-addr ior ) heap block; HERE is unchanged
+FREE        ( a-addr -- ior )   release a heap block from ALLOCATE
+
+WRONG (models invent this often):
+  CREATE html-tags  20 CELLS ALLOCATE
+  — CREATE already took the name; ALLOCATE does not allot at HERE;
+    it returns ( a-addr ior ) on the heap. The name is not a buffer.
+
+RIGHT — dictionary (fixed size, survives until ANEW/FORGET):
+  CREATE html-tags  20 CELLS ALLOT
+
+RIGHT — heap, keep the address in a VALUE:
+  20 CELLS ALLOCATE THROW  VALUE html-tags
+  \ later:  html-tags FREE DROP   (or check ior)
+
+RIGHT — heap into a VARIABLE:
+  VARIABLE html-tags
+  20 CELLS ALLOCATE THROW  html-tags !
+  \ use:  html-tags @   …   html-tags @ FREE DROP
+
+Never write CREATE name … ALLOCATE for a named buffer. Use CREATE+ALLOT
+or ALLOCATE+VALUE (or VARIABLE !).
+
 --------------------------------------------------------------------
 STACK MANIPULATION
 --------------------------------------------------------------------

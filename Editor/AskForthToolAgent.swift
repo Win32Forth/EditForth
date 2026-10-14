@@ -201,7 +201,11 @@ enum AskForthToolAgent {
             guard !query.isEmpty else { return "Error: missing query" }
             let settings = ForthLibraryRAGSettings.load()
             // Hybrid/semantic may call Ollama /api/embed; keyword stays local.
-            let rag = await ForthLibraryRAG.retrieveAsync(for: query, settings: settings)
+            let rag = await ForthLibraryRAG.retrieveAsync(
+                for: query,
+                settings: settings,
+                embedClient: AskForthEmbeddingClient()
+            )
             if rag.isEmpty {
                 return "Library: no hits for “\(query)” (\(settings.retrieveMode.statusLabel))."
             }

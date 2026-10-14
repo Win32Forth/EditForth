@@ -10,8 +10,9 @@
 
 import Foundation
 
-/// Coalesces concurrent auto-rebuilds on the main actor.
-private enum ForthLibraryEmbedRefreshGate {
+/// Coalesces concurrent auto-rebuilds (MainActor — module default isolation).
+@MainActor
+enum ForthLibraryEmbedRefreshGate {
     static var inFlight: Task<ForthLibraryEmbedStore, Error>?
 }
 
@@ -69,6 +70,10 @@ enum ForthLibraryEmbedIndex {
     static let chunkMaxChars = 4_000
     static let embedBatchSize = 16
 
+    /// True while `ensureFresh` / `buildOrRefresh` is running for the shared gate.
+    @MainActor
+    static var isRefreshing: Bool { ForthLibraryEmbedRefreshGate.inFlight != nil }
+
     private static let indexFileName = "library-embed-v1.json"
 
     // MARK: Paths
@@ -119,7 +124,7 @@ enum ForthLibraryEmbedIndex {
     // MARK: Roots (Sample/configured + always Reference)
 
     /// Primary Library folder plus Reference roots (same policy as keyword RAG).
-    static func indexRoots(settings: ForthLibraryRAGSettings = .load()) -> [URL] {
+    static func indexRoots(settings: ForthLibraryRAGSettings) -> [URL] {
         var roots: [URL] = []
         var seen = Set<String>()
         func add(_ url: URL?) {
@@ -152,7 +157,7 @@ enum ForthLibraryEmbedIndex {
     /// True when there is no index, roots differ from settings, the embedding model
     /// changed, or any source file was added/removed/modified (mtime/size).
     static func needsRefresh(
-        settings: ForthLibraryRAGSettings = .load(),
+        settings: ForthLibraryRAGSettings,
         model: String = AskForthEmbeddingClient.defaultModel
     ) -> Bool {
         guard let store = load(), !store.isEmpty else { return true }
@@ -162,7 +167,10 @@ enum ForthLibraryEmbedIndex {
         let rootPaths = Set(roots.map(\.path))
         if Set(store.roots) != rootPaths { return true }
 
-        let files = collectSourceFiles(roots: roots)
+        // Only files that actually produce chunks. Empty / tiny sources (e.g. 0–31 byte
+        // helpers) are walked by collectSourceFiles but skipped by makePendingChunks
+        // (min ~40 chars) — comparing them here falsely kept the index “stale” forever.
+        let files = collectSourceFiles(roots: roots).filter { fileYieldsChunks($0) }
         var indexedMeta: [String: (mtime: TimeInterval, size: Int)] = [:]
         for chunk in store.chunks {
             if let prior = indexedMeta[chunk.absolutePath] {
@@ -190,8 +198,8 @@ enum ForthLibraryEmbedIndex {
     /// Incremental rebuild when stale; no-op when fresh. Concurrent callers share one task.
     @discardableResult
     static func ensureFresh(
-        settings: ForthLibraryRAGSettings = .load(),
-        client: AskForthEmbeddingClient = AskForthEmbeddingClient(),
+        settings: ForthLibraryRAGSettings,
+        client: AskForthEmbeddingClient,
         progress: (@Sendable (String) -> Void)? = nil
     ) async throws -> ForthLibraryEmbedStore {
         if let store = load(), !store.isEmpty,
@@ -220,8 +228,8 @@ enum ForthLibraryEmbedIndex {
     /// Build or refresh the on-disk index. Reuses embeddings when path+mtime+size match.
     @discardableResult
     static func buildOrRefresh(
-        settings: ForthLibraryRAGSettings = .load(),
-        client: AskForthEmbeddingClient = AskForthEmbeddingClient(),
+        settings: ForthLibraryRAGSettings,
+        client: AskForthEmbeddingClient,
         forceFullRebuild: Bool = false,
         progress: (@Sendable (String) -> Void)? = nil
     ) async throws -> ForthLibraryEmbedStore {
@@ -325,7 +333,9 @@ enum ForthLibraryEmbedIndex {
             chunks: all
         )
         try save(store)
-        progress?("Indexed \(store.chunks.count) chunk(s) → \(indexFileURL().path)")
+        // Intentionally no user-facing “Indexed / ready” progress — Ask Forth banner
+        // should only show while building, then clear.
+        progress?("")
         return store
     }
 
@@ -358,8 +368,8 @@ enum ForthLibraryEmbedIndex {
     /// Convenience: load index (building if missing), search, map to Library snippets.
     static func retrieveSnippets(
         for query: String,
-        settings: ForthLibraryRAGSettings = .load(),
-        client: AskForthEmbeddingClient = AskForthEmbeddingClient(),
+        settings: ForthLibraryRAGSettings,
+        client: AskForthEmbeddingClient,
         topK: Int? = nil,
         buildIfMissing: Bool = true,
         progress: (@Sendable (String) -> Void)? = nil
@@ -460,6 +470,15 @@ enum ForthLibraryEmbedIndex {
     private static func readText(url: URL) -> String? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+    }
+
+    /// True when indexing would emit at least one chunk (matches `makePendingChunks` threshold).
+    private static func fileYieldsChunks(_ file: SourceFile) -> Bool {
+        // Cheap reject for empty / tiny helpers that can never meet the chunk floor.
+        if file.size > 0, file.size < 40 { return false }
+        if file.size == 0 { return false }
+        guard let text = readText(url: file.url) else { return false }
+        return !makePendingChunks(file: file, text: text).isEmpty
     }
 
     private static func makePendingChunks(file: SourceFile, text: String) -> [PendingChunk] {

@@ -193,8 +193,8 @@ enum ForthLibraryRAG {
     /// fall back to keyword if the index is missing or embed fails.
     static func retrieveAsync(
         for query: String,
-        settings: ForthLibraryRAGSettings = .load(),
-        embedClient: AskForthEmbeddingClient = AskForthEmbeddingClient(),
+        settings: ForthLibraryRAGSettings,
+        embedClient: AskForthEmbeddingClient,
         embedProgress: (@Sendable (String) -> Void)? = nil
     ) async -> ForthLibraryRAGResult {
         switch settings.retrieveMode {
@@ -226,6 +226,8 @@ enum ForthLibraryRAG {
         }
     }
 
+    /// Kick a background index refresh when stale; do **not** block Ask on a long first build.
+    /// Retrieve then uses the existing index, or falls back to keyword until the background job finishes.
     private static func autoRefreshEmbedIndexIfNeeded(
         settings: ForthLibraryRAGSettings,
         embedClient: AskForthEmbeddingClient,
@@ -234,14 +236,17 @@ enum ForthLibraryRAG {
         guard ForthLibraryEmbedIndex.needsRefresh(settings: settings, model: embedClient.model) else {
             return
         }
-        do {
-            _ = try await ForthLibraryEmbedIndex.ensureFresh(
-                settings: settings,
-                client: embedClient,
-                progress: progress
-            )
-        } catch {
-            progress?("Library index update failed — using keyword if needed.")
+        let alreadyBusy = await MainActor.run {
+            ForthLibraryEmbedIndex.isRefreshing || AskForthLibraryPrepare.isBusy
+        }
+        if alreadyBusy {
+            progress?("Library index still building — using keyword until ready.")
+            return
+        }
+        progress?("Library index building in background…")
+        // Fire-and-forget prepare (pull nomic if needed + ensureFresh).
+        await MainActor.run {
+            AskForthLibraryPrepare.startIfNeeded(settings: settings, progress: progress)
         }
     }
 

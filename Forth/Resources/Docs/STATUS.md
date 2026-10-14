@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.3.5** (build **14**) — shipped  
+**Current:** **2.3.6** (build **15**) — unreleased  
 
 **Last updated:** 2026-10-14
+
+---
+
+## v2.3.6 — Ask Forth setup UX + AskForth headers
+
+**Version strings:** marketing **2.3.6**, build **15** (EditForth + companion 64Forth lockstep). Tree only (no DMG/tag yet). Last public ship **v2.3.5**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.6 === Oct 14, 2026 5:06 PM ===
+```
+
+### Highlights since 2.3.5
+
+- **AskForth-N.fth header** — F-PC block comment starting with `\\ Ask Forth` and ending with `{`; records **Model**, **Temperature**, checked options (**Include Library context** with Library path / Retrieve mode / Max snippets / Context lines / Max characters, **Fetch URLs**, **web search**, **Tool agent**), and a labeled **Prompt:** section.
+- **Setup banner** — orange tip under Ask Forth help when Ollama is down, the chat model is missing, or the Library embed index needs work (exact `ollama pull …` when useful).
+- **Prepare… / auto-bootstrap** — `AskForthOllamaBootstrap.swift` + `AskForthLibraryPrepare`: auto-pull **`nomic-embed-text`** when Ollama is up, then build/refresh the Library embed index in the background; Library… **Prepare…** button alongside **Rebuild Index…**.
+- **MainActor / isolation cleanups** — nonisolated Ollama/embed defaults and settings helpers; explicit settings/client args so Hybrid prepare works off the main actor.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ---
 

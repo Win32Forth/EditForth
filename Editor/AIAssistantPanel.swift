@@ -70,16 +70,25 @@ struct AIAssistantPanel: View {
             }
             refreshLibraryFolderLeaf()
             model.reloadProfilesFromSettings()
+            model.prepareAskForthEnvironment()
         }
         .onChange(of: showLibrarySettings) { _, isOpen in
             if !isOpen {
                 refreshLibraryFolderLeaf()
+                model.prepareAskForthEnvironment()
             }
         }
         .onChange(of: showModelsSettings) { _, isOpen in
             if !isOpen {
                 model.reloadProfilesFromSettings()
+                model.prepareAskForthEnvironment()
             }
+        }
+        .onChange(of: model.includeLibraryContext) { _, _ in
+            model.prepareAskForthEnvironment()
+        }
+        .onChange(of: model.activeProfileID) { _, _ in
+            Task { await model.refreshSetupBanner() }
         }
         .sheet(isPresented: $showLibrarySettings) {
             LibraryRAGSettingsSheet()
@@ -129,9 +138,23 @@ struct AIAssistantPanel: View {
                 """
                 Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
 
+                Local Ask needs Ollama (https://ollama.com) running and a chat model (default: ollama pull gemma4:e4b). Library Hybrid/Semantic also needs nomic-embed-text — EditForth downloads that automatically when Ollama is available and builds the Library index in the background.
+
                 Pick a saved model profile below (Ollama, SpaceXAI, local mlx, …). Use Models… to add or edit names, base URLs, and per-profile API keys.
                 """
             )
+
+            if !model.setupBanner.isEmpty {
+                Text(model.setupBanner)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .accessibilityLabel("Ask Forth setup")
+            }
 
             HStack(spacing: 6) {
                 Text("Model")
@@ -727,15 +750,20 @@ private struct LibraryRAGSettingsSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
+                    Button(isRebuildingIndex ? "Working…" : "Prepare…") {
+                        prepareEmbeddings()
+                    }
+                    .disabled(isRebuildingIndex)
+                    .help("Download nomic-embed-text if missing, then build/refresh the Library embed index (background-friendly).")
                     Button(isRebuildingIndex ? "Indexing…" : "Rebuild Index…") {
                         rebuildEmbedIndex()
                     }
                     .disabled(isRebuildingIndex)
-                    .help("Force a full re-embed of Sample + Reference (including the stack-effects cheat sheet). Hybrid/Semantic also auto-update when files change.")
+                    .help("Force a full re-embed of Sample + Reference (including the stack-effects cheat sheet).")
                     Text(indexStatus)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(3)
                 }
             }
 
@@ -760,12 +788,10 @@ private struct LibraryRAGSettingsSheet: View {
                     let folderChanged = previous.folderPath != settings.folderPath
                     let modeNeedsEmbed = settings.retrieveMode != .keyword
                     dismiss()
-                    // Auto-rebuild when the Library folder changes (or index missing) for Hybrid/Semantic.
+                    // Pull nomic if needed and refresh index when Hybrid/Semantic needs it.
                     if modeNeedsEmbed,
                        folderChanged || ForthLibraryEmbedIndex.needsRefresh(settings: settings) {
-                        Task {
-                            try? await ForthLibraryEmbedIndex.ensureFresh(settings: settings)
-                        }
+                        AskForthLibraryPrepare.startIfNeeded(settings: settings)
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -782,7 +808,38 @@ private struct LibraryRAGSettingsSheet: View {
             let when = store.builtAt.formatted(date: .abbreviated, time: .shortened)
             indexStatus = "Index: \(store.chunks.count) chunks · \(store.model) · \(when)"
         } else {
-            indexStatus = "No embed index yet — Rebuild Index… (needs Ollama + nomic-embed-text)"
+            indexStatus = "No embed index yet — Prepare… or open Ask Forth (needs Ollama)"
+        }
+    }
+
+    private func prepareEmbeddings() {
+        isRebuildingIndex = true
+        indexStatus = "Preparing…"
+        settings.save()
+        let snap = settings
+        AskForthLibraryPrepare.startIfNeeded(settings: snap) { note in
+            Task { @MainActor in
+                if !note.isEmpty {
+                    indexStatus = note
+                }
+                if !AskForthLibraryPrepare.isBusy {
+                    isRebuildingIndex = false
+                    refreshIndexStatus()
+                    if indexStatus.hasPrefix("No embed") , !note.isEmpty {
+                        indexStatus = note
+                    }
+                }
+            }
+        }
+        // If startIfNeeded no-op'd because already running, still clear busy when that finishes.
+        Task {
+            while AskForthLibraryPrepare.isBusy {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+            await MainActor.run {
+                isRebuildingIndex = false
+                refreshIndexStatus()
+            }
         }
     }
 
@@ -791,15 +848,22 @@ private struct LibraryRAGSettingsSheet: View {
         indexStatus = "Starting…"
         let folderPath = settings.folderPath
         Task {
-            var progressNote = ""
             do {
+                // Ensure embed model exists, then full rebuild.
+                let client = AskForthEmbeddingClient()
+                if await AskForthOllamaBootstrap.isReachable(),
+                   !(await AskForthOllamaBootstrap.hasModel(client.model)) {
+                    try await AskForthOllamaBootstrap.pullModel(client.model) { note in
+                        Task { @MainActor in indexStatus = note }
+                    }
+                }
                 var snap = ForthLibraryRAGSettings.load()
                 snap.folderPath = folderPath
                 let store = try await ForthLibraryEmbedIndex.buildOrRefresh(
                     settings: snap,
+                    client: client,
                     forceFullRebuild: true,
                     progress: { note in
-                        progressNote = note
                         Task { @MainActor in
                             indexStatus = note
                         }
@@ -809,9 +873,6 @@ private struct LibraryRAGSettingsSheet: View {
                     isRebuildingIndex = false
                     let when = store.builtAt.formatted(date: .abbreviated, time: .shortened)
                     indexStatus = "Index: \(store.chunks.count) chunks · \(store.model) · \(when)"
-                    if !progressNote.isEmpty {
-                        // keep final status from above
-                    }
                 }
             } catch {
                 await MainActor.run {
