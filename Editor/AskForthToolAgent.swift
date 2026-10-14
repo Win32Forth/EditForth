@@ -42,7 +42,7 @@ enum AskForthToolAgent {
         ),
         LLMToolDefinition(
             name: "library_search",
-            description: "Search the configured Library folder (and Reference when under Library) for matching .fth/.txt/.md/.swift excerpts. Prefer this for local samples, docs, app source, and the Forth 2012 standard text.",
+            description: "Search the configured Library folder (and Reference when under Library) for matching .fth/.txt/.md/.swift excerpts via keyword/hybrid/semantic retrieve. Prefer this for local samples, docs, app source, Forth 2012 stack effects, and standard word meanings before inventing APIs.",
             parametersJSONSchema: [
                 "type": "object",
                 "properties": [
@@ -60,8 +60,9 @@ enum AskForthToolAgent {
     static func systemAddon() -> String {
         """
         You may call tools when they help answer accurately: web_search, fetch_url, library_search.
-        Prefer library_search for local Sample/Reference knowledge; use web_search or fetch_url only when Library is insufficient.
-        After tools return, give the final Forth-oriented answer. Do not invent tool results.
+        Prefer library_search for local Sample/Reference knowledge (including Forth-2012 stack effects); use web_search or fetch_url only when Library is insufficient.
+        After tools return, ground the answer in tool and Library results. Do not invent tool results, word names, or stack diagrams.
+        If library_search returns nothing useful, say so rather than fabricating 64Forth APIs.
         """
     }
 
@@ -199,11 +200,10 @@ enum AskForthToolAgent {
             let query = stringArg(args, "query") ?? ""
             guard !query.isEmpty else { return "Error: missing query" }
             let settings = ForthLibraryRAGSettings.load()
-            // retrieve is MainActor-isolated under SWIFT_DEFAULT_ACTOR_ISOLATION;
-            // call it directly (same as the rest of the tool agent).
-            let rag = ForthLibraryRAG.retrieve(for: query, settings: settings)
+            // Hybrid/semantic may call Ollama /api/embed; keyword stays local.
+            let rag = await ForthLibraryRAG.retrieveAsync(for: query, settings: settings)
             if rag.isEmpty {
-                return "Library: no hits for “\(query)”."
+                return "Library: no hits for “\(query)” (\(settings.retrieveMode.statusLabel))."
             }
             return rag.contextBlock(maxChars: min(settings.maxChars, maxToolResultChars))
 

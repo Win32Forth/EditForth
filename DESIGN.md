@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.4** / build **13** for both targets (EditForth + companion 64Forth). Working tree **2.3.4** (unreleased); last shipped DMG/tag **v2.3.3** (`Releases/EditForth-2.3.3-macOS.dmg`). First public release was **v2.0.0**. Tree since 2.3.3: **model profiles** (picker + Models…, per-profile Keychain keys, Temperature default 0.3), **8192** completion tokens. Shipped in 2.3.3: web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG. Requires Ollama + a pulled model (default `gemma4:e4b`), or an OpenAI-compatible endpoint. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+Marketing **2.3.5** / build **14** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.5** (`Releases/EditForth-2.3.5-macOS.dmg`); previous public release **v2.3.3**. First public release was **v2.0.0**. Since 2.3.3: **model profiles** (picker + Models…, per-profile Keychain keys, Temperature default 0.3), **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** via Ollama `nomic-embed-text` (Sample + always Reference + stack-effects cheat sheet; auto-rebuild; grounded Ask prompts). Shipped in 2.3.3: web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG. Requires Ollama + a pulled chat model (default `gemma4:e4b`; `qwen2.5-coder:7b` also useful), or an OpenAI-compatible endpoint; Hybrid/Semantic also need `ollama pull nomic-embed-text` (index auto-updates or use Library **Rebuild Index…**). How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ## Why a new project
 

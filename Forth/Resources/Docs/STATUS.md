@@ -1,34 +1,36 @@
 # 64Forth development status
 
-**Current:** **2.3.4** (build **13**) — working tree (unreleased)  
+**Current:** **2.3.5** (build **14**) — shipped  
 
-**Last updated:** 2026-10-13
+**Last updated:** 2026-10-14
 
 ---
 
-## v2.3.4 — Ask Forth model profiles (unreleased)
+## v2.3.5 — Ask Forth profiles + Library embed RAG
 
-**Version strings:** marketing **2.3.4**, build **13** (EditForth + companion 64Forth lockstep). Not yet shipped as a DMG/tag; last public release remains **v2.3.3**.
+**Version strings:** marketing **2.3.5**, build **14** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.5** (`Releases/EditForth-2.3.5-macOS.dmg`). Replaces **v2.3.3** (2.3.4 was an unreleased tree only).
 
 **Console header stamp:**
 
 ```text
-=== 64Forth 2.3.4 === Oct 13, 2026 12:29 PM ===
+=== 64Forth 2.3.5 === Oct 14, 2026 12:10 AM ===
 ```
 
-### Highlights (working tree)
+### Highlights since 2.3.3
 
 - **Model profiles** — named saved setups (Ollama + OpenAI-compatible) with panel picker + **Models…** dialog; per-profile Base URL and Keychain API key; migrates legacy single Provider/Model/key and seeds **Ollama gemma4:e4b**, **SpaceXAI grok-4.7**, **Local mlx :1234**.
 - **Temperature** — per-profile slider (default **0.3**, range 0…2); sent on every Ask / Enhance (`options.temperature` / `temperature`).
 - **Completion budget** — **8192** tokens (`max_tokens` / `num_predict`) so long Forth listings are less likely to truncate mid-definition.
+- **Stop** — cancel in-flight Ask / Enhance from the panel (Escape); local servers may keep generating until unloaded.
+- **Library hybrid / semantic RAG** — Ollama **`nomic-embed-text`** (~274 MB) indexes Sample + always **Reference** (ANS Forth-2012 `.txt` + **`Stack-effects-cheatsheet.txt`**); Library… **Retrieve mode** Keyword / Semantic / **Hybrid** (default); **Rebuild Index…** plus **auto-rebuild** when the Library folder or files change (`needsRefresh` / `ensureFresh`). Status `· Library N hybrid: …`. Chat model stays separate (e.g. `qwen2.5-coder:7b` or `gemma4:e4b`). Grounding prompts: treat Library as authoritative for stack effects; say not found instead of inventing APIs. Files: `AskForthEmbeddingClient.swift`, `ForthLibraryEmbedIndex.swift`; index under Application Support `AskForthEmbedIndex/`.
 - **Swift 6 isolation cleanups** — AskForthToolAgent / ForthAgentRunner / OpenAI key resolve / DockController MainActor warnings addressed.
-- How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+- How-to: `Forth/Resources/Docs/Ask-Forth.md` (Library embeddings section). Prep validated ANS, Hayes, dbg-span, and VED64 emit.
 
 ---
 
 ## v2.3.3 — Ask Forth providers, tools, and Library source RAG
 
-**Version strings:** marketing **2.3.3**, build **12** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.3** (`Releases/EditForth-2.3.3-macOS.dmg`). Replaces **v2.3.2**.
+**Version strings:** marketing **2.3.3**, build **12** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.3**. Replaces **v2.3.2**.
 
 **Console header stamp:**
 

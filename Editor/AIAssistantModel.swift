@@ -24,6 +24,8 @@ final class AIAssistantModel: ObservableObject {
     @Published var agentTranscript: String = ""
     @Published var status: String = ""
     @Published var isBusy = false
+    /// In-flight Ask / Enhance / agent Task; cancelled by `stop()`.
+    private var activeJob: Task<Void, Never>?
     /// When true, Ask / Fix retrieve Library .fth excerpts into the prompt.
     @Published var includeLibraryContext: Bool
     /// When true, fetch http(s) URLs found in the Prompt and add page text to the LLM context.
@@ -169,6 +171,42 @@ final class AIAssistantModel: ObservableObject {
         }
     }
 
+    /// Cancel the in-flight Ask / Enhance / headless-agent job and clear busy state.
+    func stop() {
+        guard isBusy || activeJob != nil else { return }
+        activeJob?.cancel()
+        activeJob = nil
+        isBusy = false
+        askStreamBodyStart = nil
+        status = "Stopped."
+    }
+
+    private func attachJob(_ task: Task<Void, Never>) {
+        activeJob?.cancel()
+        activeJob = task
+    }
+
+    private func finishJobIfCurrent(_ task: Task<Void, Never>?) {
+        guard let task else { return }
+        if activeJob == task {
+            activeJob = nil
+        }
+    }
+
+    /// Lets a Task body clear `activeJob` after `let job = Task { … }` finishes initializing.
+    private final class JobHandle: @unchecked Sendable {
+        var task: Task<Void, Never>?
+    }
+
+    private func statusForCaughtError(_ error: Error) -> String {
+        if error is CancellationError { return "Stopped." }
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
+            return "Stopped."
+        }
+        return error.localizedDescription
+    }
+
     func persistLibraryRAG() {
         UserDefaults.standard.set(includeLibraryContext, forKey: Self.libraryRAGKey)
     }
@@ -252,7 +290,10 @@ final class AIAssistantModel: ObservableObject {
         let fileHint = askOutputFileName ?? workspace.selectedTab?.fileURL?.lastPathComponent
         runCompletion(
             workspace: workspace,
-            system: Self.systemPrompt(fileName: fileHint) + "\nYou are correcting Forth that failed or needs improvement after a real kernel eval. Prefer Library context words when they match.",
+            system: Self.systemPrompt(fileName: fileHint)
+                + "\nYou are correcting Forth that failed or needs improvement after a real kernel eval."
+                + " Prefer Library/Reference stack effects and Sample idioms when they match."
+                + " Do not claim a fix unless the change is concrete; keep stack comments accurate.",
             user: parts.joined(separator: "\n\n"),
             ragQuery: ragQuery,
             destination: .appendFix,
@@ -304,7 +345,13 @@ final class AIAssistantModel: ObservableObject {
         let baseURLSnapshot = openAIBaseURLString
         let profileIDSnapshot = activeProfileID
 
-        Task {
+        let handle = JobHandle()
+        let job = Task {
+            defer {
+                Task { @MainActor in
+                    self.finishJobIfCurrent(handle.task)
+                }
+            }
             if providerSnapshot == .openAICompatible, !AskForthLLMSettings.hasAPIKey(for: profileIDSnapshot) {
                 await MainActor.run {
                     self.isBusy = false
@@ -312,7 +359,9 @@ final class AIAssistantModel: ObservableObject {
                 }
                 return
             }
+            try? Task.checkCancellation()
             let reachable = await client.ping()
+            guard !Task.isCancelled else { return }
             guard reachable else {
                 await MainActor.run {
                     self.isBusy = false
@@ -408,27 +457,56 @@ final class AIAssistantModel: ObservableObject {
             }
 
             // Passive Library RAG still helps when Tool agent is on; tools can deepen it.
+            var libraryHadHits = false
+            var libraryWasSearched = false
             if useRAG {
+                libraryWasSearched = true
                 await MainActor.run {
                     self.status = "Searching Library…"
                 }
                 let settings = ForthLibraryRAGSettings.load()
-                // ForthLibraryRAG is MainActor-isolated (module default); do not Task.detached it.
-                let rag = ForthLibraryRAG.retrieve(for: ragQuery, settings: settings)
+                // Hybrid/semantic await Ollama embeddings; auto-rebuild if Library drifted.
+                let rag = await ForthLibraryRAG.retrieveAsync(
+                    for: ragQuery,
+                    settings: settings,
+                    embedProgress: { note in
+                        Task { @MainActor in
+                            self.status = note
+                        }
+                    }
+                )
                 if !rag.isEmpty {
                     let block = rag.contextBlock(maxChars: settings.maxChars)
                     if !block.isEmpty {
                         contextPrefix += block + "\n\n"
+                        libraryHadHits = true
                     }
                     let names = rag.snippets.map(\.relativePath).prefix(4).joined(separator: ", ")
-                    contextNote += " · Library \(rag.snippets.count) hit(s): \(names)"
+                    contextNote += " · Library \(rag.snippets.count) \(rag.retrieveModeLabel): \(names)"
                 } else {
-                    contextNote += " · Library: no hits"
+                    contextNote += " · Library: no hits (\(settings.retrieveMode.statusLabel))"
                 }
             }
 
+            let effectiveSystem = system + Self.libraryGroundingAddon(
+                searched: libraryWasSearched,
+                hasHits: libraryHadHits
+            )
+
             let finalUser: String
-            if contextPrefix.isEmpty {
+            if libraryHadHits {
+                finalUser = contextPrefix
+                    + Self.libraryUserReminderWithHits
+                    + "\n\nUser request:\n"
+                    + user
+            } else if libraryWasSearched {
+                let emptyNote = Self.libraryUserReminderNoHits
+                if contextPrefix.isEmpty {
+                    finalUser = emptyNote + "\n\nUser request:\n" + user
+                } else {
+                    finalUser = contextPrefix + emptyNote + "\n\nUser request:\n" + user
+                }
+            } else if contextPrefix.isEmpty {
                 finalUser = user
             } else {
                 finalUser = contextPrefix + "User request:\n" + user
@@ -447,7 +525,7 @@ final class AIAssistantModel: ObservableObject {
                 if useTools {
                     let result = try await AskForthToolAgent.run(
                         client: client,
-                        system: system,
+                        system: effectiveSystem,
                         user: finalUser,
                         model: model,
                         onStatus: { note in
@@ -472,7 +550,7 @@ final class AIAssistantModel: ObservableObject {
                     }
                 } else {
                     text = try await client.completeStreaming(
-                        system: system,
+                        system: effectiveSystem,
                         user: finalUser,
                         model: model
                     ) { delta in
@@ -483,6 +561,7 @@ final class AIAssistantModel: ObservableObject {
                     }
                 }
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         self.reply = trimmed
@@ -498,8 +577,6 @@ final class AIAssistantModel: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    self.isBusy = false
-                    self.status = error.localizedDescription
                     if !self.reply.isEmpty {
                         self.writeWrappedStreamBody(self.reply, in: workspace)
                     }
@@ -507,9 +584,21 @@ final class AIAssistantModel: ObservableObject {
                         _ = workspace.saveTab(tab)
                     }
                     self.askStreamBodyStart = nil
+                    // stop() already cleared busy + status; don't overwrite with a network error.
+                    if Task.isCancelled || error is CancellationError {
+                        if self.isBusy {
+                            self.isBusy = false
+                            self.status = "Stopped."
+                        }
+                        return
+                    }
+                    self.isBusy = false
+                    self.status = self.statusForCaughtError(error)
                 }
             }
         }
+        handle.task = job
+        attachJob(job)
     }
 
     /// Replace the current streamed body in the AskForth tab with `body` wrapped at 80 columns.
@@ -605,14 +694,25 @@ final class AIAssistantModel: ObservableObject {
 
         let cwd = agentWorkingDirectory(workspace: workspace)
 
-        Task {
+        let handle = JobHandle()
+        let job = Task {
+            defer {
+                Task { @MainActor in
+                    self.finishJobIfCurrent(handle.task)
+                }
+            }
             do {
+                try Task.checkCancellation()
                 let result = try await ForthAgentRunner.evaluate(
                     source: code,
                     cwd: cwd,
                     autoload: true
                 )
                 await MainActor.run {
+                    guard !Task.isCancelled else {
+                        onFinished?(false)
+                        return
+                    }
                     self.agentTranscript = result.transcript.isEmpty
                         ? "(no transcript, exit \(result.exitCode))"
                         : result.transcript
@@ -626,13 +726,23 @@ final class AIAssistantModel: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
+                    if Task.isCancelled || error is CancellationError {
+                        if self.isBusy {
+                            self.isBusy = false
+                            self.status = "Stopped."
+                        }
+                        onFinished?(false)
+                        return
+                    }
                     self.isBusy = false
                     self.agentTranscript = ""
-                    self.status = error.localizedDescription
+                    self.status = self.statusForCaughtError(error)
                     onFinished?(false)
                 }
             }
         }
+        handle.task = job
+        attachJob(job)
     }
 
     private func agentWorkingDirectory(workspace: WorkspaceModel) -> URL {
@@ -691,7 +801,9 @@ final class AIAssistantModel: ObservableObject {
         var lines = [
             "You are a Forth programming assistant for EditForth / 64Forth (ANS-style ITC Forth on Apple Silicon).",
             "Prefer idiomatic Forth: clear stack comments ( a b -- c ), short words, and explanations that match classic Forth style.",
-            "When asked for code, return Forth source the user can paste inside a ```forth fenced block when possible. Avoid inventing words that are not standard or not in common 64Forth libraries unless you label them as suggestions.",
+            "When asked for code, return Forth source the user can paste inside a ```forth fenced block when possible.",
+            "Never invent ANS or 64Forth word names, stack effects, or APIs. If you are unsure, say so and suggest looking in Library/Reference or forth-standard.org.",
+            "Stack comments must match real argument order (e.g. c-addr u for strings, not a single invented string cell).",
             "Be concise."
         ]
         if let fileName, !fileName.isEmpty {
@@ -699,6 +811,39 @@ final class AIAssistantModel: ObservableObject {
         }
         return lines.joined(separator: "\n")
     }
+
+    /// Extra system rules after Library search (Phase 3 grounding).
+    private static func libraryGroundingAddon(searched: Bool, hasHits: Bool) -> String {
+        guard searched else { return "" }
+        if hasHits {
+            return """
+
+            Library context was retrieved for this request (Sample and/or Forth-2012 Reference excerpts).
+            Ground your answer in that context: use the cited stack effects, word names, and sample idioms.
+            Prefer quoting or paraphrasing stack diagrams from Reference (e.g. COMPARE, MOVE, TYPE) over guessing.
+            If the user asks for something not supported by the Library excerpts, say “Not found in the provided Library context” (or similar) for that part, and label any extra suggestion clearly as unverified.
+            When citing, mention path:line from the Library headers when helpful.
+            """
+        }
+        return """
+
+            Library search ran but returned no matching excerpts for this prompt.
+            Do not invent standard stack effects or Library APIs. Say that Library context had no hits, give only carefully labeled general Forth advice, and prefer “I don’t know / not in Library” over fabricating 64Forth words.
+            """
+    }
+
+    private static let libraryUserReminderWithHits = """
+    Instructions for this answer:
+    - Use the Library context above as the source of truth for word names and stack effects.
+    - If a needed fact is missing from that context, say it is not in the provided sources instead of inventing it.
+    - Put loadable Forth in a ```forth block when you provide code.
+    """
+
+    private static let libraryUserReminderNoHits = """
+    Instructions for this answer:
+    - Library search found no excerpts for this prompt.
+    - Do not invent ANS/64Forth stack effects or APIs. Prefer saying you lack Library backing over fabricating a solution.
+    """
 }
 
 // MARK: - EditorTab helpers

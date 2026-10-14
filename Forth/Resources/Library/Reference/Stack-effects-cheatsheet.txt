@@ -1,0 +1,125 @@
+64Forth / ANS stack-effects cheat sheet (Ask Forth)
+=====================================================
+Short reference for words models often get wrong. Prefer these stack
+comments over invented ones. Not Forth source — do not INCLUDE.
+
+Notation: ( before -- after )  TOS is rightmost.  c-addr = address,
+u = unsigned count (often character count), n = signed cell,
+a-addr = aligned address, f = flag (true ≠ 0).
+
+--------------------------------------------------------------------
+STRINGS (Core + String word set)
+--------------------------------------------------------------------
+S" ccc"     ( -- c-addr u )     compile/runtime counted? No: addr+len
+TYPE        ( c-addr u -- )     print u chars from c-addr
+COMPARE     ( c-addr1 u1 c-addr2 u2 -- n )
+            n=0 equal; n=-1 if s1<s2; n=1 if s1>s2
+            Do NOT use = on two strings. COMPARE then 0= for equality.
+CMOVE       ( c-addr1 c-addr2 u -- )  copy u chars, low→high
+CMOVE>      ( c-addr1 c-addr2 u -- )  copy u chars, high→low (overlap)
+MOVE        ( addr1 addr2 u -- )      copy u address units (often cells
+            on cell systems — for character buffers prefer CMOVE/CMOVE>)
+/STRING     ( c-addr1 u1 n -- c-addr2 u2 )  drop n chars from front
+BLANK       ( c-addr u -- )     fill with spaces
+-TRAILING   ( c-addr u1 -- c-addr u2 )
+
+64Forth tip: after S" name" you already have ( c-addr u ). Do not push
+an extra length. To copy a name into a buffer:
+  S" Alice"  DEST  SWAP  CMOVE     \ wrong if DEST needs u first
+  Better: S" Alice"  2DUP DEST SWAP CMOVE  or keep u and use MOVE/CMOVE
+  carefully with ( src dst u ).
+
+--------------------------------------------------------------------
+MEMORY / CELLS
+--------------------------------------------------------------------
+@           ( a-addr -- x )
+!           ( x a-addr -- )
+C@          ( c-addr -- char )
+C!          ( char c-addr -- )
++!          ( n a-addr -- )
+CELL+       ( a-addr1 -- a-addr2 )
+CELLS       ( n1 -- n2 )
+CHAR+       ( c-addr1 -- c-addr2 )
+CHARS       ( n1 -- n2 )
+FILL        ( c-addr u char -- )
+ERASE       ( addr u -- )       fill with zero
+
+--------------------------------------------------------------------
+STACK MANIPULATION
+--------------------------------------------------------------------
+DUP         ( x -- x x )
+DROP        ( x -- )
+SWAP        ( x1 x2 -- x2 x1 )
+OVER        ( x1 x2 -- x1 x2 x1 )
+ROT         ( x1 x2 x3 -- x2 x3 x1 )
+-ROT        ( x1 x2 x3 -- x3 x1 x2 )   if present
+2DUP        ( x1 x2 -- x1 x2 x1 x2 )
+2DROP       ( x1 x2 -- )
+2SWAP       ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
+NIP         ( x1 x2 -- x2 )
+TUCK        ( x1 x2 -- x2 x1 x2 )
+?DUP        ( x -- 0 | x x )
+
+--------------------------------------------------------------------
+FILE ACCESS (File-Access word set) — typical patterns
+--------------------------------------------------------------------
+R/O W/O R/W BIN
+OPEN-FILE   ( c-addr u fam -- fileid ior )
+CREATE-FILE ( c-addr u fam -- fileid ior )
+CLOSE-FILE  ( fileid -- ior )
+READ-FILE   ( c-addr u1 fileid -- u2 ior )
+WRITE-FILE  ( c-addr u fileid -- ior )
+READ-LINE   ( c-addr u1 fileid -- u2 flag ior )
+WRITE-LINE  ( c-addr u fileid -- ior )
+FILE-SIZE   ( fileid -- ud ior )
+FILE-POSITION ( fileid -- ud ior )
+REPOSITION-FILE ( ud fileid -- ior )
+DELETE-FILE ( c-addr u -- ior )
+INCLUDE-FILE / INCLUDED / INCLUDE — see Core Ext / system docs
+
+ior = 0 means success on most systems. Always check ior after OPEN.
+
+--------------------------------------------------------------------
+LOOPS (common mistakes)
+--------------------------------------------------------------------
+DO … LOOP     ( limit start -- )   runs while i < limit (start..limit-1)
+  Prefer:  COUNT @  0  DO  …  LOOP     for 0 .. COUNT-1
+  Avoid:   0  COUNT @ DO … LOOP        (inverted / empty)
+?DO … LOOP    skips if limit = start
+I             ( -- n )             index (r-stack)
+LEAVE         exit loop
+
+--------------------------------------------------------------------
+RECORDS / CARD-FILE STYLE BUFFERS (64Forth samples)
+--------------------------------------------------------------------
+Typical layout: fixed REC-SIZE bytes per record, REC-COUNT cells.
+
+  N REC-SIZE * CONSTANT DB-CAP     \ total bytes, not N alone
+  CREATE DB  DB-CAP ALLOT
+
+Address of record i (0-based):
+  DB  i REC-SIZE *  +              ( -- c-addr )
+
+Copy name (c-addr u) into record field at DEST (length u must fit):
+  ( c-addr u dest -- )   SWAP CMOVE   after arranging stack, or:
+  DEST  SWAP  CMOVE                \ if ( c-addr u DEST ) on stack — check order!
+
+Print a counted field:
+  FIELD-ADDR  FIELD-LEN  TYPE
+
+Search by name: COMPARE against each record’s name field; 0= means match.
+Do not use = between addresses or between string cells.
+
+--------------------------------------------------------------------
+QUICK EQUALITY TESTS
+--------------------------------------------------------------------
+Numbers / cells:  =  <>  <  >  0=  0<>
+Strings:          COMPARE 0=     (equal)   COMPARE 0<> (not equal)
+Flags after words that return ior:  0= IF … success …
+
+--------------------------------------------------------------------
+SEE ALSO
+--------------------------------------------------------------------
+Forth-2012-core.txt, Forth-2012-string.txt, Forth-2012-file.txt
+forth-standard.org  ·  Library/Sample (working idioms)
+Agent Enhance Reply after Ask for loadable stack balance

@@ -1,6 +1,6 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, and **8192** completion tokens in **2.3.4**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**.
 
 ## Requirements (providers)
 
@@ -19,7 +19,9 @@ ollama pull gemma4:e4b
 
 3. Leave Ollama running, then pick an Ollama profile in Ask Forth (starter: **Ollama gemma4:e4b**).
 
-**Default model tag:** **`gemma4:e4b`**. Also useful: **`gemma4:12b`**, **`gemma4:31b-cloud`**.
+**Default chat model tag:** **`gemma4:e4b`**. Also useful: **`qwen2.5-coder:7b`**, **`gemma4:12b`**, **`gemma4:31b-cloud`**. Create or pick a profile in **Models…** for the tag you pulled.
+
+The **chat** model answers questions. Library **Hybrid/Semantic** retrieve uses a separate **embedding** model (`nomic-embed-text`) — see [Library embeddings](#library-embeddings-nomic-embed-text) below.
 
 ### OpenAI-compatible (SpaceXAI / local mlx / others)
 
@@ -27,11 +29,31 @@ Uses HTTP **`/v1/chat/completions`**. In **Models…**, set **Base URL** (SpaceX
 
 1. Create an API key when needed (for xAI: [console.x.ai](https://console.x.ai) → API Keys).  
 2. In **Models…**, paste the key for that profile and click **Save** (Keychain **per profile**). Or export **`XAI_API_KEY`** before launch (SpaceXAI fallback). Local servers often use a dummy key such as **`local`**.  
-3. Set **Model** (e.g. **`grok-4.7`**, or a full on-disk MLX path for mlx_lm.server).
+3. Set **Model** (e.g. **`grok-4.7`**, or a full on-disk MLX path for `mlx_lm.server`).
 
 First launch migrates your previous Provider / Model / Base URL / key into profiles and adds starters **Ollama gemma4:e4b**, **SpaceXAI grok-4.7**, and **Local mlx :1234** when appropriate.
 
 Streaming and Tool agent use the same OpenAI tools message shape. Cloud use needs network access and incurs provider charges.
+
+**Most users should prefer Ollama or SpaceXAI.** EditForth does not start a local MLX/LM Studio process; something else must already be listening on the profile’s Base URL.
+
+### Advanced: local MLX on port 1234 (`mlx_lm.server`)
+
+Ask Forth’s **Local mlx :1234** profile expects an OpenAI-compatible server at **`http://127.0.0.1:1234/v1`**. Opening an LM Studio **chat** alone is not enough — that UI does not serve EditForth. Either run **`mlx_lm.server`** (below) or start **LM Studio → Local Server** (Developer) on port **1234** with the model loaded.
+
+Prefer **`python -m mlx_lm.server`** after activating your MLX venv (the bare `mlx_lm.server` command only works when that venv’s `bin` is on `PATH`):
+
+```bash
+source ~/mlx-forth-venv/bin/activate
+python -m mlx_lm.server \
+  --model ~/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-7B-Instruct-MLX-4bit \
+  --host 127.0.0.1 \
+  --port 1234
+```
+
+Leave that Terminal window open. In Ask Forth, pick **Local mlx :1234** (Base URL `http://127.0.0.1:1234/v1`, API key often `local`, Model = the same on-disk path or whatever `/v1/models` lists). Adjust the `--model` path if your weights live elsewhere.
+
+To stop a runaway generation: use Ask Forth **Stop** (cancels EditForth’s request), then stop the Terminal server with **Ctrl+C**, or quit / unload in LM Studio if that app was serving.
 
 Ask / Agent Enhance Reply request up to **8192** completion tokens (`max_tokens` on OpenAI-compatible; `options.num_predict` on Ollama) so long Forth listings are less likely to stop mid-definition. Turn **Include web search** off for “write me a program” prompts unless you need live web hits.
 
@@ -41,6 +63,7 @@ To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root
 
 1. Show the Ask Forth panel: trailing **sidebar** button on the tab bar, **View → Show Ask Forth**, or **⌥⌘A**. Hide the same way (or the sidebar button in the panel header) while you edit results in `AskForth-N.fth`.  
 2. Type a question in **Prompt**, or select editor text and click **Capture Selected to Prompt**.  
+2a. While **Ask** or **Agent Enhance Reply** is running, click **Stop** (or press Escape) to cancel EditForth’s in-flight request. Status shows **Stopped.** If a local server keeps generating on its own, unload the model or stop that server separately.  
 3. Optionally leave **Include Library context** on (default folder **`~/Documents/EditForth/Library/Sample`**; **Library…** to change).  
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
 5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
@@ -62,13 +85,59 @@ Turn on **Show Agent Transcript** (beside the button) if you want to read the ev
 
 ## Library context
 
-Library search does **not** send the whole tree. It scores `.fth` / `.txt` / `.md` / `.swift` files for tokens in your prompt and includes only the top excerpts. Default folder: **`Library/Sample`**.
+Library search does **not** send the whole tree. It includes only the top excerpts from `.fth` / `.txt` / `.md` / `.swift` files. Default folder: **`Library/Sample`**.
 
-Use **Library…** to point at another folder. For EditForth app / UI / debugger questions, choose the EditForth project root (or `Editor/`) so Ask can see Swift sources and Docs. Heavy folders (`.git`, `DerivedData`, `finetune`, `Build`, `.build`, `xcuserdata`, `Pods`, `node_modules`, model weights) are skipped.
+Use **Library…** to point at another folder and to choose **Retrieve mode**:
+
+| Mode | Behavior |
+|------|----------|
+| **Hybrid** (default) | Blends local **nomic-embed-text** similarity with keyword scores |
+| **Semantic** | Embedding search only |
+| **Keyword** | Original token scoring only |
+
+Status notes look like `· Library 8 hybrid: …`. If the embed index is missing or Ollama embeddings fail, Ask falls back to keyword and the status says so (`keyword (no embed index)`).
+
+For EditForth app / UI / debugger questions, choose the EditForth project root (or `Editor/`) so Ask can see Swift sources and Docs. Heavy folders (`.git`, `DerivedData`, `finetune`, `Build`, `.build`, `xcuserdata`, `Pods`, `node_modules`, model weights) are skipped.
 
 In addition, when your folder is under **Library**, Ask Forth also searches **`Library/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
 
+When Library excerpts are present, Ask Forth tells the model to treat them as authoritative for word names and stack effects, cite `path:line` when helpful, and say **Not found in the provided Library context** instead of inventing APIs. If Library search returns no hits, the model is instructed to avoid fabricating stack effects.
+
 For app-source questions, turn **Fetch URLs in Prompt** off so the model stays on local excerpts instead of inventing generic shortcuts from the web.
+
+### Library embeddings (`nomic-embed-text`)
+
+**Chat model ≠ embedding model.** Profiles (gemma / Qwen / SpaceXAI / mlx) write the answer. Hybrid and Semantic retrieve call local Ollama **`nomic-embed-text`** (~274 MB, 768-dimensional vectors) only to find relevant Library chunks — even when chat uses SpaceXAI or `mlx_lm.server` on port 1234.
+
+**One-time setup**
+
+```bash
+ollama pull nomic-embed-text
+```
+
+Leave Ollama running. In Ask Forth → **Library…** → **Rebuild Index…**. EditForth chunks the configured Library folder **plus always `Library/Reference`**, embeds each chunk with the Nomic document prefix, and stores the index at:
+
+`~/Library/Application Support/EditForth/AskForthEmbedIndex/library-embed-v1.json`
+
+Typical Sample + Reference size is on the order of hundreds of chunks and a few–tens of MB on disk (not gigabytes).
+
+**When the index updates**
+
+- **Automatic:** before Hybrid/Semantic Ask (and after **Library…** Save if the folder changed or the index is stale), EditForth incrementally re-embeds added/changed files and drops removed ones. Status may show `Library index out of date — updating…`.  
+- **Manual:** **Rebuild Index…** forces a full refresh (useful after a large Library edit or if auto-update failed).  
+- Also rebuild after switching embedding model tags (rare; default stays `nomic-embed-text`).
+
+Incremental rebuilds reuse unchanged files by mtime/size.
+
+**Stack-effects cheat sheet**
+
+`Library/Reference/Stack-effects-cheatsheet.txt` lists stack comments and 64Forth idioms models often invent wrong (`COMPARE` vs `=`, `TYPE`, `CMOVE`/`MOVE`, file `ior`, `DO` limits, record buffers). It is indexed with the other Reference text — do not `INCLUDE` it.
+
+**What this improves**
+
+- Paraphrased questions (“compare two counted strings”) still surface ANS glossary stack effects (`COMPARE`, `MOVE`, `TYPE`, …) from Reference and the cheat sheet  
+- Fewer invented stack diagrams when the right excerpt is in context  
+- Still pair with **Agent Enhance Reply** for multi-word stack balance; embeddings find sources, they do not simulate the kernel
 
 ## Fetch URLs in Prompt
 
@@ -97,7 +166,7 @@ Default **off**. When on, Ask and Agent Enhance Reply run an Ollama **tool loop*
 |------|----------------|
 | `web_search` | DuckDuckGo Lite search → titles / URLs / snippets |
 | `fetch_url` | Fetch one http(s) page → plain text excerpt |
-| `library_search` | Score Library (+ Reference) `.fth` / `.txt` / `.md` / `.swift` excerpts |
+| `library_search` | Library (+ Reference) excerpts via keyword / hybrid / semantic retrieve |
 
 Status notes look like `· Tools 2 call(s)/2 round(s)`. The AskForth file gets `\ Tool agent:` audit lines. Turn on **Show Agent Transcript** to read `→ tool(…)` / `← …` steps. Automatic **Fetch URLs** / **Include web search** are disabled while Tool agent is on (the model calls those tools itself). Passive **Include Library context** still runs when enabled.
 

@@ -19,13 +19,27 @@ struct ForthLibraryRAGResult: Sendable {
     var snippets: [ForthLibrarySnippet]
     var rootPath: String
     var queryTokens: [String]
+    /// `keyword`, `embed`, `hybrid`, or a fallback note such as `keyword (no embed index)`.
+    var retrieveModeLabel: String
+
+    init(
+        snippets: [ForthLibrarySnippet],
+        rootPath: String,
+        queryTokens: [String],
+        retrieveModeLabel: String = "keyword"
+    ) {
+        self.snippets = snippets
+        self.rootPath = rootPath
+        self.queryTokens = queryTokens
+        self.retrieveModeLabel = retrieveModeLabel
+    }
 
     var isEmpty: Bool { snippets.isEmpty }
 
     /// Block to append to the model user message.
     func contextBlock(maxChars: Int) -> String {
         guard !snippets.isEmpty else { return "" }
-        var out = "Library context (excerpts from \(rootPath); prefer these real words/APIs when writing Forth):\n"
+        var out = "Library context (excerpts from \(rootPath); \(retrieveModeLabel)). Treat as authoritative for word names and stack effects; answer from these excerpts when possible:\n"
         for snip in snippets {
             let header = "\n--- \(snip.relativePath):\(snip.startLine) (score \(snip.score)) ---\n"
             if out.count + header.count + snip.text.count > maxChars {
@@ -40,13 +54,14 @@ struct ForthLibraryRAGResult: Sendable {
 }
 
 enum ForthLibraryRAG {
-    private static let skipDirNames: Set<String> = [
+    /// Shared with `ForthLibraryEmbedIndex` walk.
+    static let skipDirNames: Set<String> = [
         ".git", "DerivedData", "PI", "VED64", "__pycache__",
         // EditForth / Xcode project trees (safe to point Library… at the repo root)
         "finetune", "Build", "build", ".build", "xcuserdata",
         "Pods", "node_modules", "models", "adapters", "fused_model",
     ]
-    private static let sourceExtensions: Set<String> = [
+    static let sourceExtensions: Set<String> = [
         "fth", "fs", "4th", "f", "txt",
         "md", "swift",
     ]
@@ -168,8 +183,257 @@ enum ForthLibraryRAG {
         return ForthLibraryRAGResult(
             snippets: snippets,
             rootPath: rootLabel,
-            queryTokens: tokens
+            queryTokens: tokens,
+            retrieveModeLabel: "keyword"
         )
+    }
+
+    /// Keyword, semantic, or hybrid retrieve according to `settings.retrieveMode`.
+    /// Semantic/hybrid auto-refresh the embed index when the Library folder or files drift;
+    /// fall back to keyword if the index is missing or embed fails.
+    static func retrieveAsync(
+        for query: String,
+        settings: ForthLibraryRAGSettings = .load(),
+        embedClient: AskForthEmbeddingClient = AskForthEmbeddingClient(),
+        embedProgress: (@Sendable (String) -> Void)? = nil
+    ) async -> ForthLibraryRAGResult {
+        switch settings.retrieveMode {
+        case .keyword:
+            return retrieve(for: query, settings: settings)
+        case .semantic:
+            await autoRefreshEmbedIndexIfNeeded(
+                settings: settings,
+                embedClient: embedClient,
+                progress: embedProgress
+            )
+            return await retrieveSemantic(
+                for: query,
+                settings: settings,
+                embedClient: embedClient,
+                fallbackToKeyword: true
+            )
+        case .hybrid:
+            await autoRefreshEmbedIndexIfNeeded(
+                settings: settings,
+                embedClient: embedClient,
+                progress: embedProgress
+            )
+            return await retrieveHybrid(
+                for: query,
+                settings: settings,
+                embedClient: embedClient
+            )
+        }
+    }
+
+    private static func autoRefreshEmbedIndexIfNeeded(
+        settings: ForthLibraryRAGSettings,
+        embedClient: AskForthEmbeddingClient,
+        progress: (@Sendable (String) -> Void)?
+    ) async {
+        guard ForthLibraryEmbedIndex.needsRefresh(settings: settings, model: embedClient.model) else {
+            return
+        }
+        do {
+            _ = try await ForthLibraryEmbedIndex.ensureFresh(
+                settings: settings,
+                client: embedClient,
+                progress: progress
+            )
+        } catch {
+            progress?("Library index update failed — using keyword if needed.")
+        }
+    }
+
+    private static func retrieveSemantic(
+        for query: String,
+        settings: ForthLibraryRAGSettings,
+        embedClient: AskForthEmbeddingClient,
+        fallbackToKeyword: Bool
+    ) async -> ForthLibraryRAGResult {
+        guard let store = ForthLibraryEmbedIndex.load(), !store.isEmpty else {
+            if fallbackToKeyword {
+                var kw = retrieve(for: query, settings: settings)
+                kw.retrieveModeLabel = "keyword (no embed index)"
+                return kw
+            }
+            return ForthLibraryRAGResult(
+                snippets: [],
+                rootPath: "",
+                queryTokens: significantTokens(in: query),
+                retrieveModeLabel: "embed (no index)"
+            )
+        }
+        do {
+            let hits = try await ForthLibraryEmbedIndex.search(
+                query: query,
+                store: store,
+                client: embedClient,
+                topK: settings.maxSnippets
+            )
+            let snippets = hits.map { $0.asSnippet() }
+            let rootLabel = store.roots.joined(separator: " + ")
+            return ForthLibraryRAGResult(
+                snippets: snippets,
+                rootPath: rootLabel.isEmpty ? "embed-index" : rootLabel,
+                queryTokens: significantTokens(in: query),
+                retrieveModeLabel: "embed"
+            )
+        } catch {
+            if fallbackToKeyword {
+                var kw = retrieve(for: query, settings: settings)
+                kw.retrieveModeLabel = "keyword (embed failed)"
+                return kw
+            }
+            return ForthLibraryRAGResult(
+                snippets: [],
+                rootPath: "",
+                queryTokens: significantTokens(in: query),
+                retrieveModeLabel: "embed (failed)"
+            )
+        }
+    }
+
+    private static func retrieveHybrid(
+        for query: String,
+        settings: ForthLibraryRAGSettings,
+        embedClient: AskForthEmbeddingClient
+    ) async -> ForthLibraryRAGResult {
+        let keyword = retrieve(for: query, settings: settings)
+        guard let store = ForthLibraryEmbedIndex.load(), !store.isEmpty else {
+            var kw = keyword
+            kw.retrieveModeLabel = "keyword (no embed index)"
+            return kw
+        }
+
+        let embedHits: [ForthLibraryEmbedHit]
+        do {
+            embedHits = try await ForthLibraryEmbedIndex.search(
+                query: query,
+                store: store,
+                client: embedClient,
+                topK: max(settings.maxSnippets * 2, 16)
+            )
+        } catch {
+            var kw = keyword
+            kw.retrieveModeLabel = "keyword (embed failed)"
+            return kw
+        }
+
+        let merged = mergeHybrid(
+            keyword: keyword.snippets,
+            embedHits: embedHits,
+            maxSnippets: settings.maxSnippets
+        )
+        let rootLabel: String
+        if keyword.rootPath.isEmpty {
+            rootLabel = store.roots.joined(separator: " + ")
+        } else if store.roots.isEmpty {
+            rootLabel = keyword.rootPath
+        } else {
+            rootLabel = keyword.rootPath
+        }
+        return ForthLibraryRAGResult(
+            snippets: merged,
+            rootPath: rootLabel,
+            queryTokens: keyword.queryTokens,
+            retrieveModeLabel: "hybrid"
+        )
+    }
+
+    /// Blend cosine (0…1) with normalized keyword scores. Prefers entries with both signals.
+    private static func mergeHybrid(
+        keyword: [ForthLibrarySnippet],
+        embedHits: [ForthLibraryEmbedHit],
+        maxSnippets: Int
+    ) -> [ForthLibrarySnippet] {
+        struct Acc {
+            var path: String
+            var startLine: Int
+            var text: String
+            var embed: Float
+            var keyword: Float
+        }
+
+        let maxKW = Float(keyword.map(\.score).max() ?? 0)
+        var byKey: [String: Acc] = [:]
+
+        func key(_ path: String, _ start: Int) -> String {
+            // Bucket nearby line windows so keyword ±context and embed chunks can merge.
+            let bucket = (max(1, start) / 40) * 40
+            return "\(path)#\(bucket)"
+        }
+
+        for snip in keyword {
+            let k = key(snip.relativePath, snip.startLine)
+            let kn = maxKW > 0 ? Float(snip.score) / maxKW : 0
+            if var existing = byKey[k] {
+                existing.keyword = max(existing.keyword, kn)
+                if snip.text.count > existing.text.count {
+                    existing.text = snip.text
+                    existing.startLine = snip.startLine
+                }
+                byKey[k] = existing
+            } else {
+                byKey[k] = Acc(
+                    path: snip.relativePath,
+                    startLine: snip.startLine,
+                    text: snip.text,
+                    embed: 0,
+                    keyword: kn
+                )
+            }
+        }
+
+        for hit in embedHits {
+            let snip = hit.asSnippet()
+            let k = key(snip.relativePath, snip.startLine)
+            if var existing = byKey[k] {
+                existing.embed = max(existing.embed, hit.score)
+                if snip.text.count > existing.text.count {
+                    existing.text = snip.text
+                    existing.startLine = snip.startLine
+                }
+                byKey[k] = existing
+            } else {
+                byKey[k] = Acc(
+                    path: snip.relativePath,
+                    startLine: snip.startLine,
+                    text: snip.text,
+                    embed: hit.score,
+                    keyword: 0
+                )
+            }
+        }
+
+        let alpha: Float = 0.65  // embed
+        let beta: Float = 0.35   // keyword
+        var ranked: [(Float, Acc)] = []
+        ranked.reserveCapacity(byKey.count)
+        for acc in byKey.values {
+            let final: Float
+            if acc.embed > 0, acc.keyword > 0 {
+                final = alpha * acc.embed + beta * acc.keyword
+            } else if acc.embed > 0 {
+                final = acc.embed
+            } else {
+                final = acc.keyword
+            }
+            ranked.append((final, acc))
+        }
+        ranked.sort { lhs, rhs in
+            if lhs.0 != rhs.0 { return lhs.0 > rhs.0 }
+            return lhs.1.path < rhs.1.path
+        }
+
+        return ranked.prefix(maxSnippets).map { score, acc in
+            ForthLibrarySnippet(
+                relativePath: acc.path,
+                startLine: acc.startLine,
+                text: acc.text,
+                score: Int((score * 1000).rounded())
+            )
+        }
     }
 
     private static func collectScoredFiles(
@@ -189,14 +453,12 @@ enum ForthLibraryRAG {
         for case let url as URL in enumerator {
             let name = url.lastPathComponent
             if url.hasDirectoryPath {
-                if skipDirNames.contains(name) || name.hasSuffix(".app") {
+                if shouldSkipDirectory(named: name) {
                     enumerator.skipDescendants()
                 }
                 continue
             }
-            let ext = url.pathExtension.lowercased()
-            guard sourceExtensions.contains(ext) else { continue }
-            if name == "HYPER.NDX" || name.hasSuffix(".emit.log") { continue }
+            guard isIndexableSource(url: url) else { continue }
 
             let vals = try? url.resourceValues(forKeys: [.fileSizeKey])
             if let size = vals?.fileSize, size > maxFileBytes { continue }

@@ -242,6 +242,13 @@ struct AIAssistantPanel: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if model.isBusy {
+                    Button("Stop") {
+                        model.stop()
+                    }
+                    .help("Cancel the current Ask, Enhance, or headless agent run. Stops EditForth’s request; unload the model or stop the local server if generation continues there.")
+                    .keyboardShortcut(.cancelAction)
+                }
                 Button(askButtonTitle) {
                     model.ask(workspace: workspace)
                 }
@@ -301,6 +308,13 @@ struct AIAssistantPanel: View {
                 }
                 .disabled(model.isBusy || model.reply.isEmpty)
                 .help("After Ask: run the reply in a headless 64Forth --agent (Autoload on), then ask the model to improve it and append “Agent Enhanced Reply” to the same AskForth file. Does not type into the live console — use INCLUDE after you edit.")
+
+                if model.isBusy {
+                    Button("Stop") {
+                        model.stop()
+                    }
+                    .help("Cancel the current Ask, Enhance, or headless agent run.")
+                }
 
                 Toggle("Show Agent Transcript", isOn: $model.showAgentTranscript)
                     .font(.caption)
@@ -493,7 +507,7 @@ private struct AskForthModelsSettingsSheet: View {
                     TextField(AskForthLLMSettings.defaultOpenAIBaseURL, text: binding.baseURL)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
-                        .help("OpenAI-compatible root, e.g. https://api.x.ai/v1 or http://127.0.0.1:1234/v1.")
+                        .help("OpenAI-compatible root, e.g. https://api.x.ai/v1 or http://127.0.0.1:1234/v1. For local MLX, start a server first (see Ask-Forth.md): source ~/mlx-forth-venv/bin/activate && python -m mlx_lm.server --model <path> --host 127.0.0.1 --port 1234. An LM Studio chat window alone is not enough.")
                 }
                 labeledField("API key") {
                     HStack(spacing: 8) {
@@ -648,13 +662,15 @@ private struct AskForthModelsSettingsSheet: View {
 private struct LibraryRAGSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var settings = ForthLibraryRAGSettings.load()
+    @State private var indexStatus: String = ""
+    @State private var isRebuildingIndex = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Library context")
                 .font(.title2.weight(.semibold))
 
-            Text("Ask Forth searches this folder for .fth / .txt / .md / .swift excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. You can point at the EditForth project (Editor/, Docs/) for app questions — heavy folders like .git, DerivedData, and finetune are skipped. Library/Reference (Forth 2012 Standard text) is always searched too when your folder is under Library. Only the top-scoring snippets are sent — not the whole tree.")
+            Text("Ask Forth searches this folder for .fth / .txt / .md / .swift excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. You can point at the EditForth project (Editor/, Docs/) for app questions — heavy folders like .git, DerivedData, and finetune are skipped. Library/Reference (Forth 2012 + stack-effects cheat sheet) is always searched too when your folder is under Library. Hybrid/Semantic use nomic-embed-text via local Ollama; the index auto-updates when the folder or files change (or use Rebuild Index…).")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -673,6 +689,20 @@ private struct LibraryRAGSettingsSheet: View {
                 }
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Retrieve mode")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Retrieve mode", selection: $settings.retrieveMode) {
+                    ForEach(ForthLibraryRetrieveMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .help("Hybrid = nomic-embed-text + keyword (recommended). Semantic = embed only. Keyword = original token search. Needs Ollama nomic-embed-text and Rebuild Index… for Hybrid/Semantic.")
+            }
+
             HStack(alignment: .top, spacing: 16) {
                 stepperField(
                     title: "Max snippets",
@@ -682,7 +712,7 @@ private struct LibraryRAGSettingsSheet: View {
                 )
                 stepperField(
                     title: "Context lines",
-                    help: "Lines above/below each hit",
+                    help: "Lines above/below each hit (keyword windows)",
                     value: $settings.contextLines,
                     range: 2...40
                 )
@@ -695,13 +725,28 @@ private struct LibraryRAGSettingsSheet: View {
                 )
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Button(isRebuildingIndex ? "Indexing…" : "Rebuild Index…") {
+                        rebuildEmbedIndex()
+                    }
+                    .disabled(isRebuildingIndex)
+                    .help("Force a full re-embed of Sample + Reference (including the stack-effects cheat sheet). Hybrid/Semantic also auto-update when files change.")
+                    Text(indexStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
             HStack {
                 Button("Reset Defaults") {
                     settings = ForthLibraryRAGSettings(
                         folderPath: ForthLibraryRAGSettings.defaultFolderPath,
                         maxSnippets: 12,
                         contextLines: 12,
-                        maxChars: 16_000
+                        maxChars: 16_000,
+                        retrieveMode: .hybrid
                     )
                 }
                 Spacer()
@@ -710,8 +755,18 @@ private struct LibraryRAGSettingsSheet: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Save") {
+                    let previous = ForthLibraryRAGSettings.load()
                     settings.save()
+                    let folderChanged = previous.folderPath != settings.folderPath
+                    let modeNeedsEmbed = settings.retrieveMode != .keyword
                     dismiss()
+                    // Auto-rebuild when the Library folder changes (or index missing) for Hybrid/Semantic.
+                    if modeNeedsEmbed,
+                       folderChanged || ForthLibraryEmbedIndex.needsRefresh(settings: settings) {
+                        Task {
+                            try? await ForthLibraryEmbedIndex.ensureFresh(settings: settings)
+                        }
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
@@ -719,6 +774,52 @@ private struct LibraryRAGSettingsSheet: View {
         }
         .padding(20)
         .frame(width: 660)
+        .onAppear { refreshIndexStatus() }
+    }
+
+    private func refreshIndexStatus() {
+        if let store = ForthLibraryEmbedIndex.load(), !store.isEmpty {
+            let when = store.builtAt.formatted(date: .abbreviated, time: .shortened)
+            indexStatus = "Index: \(store.chunks.count) chunks · \(store.model) · \(when)"
+        } else {
+            indexStatus = "No embed index yet — Rebuild Index… (needs Ollama + nomic-embed-text)"
+        }
+    }
+
+    private func rebuildEmbedIndex() {
+        isRebuildingIndex = true
+        indexStatus = "Starting…"
+        let folderPath = settings.folderPath
+        Task {
+            var progressNote = ""
+            do {
+                var snap = ForthLibraryRAGSettings.load()
+                snap.folderPath = folderPath
+                let store = try await ForthLibraryEmbedIndex.buildOrRefresh(
+                    settings: snap,
+                    forceFullRebuild: true,
+                    progress: { note in
+                        progressNote = note
+                        Task { @MainActor in
+                            indexStatus = note
+                        }
+                    }
+                )
+                await MainActor.run {
+                    isRebuildingIndex = false
+                    let when = store.builtAt.formatted(date: .abbreviated, time: .shortened)
+                    indexStatus = "Index: \(store.chunks.count) chunks · \(store.model) · \(when)"
+                    if !progressNote.isEmpty {
+                        // keep final status from above
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isRebuildingIndex = false
+                    indexStatus = "Index failed: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     private func stepperField(

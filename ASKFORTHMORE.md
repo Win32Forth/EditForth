@@ -6,14 +6,26 @@ Related: `Forth/Resources/Docs/Ask-Forth.md`, `ROADMAP.md` §5, `Library/Referen
 
 ---
 
-## Current baseline (shipped)
+## Current baseline (working tree / shipped)
 
-- Local **Ollama** only; models do not browse the network by themselves.
-- **Library context** scores `.fth` / `.txt` under a chosen folder (default **Sample**) and always also searches **`Library/Reference`** (Forth 2012 chapters).
-- Ask streams into **`~/Documents/EditForth/AskForth-N.fth`**; **Agent Enhance Reply** appends after a headless `--agent` eval.
+- **Ollama** and **OpenAI-compatible** profiles (SpaceXAI, local mlx, …); models do not browse the network by themselves unless EditForth fetches for them.
+- **Library context** defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012 chapters). Retrieve modes: **Keyword** / **Semantic** / **Hybrid** (default). Hybrid/Semantic use Ollama **`nomic-embed-text`** + Application Support index (**Rebuild Index…**). Indexes `.fth` / `.txt` / `.md` / `.swift`.
+- Ask streams into **`~/Documents/EditForth/AskForth/AskForth-N.fth`**; **Agent Enhance Reply** appends after a headless `--agent` eval.
 - Live load of edited code stays on status **INCLUDE**.
 
 Any “web access” would mean **EditForth fetches** pages or search hits on the Mac, then **injects capped text into the LLM prompt** (same seam as Library RAG), with an explicit user opt-in where privacy matters.
+
+### Embedding RAG (nomic-embed-text) — **done (shipped 2.3.5)**
+
+**Idea:** Add a tiny local embedding model so Library retrieve matches meaning (paraphrases → ANS stack effects), then ground the chat model on those excerpts.
+
+**Implemented:** `AskForthEmbeddingClient.swift`, `ForthLibraryEmbedIndex.swift`, `ForthLibraryRAG.retrieveAsync` (keyword / semantic / hybrid), Library sheet Retrieve mode + Rebuild Index, Ask + Tool agent wiring, grounding system/user prompts. Doc: `Ask-Forth.md` § Library embeddings. Chat model remains separate (e.g. `qwen2.5-coder:7b`).
+
+**Follow-ups**
+
+- ~~Short `Stack-effects-cheatsheet.txt`~~ — **done** (`Library/Reference/Stack-effects-cheatsheet.txt`).  
+- ~~Auto-rebuild index when Library folder mtimes drift~~ — **done** (`needsRefresh` / `ensureFresh` on Ask + Library Save).  
+- Ship in next public EditForth release when ready.
 
 ---
 
@@ -79,7 +91,7 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 **Idea:** Ollama tool loop where the model may call `search`, `fetch_url`, or `library_search`, see results, then answer.
 
-**Implemented:** Panel toggle **Tool agent** (default off, `aiAssistantToolAgent`). `AskForthToolAgent.swift` + `LLMClient.chat(… tools:)` / `OllamaClient` tool encoding. Tools: `web_search`, `fetch_url`, `library_search`. Max 4 rounds. Status `· Tools N call(s)/R round(s)`. Tool steps land in the Agent Transcript box and as `\ Tool agent:` comments in the AskForth file. When Tool agent is on, automatic Fetch URLs / Include web search are skipped (model drives those). Passiveive Library RAG still runs if enabled. Requires a tools-capable Ollama model (e.g. `gemma4:e4b`).
+**Implemented:** Panel toggle **Tool agent** (default off, `aiAssistantToolAgent`). `AskForthToolAgent.swift` + `LLMClient.chat(… tools:)` / `OllamaClient` tool encoding. Tools: `web_search`, `fetch_url`, `library_search`. Max 4 rounds. Status `· Tools N call(s)/R round(s)`. Tool steps land in the Agent Transcript box and as `\ Tool agent:` comments in the AskForth file. When Tool agent is on, automatic Fetch URLs / Include web search are skipped (model drives those). Passive Library RAG still runs if enabled (`library_search` uses keyword/hybrid/semantic retrieve). Requires a tools-capable Ollama model (e.g. `gemma4:e4b`).
 
 **Why useful**
 

@@ -14,5 +14,9 @@ folder even if Library… points at Sample (or another subfolder).
 Forth-2012-word-urls.json maps standard word names to forth-standard.org
 paths for Ask Forth’s “Fetch URLs in Prompt” auto-boost (live page fetch).
 
+Stack-effects-cheatsheet.txt is a short Ask Forth helper for stack comments
+and idioms models often invent wrong (MOVE/COMPARE/TYPE/files/records). It is
+indexed with the other Reference text; do not INCLUDE it.
+
 Not Forth source — do not INCLUDE these files into the dictionary. Also copy
 updates into ~/Documents/EditForth/Library/Reference/ for the live tree.
