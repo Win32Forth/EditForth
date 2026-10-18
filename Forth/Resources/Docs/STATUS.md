@@ -496,7 +496,7 @@ Append new design sections as we go; mark items done when implemented.
 - **Cold VIEW stamps:** `HYPER-STAMP-COLD` temporarily `ALSO SYSVOC EDITOR GRAPHICS` so `FORTH>SYSVOC` (etc.) words get `VIEW-FILE#` / `VIEW-LINE`; DBG sync/map-HL no longer stick on `TRAVERSE-WORDLIST` while stepping the visitor.
 - **R-stack DEBUG display:** nearest **4** cells + `...`; CFA/small-int labeling hardened (no NFA probe on aligned `0`).
 - **Debugger library:** `dbg-map.fth` / `dbg-ed.fth` under `Library/Debugger` (moved off Hyper); deferred Editor/Hyper links via `DBG-ED-INSTALL` after Autoload.
-- **Cold-bootstrap messages:** `KernelBridge` retains emit from `kernel_init` (`.incbin` blobs) in `bootTranscript`; **Help → Show Boot Messages** shows it (survives `CLS`). Not auto-inserted at startup. Cold blobs print `.( Loading: … )` / `.( Finished Loading: … )` progress. Agent dumps the same transcript.
+- **Cold-bootstrap messages:** `KernelBridge` retains emit from `kernel_init` (`.incbin` blobs) in `bootTranscript`; **Help → Show Boot Messages** shows it (survives `CLS`). Available on **EditForth** Help (via `EditorRequest.showBootMessages` over edit.sock) and on companion / standalone **64Forth** Help. Not auto-inserted at startup. Cold blobs print `.( Loading: … )` / `.( Finished Loading: … )` progress. Agent dumps the same transcript.
 - **Undefined `file:line`:** during INCLUDE/FLOAD/Autoload, `_report_undefined` appends `  (path:line)` from `include_name_pending` + `_source_line_at_token` (FILE-ECHO file-load predicate). Console undefined stays bare.
 
 **Release:** `64Forth/releases/64Forth-1.4.1-macOS.dmg` + GitHub `v1.4.1`.

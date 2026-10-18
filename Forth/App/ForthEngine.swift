@@ -78,6 +78,8 @@ final class ForthEngine: NSObject, ForthEngineXPC {
             return .consoleOutput(text: "update user tree")
         case .restoreUserTree:
             return .consoleOutput(text: "restore user tree")
+        case .showBootMessages:
+            return .consoleOutput(text: "show boot messages")
         }
 
     }

@@ -35,6 +35,11 @@ enum ForthMenuSupport {
         forth.clearConsoleDisplay()
     }
 
+    /// Help → Show Boot Messages: ask the companion to append cold-bootstrap emit.
+    static func showBootMessages(forth: ForthConnectionManager) {
+        forth.send(.showBootMessages)
+    }
+
     static func presentFload(forth: ForthConnectionManager) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true

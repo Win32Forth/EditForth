@@ -322,6 +322,16 @@ struct SixtyFourEditApp: App {
                     ForthMenuSupport.revealInFinder(ForthMenuSupport.configURL)
                 }
             }
+
+            // Cold-bootstrap Loading/Finished chatter is retained in the companion
+            // and omitted from the console at start; same action as 64Forth Help.
+            CommandGroup(after: .help) {
+                Button("Show Boot Messages") {
+                    ForthMenuSupport.showBootMessages(forth: forth)
+                }
+                .disabled(!forth.isConnected)
+                .help("Append cold-bootstrap Loading / Finished messages to the Forth console (survives CLS).")
+            }
         }
     }
 

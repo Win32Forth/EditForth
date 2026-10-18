@@ -50,6 +50,7 @@ Window overlay docking (separate NSWindow `setFrame` into a slot) failed UX (flo
 - GRAPHICS App Output / facility windows remain out of scope while headless.
 - **Undock**: EditForth-owned floating `NSWindow` hosting `DockedConsoleView` (same companion / sock). Not a second 64Forth GUI process.
 - **Dock** / closing the floating window: console returns under Ping. Preference `forthDocked` (default true).
+- **Menus while EditForth is frontmost:** Forth INCLUDE/FLOAD/CLS and **Help → Show Boot Messages** live on EditForth’s menu bar (`ForthMenuSupport` / `EditorRequest`). Companion File/Tools/Help (including Show Boot Messages) appear only when the Dock **64Forth** icon is frontmost. Cold-bootstrap `Loading:` / `Finished Loading:` emit stays in `KernelBridge.bootTranscript` until requested (`showBootMessages` over edit.sock).
 
 ## Intended architecture (dock / detach)
 

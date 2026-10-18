@@ -1,7 +1,7 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.6** / build **15** (shipped); previous ship **2.3.5** / build **14**. AskForth header metadata + setup banner + nomic auto-pull / Prepare… in **2.3.6**; model profiles + Temperature + 8192 completion budget + Stop + Library hybrid/semantic RAG (`nomic-embed-text`, cheat sheet, auto-rebuild) in **2.3.5**; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
-**Updated:** 2026-10-14.
+**Baseline:** **2.3.6** / build **15** (shipped); previous ship **2.3.5** / build **14**. AskForth header metadata + setup banner + nomic auto-pull / Prepare… in **2.3.6**; model profiles + Temperature + 8192 completion budget + Stop + Library hybrid/semantic RAG (`nomic-embed-text`, cheat sheet, auto-rebuild) in **2.3.5**; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**. Post-ship: **Help → Show Boot Messages** on EditForth (3.4).  
+**Updated:** 2026-10-18.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
 
@@ -151,6 +151,12 @@ Dock and undock move the Forth console only. GCLOCK and other App Output windows
 ### 3.2 BYE drops the console — **Fixed**
 
 `BYE` used to send `requestQuit`, and EditForth called `NSApp.terminate` (same as Cmd-Q). Now the editor stays open with its files. The console is hidden, the debugger is cleared, and a Ping-launched companion is stopped so the VM is not left dead on `edit.sock`. The next successful connect shows the console again. Standalone 64Forth (no editor client) still quits on `BYE`.
+
+### 3.4 Show Boot Messages missing from EditForth Help — **Fixed**
+
+**Problem:** Cold-bootstrap `Loading:` / `Finished Loading:` chatter is retained in the companion and shown via **Help → Show Boot Messages**, but that item lived only on the **64Forth** menu bar (standalone GUI or companion when frontmost). While EditForth owns the console, users never saw it.
+
+**Solution:** EditForth **Help → Show Boot Messages** sends `EditorRequest.showBootMessages` over `edit.sock`; the companion appends `=== Cold bootstrap messages ===` plus `bootTranscript` to the EditForth console (same text as companion Help). Disabled when Forth is disconnected. Both `IPCProtocol.swift` copies stay in sync.
 
 ### 3.3 Standalone 64Forth is still 1.5.4 — **Won't do**
 

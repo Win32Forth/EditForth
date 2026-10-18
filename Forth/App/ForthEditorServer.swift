@@ -313,6 +313,20 @@ final class ForthEditorServer {
             // Confirm alerts run in EditForth; companion only performs the copy.
             FileHost.shared.restoreUserTreeFromEditor(renameFirst: renameFirst)
             return
+        case .showBootMessages:
+            // Cold-blob Loading/Finished chatter is retained in bootTranscript
+            // (not auto-inserted at startup). Mirror companion Help → Show Boot Messages.
+            let text = kernel.bootTranscript
+            var block = "=== Cold bootstrap messages ===\n"
+            if text.isEmpty {
+                block += "No cold-bootstrap messages.\n"
+            } else {
+                block += text
+                if !text.hasSuffix("\n") { block += "\n" }
+            }
+            broadcast(.consoleOutput(text: block))
+            broadcastOkPrompt()
+            return
         case .toggleBreakpoint(let name):
             // FIND + table update. No EVALUATE, so F9 works while paused.
             let word = name.trimmingCharacters(in: .whitespacesAndNewlines)

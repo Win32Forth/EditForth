@@ -55,6 +55,9 @@ enum EditorRequest: Codable, Equatable {
     /// Wipe/replace Documents/EditForth Library/AutoLoad/Docs from the companion
     /// bundle. When `renameFirst` is true, rename EditForth → EditForth.User* first.
     case restoreUserTree(renameFirst: Bool)
+    /// Append retained cold-bootstrap emit (`Loading:` / `Finished Loading:`) to the
+    /// EditForth console. Survives CLS; same as companion Help → Show Boot Messages.
+    case showBootMessages
 }
 
 // MARK: - Messages from 64Forth to 64Edit

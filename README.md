@@ -68,7 +68,7 @@ Both targets build. **Run the system by double clicking the EditForth.app icon. 
 
 ### Embedded companion console
 
-**Start Forth** runs `64Forth as an embedded companion` (accessory activation, no Forth app window). While connected, Start Forth button is hidden. The editor hosts `DockedConsoleView` when docked; typing and output go over `edit.sock`. **Undock** opens a floating titled window; closing that window with the red traffic light hides the console (companion keeps running) and the strip shows **Unhide Forth**. **Dock** returns the console under the strip. Quit EditForth terminates the launched companion.
+**Start Forth** runs `64Forth as an embedded companion` (accessory activation, no Forth app window). While connected, Start Forth button is hidden. The editor hosts `DockedConsoleView` when docked; typing and output go over `edit.sock`. **Undock** opens a floating titled window; closing that window with the red traffic light hides the console (companion keeps running) and the strip shows **Unhide Forth**. **Dock** returns the console under the strip. Quit EditForth terminates the launched companion. **Help → Show Boot Messages** appends retained cold-bootstrap `Loading:` / `Finished Loading:` text to the console (not shown automatically at startup).
 
 ## Build
 
