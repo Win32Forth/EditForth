@@ -13,7 +13,7 @@
 #
 # host.fth covers: FIND, SOURCE, POSTPONE, SLITERAL, 2!/2@, SIGN, double
 # literals, {:} order, EMIT?/EKEY?, ABORT", REQUIRED/INCLUDED, GD8 +LOOP,
-# FALIGNED (alignment flag, TZForth-style)/FATAN2/FLITERAL, MARKER.
+# FALIGNED (ANS address round-up)/FATAN2/FLITERAL, MARKER.
 #
 # Note: ABORT" nonzero test may print "boom" before CATCH; that is expected.
 # Kernel FILE_POP_UNDER: multi-result file words no longer leave fam/fileid.

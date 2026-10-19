@@ -82,10 +82,10 @@ enum FloatOpCode: Int64 {
     case floor = 67
     case fround = 68
     case fmod = 69
-    case falign = 70       // a=addr → o1
+    case falign = 70       // a=addr → o1 next float-aligned address
     case sfalign = 71
     case dfalign = 72
-    case faligned = 73     // a=addr → o1 flag
+    case faligned = 73     // a=addr → o1 next float-aligned address (ANS)
     case sfaligned = 74
     case dfaligned = 75
     case parseLit = 100    // ptr + b=len → o1=ok o2=bits (no fpush)
@@ -675,14 +675,13 @@ final class FloatHost {
         case .fmod:
             let r2 = fpop(); let r1 = fpop()
             fpush(r1.truncatingRemainder(dividingBy: r2))
-        case .falign, .dfalign:
+        // ANS FALIGN/FALIGNED family: return the first aligned address ≥ addr
+        // (not a "already aligned?" flag). Matches kernel2 FALIGN:
+        //   HERE DUP FALIGNED SWAP - ALLOT
+        case .falign, .dfalign, .faligned, .dfaligned:
             o1?.pointee = (a + 7) & ~7
-        case .sfalign:
+        case .sfalign, .sfaligned:
             o1?.pointee = (a + 3) & ~3
-        case .faligned, .dfaligned:
-            o1?.pointee = flag((a & 7) == 0)
-        case .sfaligned:
-            o1?.pointee = flag((a & 3) == 0)
         case .parseLit:
             let u = Int(b)
             var bytes = [UInt8]()

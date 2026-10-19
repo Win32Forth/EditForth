@@ -1,7 +1,7 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.6** / build **15** (shipped); previous ship **2.3.5** / build **14**. AskForth header metadata + setup banner + nomic auto-pull / Prepare… in **2.3.6**; model profiles + Temperature + 8192 completion budget + Stop + Library hybrid/semantic RAG (`nomic-embed-text`, cheat sheet, auto-rebuild) in **2.3.5**; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**. Post-ship: **Help → Show Boot Messages** on EditForth (3.4).  
-**Updated:** 2026-10-18.
+**Baseline:** **2.3.7** / build **16** (shipped); previous ship **2.3.6** / build **15**. Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header metadata + setup banner + nomic auto-pull / Prepare… in **2.3.6**; model profiles + Temperature + 8192 completion budget + Stop + Library hybrid/semantic RAG (`nomic-embed-text`, cheat sheet, auto-rebuild) in **2.3.5**; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
+**Updated:** 2026-10-19.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
 
@@ -157,6 +157,12 @@ Dock and undock move the Forth console only. GCLOCK and other App Output windows
 **Problem:** Cold-bootstrap `Loading:` / `Finished Loading:` chatter is retained in the companion and shown via **Help → Show Boot Messages**, but that item lived only on the **64Forth** menu bar (standalone GUI or companion when frontmost). While EditForth owns the console, users never saw it.
 
 **Solution:** EditForth **Help → Show Boot Messages** sends `EditorRequest.showBootMessages` over `edit.sock`; the companion appends `=== Cold bootstrap messages ===` plus `bootTranscript` to the EditForth console (same text as companion Help). Disabled when Forth is disconnected. Both `IPCProtocol.swift` copies stay in sync.
+
+### 3.5 Mac FALIGNED returned a flag — **Fixed**
+
+**Problem:** `FloatHost` opcodes 73–75 (`FALIGNED` / `SFALIGNED` / `DFALIGNED`) returned an “already aligned?” flag (`-1`/`0`). `kernel2.fth` DOC strings and `FALIGN` (`HERE DUP FALIGNED SWAP - ALLOT`) expect ANS address round-up, so Mac `FALIGN` could `ALLOT` a huge value and abort. `host.fth` had been written to match the flag behavior.
+
+**Solution:** Mac host now returns the first aligned address ≥ `addr` (8-byte for `FALIGNED`/`DFALIGNED`, 4-byte for `SFALIGNED`), matching ANS and the Windows host. `host.fth` checks `0→0`, `1→8`, `8→8`, and `1 SFALIGNED → 4`.
 
 ### 3.3 Standalone 64Forth is still 1.5.4 — **Won't do**
 

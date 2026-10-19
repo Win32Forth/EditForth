@@ -1,8 +1,26 @@
 # 64Forth development status
 
-**Current:** **2.3.6** (build **15**) — shipped  
+**Current:** **2.3.7** (build **16**) — shipped  
 
-**Last updated:** 2026-10-14
+**Last updated:** 2026-10-19
+
+---
+
+## v2.3.7 — ANS FALIGNED + EditForth Show Boot Messages
+
+**Version strings:** marketing **2.3.7**, build **16** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.7** (`Releases/EditForth-2.3.7-macOS.dmg`). Replaces **v2.3.6**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.7 === Oct 19, 2026 12:30 PM ===
+```
+
+### Highlights since 2.3.6
+
+- **Mac ANS `FALIGNED` / `SFALIGNED` / `DFALIGNED`** — `FloatHost` opcodes 73–75 return the first aligned address ≥ `addr` (8 / 4 / 8), not a TZForth-style flag. Restores `kernel2` `FALIGN` / `SFALIGN` (`HERE DUP FALIGNED SWAP - ALLOT`). `host.fth` checks `0→0`, `1→8`, `8→8`, `1 SFALIGNED→4`. ANS-VALIDATE **395** passed / **0** failed.
+- **EditForth Help → Show Boot Messages** — sends `EditorRequest.showBootMessages` over edit.sock so cold-bootstrap `Loading:` / `Finished Loading:` text is available while EditForth owns the menu bar (same output as companion / standalone 64Forth Help).
+- Prep validates ANS, Hayes, dbg-span, and VED64 emit.
 
 ---
 
