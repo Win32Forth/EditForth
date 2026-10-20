@@ -1732,29 +1732,29 @@ final class FileHost {
         )
     }
 
-    /// Open `url` in 64Edit. Uses `locateSixtyFourEditApp()` (Release: sibling
-    /// or `/Applications`; Debug: DerivedData first). Falls back to the default
-    /// system opener only if 64Edit cannot be found or launched.
+    /// Open `url` in the editor. Prefer EditForth / 64Edit on edit.sock (pending-goto
+    /// + DistributedNotification only). Otherwise launch companion `64Edit.app` via
+    /// `locateSixtyFourEditApp()`. Fall back to the system default opener only when
+    /// no sock client and no 64Edit — never do that while EditForth is connected, or
+    /// ⌘-click VIEW opens the file twice (EditForth + Xcode / default app).
     /// Writes `pending-goto.json`: VIEW (`line` > 0) opens read-only view mode;
     /// EDIT opens edit mode (and can clear a prior VIEW lock on the same file).
-    ///
-    /// When a sock client is connected, pending-goto + DistributedNotification is
-    /// enough — `open -a App file` (or even bare activate) reactivates the window
-    /// and flashes. Cold launch still passes the file path to Launch Services.
     private func openInSystemEditor(_ url: URL, line: Int) {
         #if os(macOS)
         let viewMode = line > 0
         writePendingGoto(path: url.path, line: line, mode: viewMode ? "view" : "edit")
-        if locateSixtyFourEditApp() != nil {
-            if ForthEditorServer.shared.hasConnectedClients {
-                // Editor already live on edit.sock; notification delivers the goto.
-                if viewMode {
-                    msg("VIEW (64Edit): \(url.path):\(line)\n")
-                } else {
-                    msg("EDIT (64Edit): \(url.path)\n")
-                }
-                return
+        // Sock client first — EditForth does not ship as 64Edit.app; checking
+        // locateSixtyFourEditApp() before hasConnectedClients used to fall through
+        // to NSWorkspace.open and open the same path in Xcode.
+        if ForthEditorServer.shared.hasConnectedClients {
+            if viewMode {
+                msg("VIEW: \(url.path):\(line)\n")
+            } else {
+                msg("EDIT: \(url.path)\n")
             }
+            return
+        }
+        if locateSixtyFourEditApp() != nil {
             // Running but not sock-connected yet: activate without re-opening the
             // file path (pending-goto handles the buffer). Cold launch passes file.
             let passFile = !isSixtyFourEditRunning()
@@ -1772,7 +1772,7 @@ final class FileHost {
             }
             return
         }
-        msg("? 64Edit.app not found (build Debug or install in /Applications); using system opener\n")
+        msg("? No editor on edit.sock and 64Edit.app not found; using system opener\n")
         let ok = NSWorkspace.shared.open(url)
         if ok {
             msg("EDIT: \(url.path)\n")

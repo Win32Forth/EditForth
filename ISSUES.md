@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.8** / build **17** (shipped); previous ship **2.3.7** / build **16**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**.  
+**Baseline:** **2.3.8** / build **17** (shipped); previous ship **2.3.7** / build **16**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
 **Updated:** 2026-10-19.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
@@ -157,6 +157,14 @@ Dock and undock move the Forth console only. GCLOCK and other App Output windows
 **Problem:** Cold-bootstrap `Loading:` / `Finished Loading:` chatter is retained in the companion and shown via **Help → Show Boot Messages**, but that item lived only on the **64Forth** menu bar (standalone GUI or companion when frontmost). While EditForth owns the console, users never saw it.
 
 **Solution:** EditForth **Help → Show Boot Messages** sends `EditorRequest.showBootMessages` over `edit.sock`; the companion appends `=== Cold bootstrap messages ===` plus `bootTranscript` to the EditForth console (same text as companion Help). Disabled when Forth is disconnected. Both `IPCProtocol.swift` copies stay in sync.
+
+### 3.6 ⌘-click VIEW also opened Xcode — **Fixed**
+
+**Problem:** Console ⌘-click / VIEW correctly opened the source in EditForth (pending-goto + browse mode) and also opened the same file in Xcode (or the system default editor).
+
+**Cause:** `FileHost.openInSystemEditor` only skipped `NSWorkspace.shared.open` when `64Edit.app` was found *and* a sock client was connected. EditForth is the sock client but is not `64Edit.app`, so VIEW fell through to the system opener.
+
+**Solution:** If `ForthEditorServer.hasConnectedClients`, write pending-goto / notify and return — do not launch 64Edit or call `NSWorkspace.open`.
 
 ### 3.5 Mac FALIGNED returned a flag — **Fixed**
 

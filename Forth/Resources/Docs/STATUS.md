@@ -24,6 +24,8 @@
 - **Prompt** label sits closer to the prompt editor (2 pt).
 - How-to: `Forth/Resources/Docs/Ask-Forth.md`. Prep validates ANS, Hayes, dbg-span, and VED64 emit.
 
+**Post-ship (tree):** Console ⌘-click / VIEW no longer opens the same file in Xcode when EditForth is on edit.sock (`FileHost.openInSystemEditor` checks sock clients before the system opener). ISSUES §3.6.
+
 ---
 
 ## v2.3.7 — ANS FALIGNED + EditForth Show Boot Messages
