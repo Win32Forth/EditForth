@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.3.7** (build **16**) — shipped  
+**Current:** **2.3.8** (build **17**) — shipped  
 
 **Last updated:** 2026-10-19
+
+---
+
+## v2.3.8 — Ask Forth panel undock + compact help
+
+**Version strings:** marketing **2.3.8**, build **17** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.8** (`Releases/EditForth-2.3.8-macOS.dmg`). Replaces **v2.3.7**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.8 === Oct 19, 2026 9:40 PM ===
+```
+
+### Highlights since 2.3.7
+
+- **Ask Forth undock** — **Undock** opens a floating Ask Forth window (`AskForthWindowController`); **Dock** returns it to the trailing inspector. Preference `askForthDocked`. Quit no longer clears visibility when the floating window tears down — undocked Ask Forth restores on next launch.
+- **Compact help** — `info.circle` tooltips beside **Ask Forth** and **64Forth Agent** titles replace the always-visible help boxes.
+- **Capture Selected to Prompt** button removed (paste into Prompt instead).
+- **Prompt** label sits closer to the prompt editor (2 pt).
+- How-to: `Forth/Resources/Docs/Ask-Forth.md`. Prep validates ANS, Hayes, dbg-span, and VED64 emit.
 
 ---
 

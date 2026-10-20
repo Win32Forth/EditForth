@@ -93,17 +93,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Prefer a single workspace window; leave the floating "64Forth" console alone.
+    /// Prefer a single workspace window; leave floating "64Forth" / "Ask Forth" alone.
     func collapseExtraWorkspaceWindows() {
         let id = Self.workspaceWindowID
         var workspaceWindows = NSApp.windows.filter { $0.identifier == id && $0.isVisible }
         // Before WindowChrome tags a raced scene, also catch untitled SwiftUI windows
-        // that are not the floating Forth console / panels.
+        // that are not the floating Forth console / Ask Forth / panels.
         if workspaceWindows.count <= 1 {
-            let consoleTitle = "64Forth"
+            let floatingTitles: Set<String> = ["64Forth", "Ask Forth"]
             let extras = NSApp.windows.filter { win in
                 guard win.isVisible, win.canBecomeKey, !(win is NSPanel) else { return false }
-                if win.title == consoleTitle { return false }
+                if floatingTitles.contains(win.title) { return false }
                 if win.identifier == id { return true }
                 // Untagged SwiftUI workspace-like windows (titled, closable).
                 return win.styleMask.contains(.titled) && win.styleMask.contains(.closable)
@@ -122,7 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func bringWorkspaceWindowsForward() {
         let id = Self.workspaceWindowID
         if let main = NSApp.windows.first(where: { $0.identifier == id && $0.isVisible })
-            ?? NSApp.windows.first(where: { $0.canBecomeKey && $0.isVisible && $0.title != "64Forth" }) {
+            ?? NSApp.windows.first(where: {
+                $0.canBecomeKey && $0.isVisible
+                    && $0.title != "64Forth" && $0.title != "Ask Forth"
+            }) {
             main.makeKeyAndOrderFront(nil)
             return
         }
@@ -138,10 +141,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let workspace else {
+            AskForthWindowController.shared.prepareForAppTermination()
             forth?.terminateLaunchedCompanion()
             return .terminateNow
         }
         guard workspace.tabs.contains(where: \.isDirty) else {
+            AskForthWindowController.shared.prepareForAppTermination()
             forth?.terminateLaunchedCompanion()
             return .terminateNow
         }
@@ -150,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.reviewDirtyTabsForTermination { [weak self] allow in
             self?.isReviewingTermination = false
             if allow {
+                AskForthWindowController.shared.prepareForAppTermination()
                 self?.forth?.terminateLaunchedCompanion()
             }
             NSApp.reply(toApplicationShouldTerminate: allow)
@@ -158,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        AskForthWindowController.shared.prepareForAppTermination()
         forth?.terminateLaunchedCompanion()
     }
 

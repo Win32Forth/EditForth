@@ -36,6 +36,8 @@ struct ContentView: View {
     @State private var splitDragStartFraction: CGFloat?
     /// View → Ask Forth — trailing AI assistant inspector (local Ollama).
     @AppStorage("showAIAssistant") private var showAIAssistant = false
+    /// Ask Forth trailing inspector (true) vs floating window (false).
+    @AppStorage("askForthDocked") private var askForthDocked = true
     /// Persisted Ask Forth panel width (points).
     @AppStorage("aiPanelWidth") private var storedAIPanelWidth = 340.0
     @State private var aiPanelWidth = 340.0
@@ -69,7 +71,7 @@ struct ContentView: View {
                     editorArea
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    if showAIAssistant {
+                    if showAIAssistant, askForthDocked {
                         EditorHSplitter(
                             onDrag: { translationX in
                                 let base = aiWidthDragStart ?? clampedAIWidth
@@ -96,6 +98,16 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     aiPanelWidth = max(storedAIPanelWidth, Self.aiPanelMinWidth)
+                    AskForthWindowController.shared.onRequestHide = {
+                        showAIAssistant = false
+                    }
+                    syncAskForthWindow()
+                }
+                .onChange(of: showAIAssistant) { _, _ in
+                    syncAskForthWindow()
+                }
+                .onChange(of: askForthDocked) { _, _ in
+                    syncAskForthWindow()
                 }
                 .onChange(of: geo.size.width) { _, newWidth in
                     let cap = Self.aiPanelMaxWidth(forWindowWidth: newWidth)
@@ -448,6 +460,16 @@ struct ContentView: View {
         }
         aiAssistant.status = "Added page URL to Prompt."
         showAIAssistant = true
+        syncAskForthWindow()
+    }
+
+    /// Trailing inspector when docked; floating window when undocked (same model).
+    private func syncAskForthWindow() {
+        if showAIAssistant, !askForthDocked {
+            AskForthWindowController.shared.show(model: aiAssistant, workspace: workspace)
+        } else {
+            AskForthWindowController.shared.closeQuietly()
+        }
     }
 
     private func splitPaneHeader(title: String, isSecondary: Bool) -> some View {

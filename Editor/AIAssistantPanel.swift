@@ -15,6 +15,8 @@ struct AIAssistantPanel: View {
 
     /// Same key as View → Ask Forth / tab-bar inspector button.
     @AppStorage("showAIAssistant") private var showAIAssistant = false
+    /// Trailing inspector (true) vs floating Ask Forth window (false).
+    @AppStorage("askForthDocked") private var askForthDocked = true
 
     /// Prompt TextEditor height only — agent pane fills whatever is left below the splitter.
     @AppStorage("aiPromptEditorHeight") private var storedPromptHeight = 40.0
@@ -116,13 +118,29 @@ struct AIAssistantPanel: View {
 
     private var chatSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Text("Ask Forth")
                     .font(.headline)
+                askForthInfoHint(
+                    """
+                    Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
+
+                    Local Ask needs Ollama (https://ollama.com) running and a chat model (default: ollama pull gemma4:e4b). Library Hybrid/Semantic also needs nomic-embed-text — EditForth downloads that automatically when Ollama is available and builds the Library index in the background.
+
+                    Pick a saved model profile below (Ollama, SpaceXAI, local mlx, …). Use Models… to add or edit names, base URLs, and per-profile API keys.
+                    """
+                )
                 Spacer()
                 Text(model.providerLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if askForthDocked {
+                    Button("Undock") {
+                        askForthDocked = false
+                    }
+                    .font(.caption)
+                    .help("Open Ask Forth in a floating window.")
+                }
                 Button {
                     showAIAssistant = false
                 } label: {
@@ -133,16 +151,6 @@ struct AIAssistantPanel: View {
                 .help("Hide Ask Forth (⌥⌘A)")
                 .accessibilityLabel("Hide Ask Forth")
             }
-
-            askForthHelpPanel(
-                """
-                Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
-
-                Local Ask needs Ollama (https://ollama.com) running and a chat model (default: ollama pull gemma4:e4b). Library Hybrid/Semantic also needs nomic-embed-text — EditForth downloads that automatically when Ollama is available and builds the Library index in the background.
-
-                Pick a saved model profile below (Ollama, SpaceXAI, local mlx, …). Use Models… to add or edit names, base URLs, and per-profile API keys.
-                """
-            )
 
             if !model.setupBanner.isEmpty {
                 Text(model.setupBanner)
@@ -228,30 +236,25 @@ struct AIAssistantPanel: View {
                     model.persistToolAgent()
                 }
 
-            Button("Capture Selected to Prompt") {
-                model.captureSelectedToPrompt(from: workspace)
-            }
-            .help("Select some text from a source file and this button will copy and paste it into the Prompt window for evaluation by Ask Forth")
-            .disabled(model.isBusy)
-
-            HStack(spacing: 8) {
-                Text("Prompt")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text("Prompt")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Output") {
+                        openAskForthOutputFolder()
+                    }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Button("Output") {
-                    openAskForthOutputFolder()
+                    .help("Show the Ask Forth output folder. Ask Forth result files accumulate and should be cleaned up occasionally.")
                 }
-                .font(.caption)
-                .help("Show the Ask Forth output folder. Ask Forth result files accumulate and should be cleaned up occasionally.")
+                TextEditor(text: $model.prompt)
+                    .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .frame(height: promptHeight)
+                    .askForthBoxChrome()
             }
-            TextEditor(text: $model.prompt)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .frame(height: promptHeight)
-                .askForthBoxChrome()
-
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     if let name = model.askOutputFileName {
@@ -282,20 +285,14 @@ struct AIAssistantPanel: View {
         }
     }
 
-    /// About 2½ lines of caption2 (one line shorter than the prior ~3½); scroll for the rest.
-    private static let helpPanelHeight: CGFloat = 42
-
-    private func askForthHelpPanel(_ text: String) -> some View {
-        ScrollView {
-            Text(text)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(4)
-        }
-        .frame(height: Self.helpPanelHeight)
-        .askForthBoxChrome()
+    /// Compact help affordance beside a section title (hover for the full tip).
+    private func askForthInfoHint(_ text: String) -> some View {
+        Image(systemName: "info.circle")
+            .imageScale(.medium)
+            .foregroundStyle(.secondary)
+            .help(text)
+            .accessibilityLabel("Help")
+            .accessibilityHint(text)
     }
 
     private var askButtonTitle: String {
@@ -316,14 +313,15 @@ struct AIAssistantPanel: View {
 
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("64Forth Agent")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-
-            askForthHelpPanel(
-                "Agent Enhance Reply asks the model to evaluate the Ask Forth transcript and to enhance its answer. The enhanced answer is appended to the AskForth-N.fth file with a header \"Agent Enhanced Reply\". Use INCLUDE in the status strip to load edited code into the live Forth console."
-            )
+            HStack(spacing: 4) {
+                Text("64Forth Agent")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                askForthInfoHint(
+                    "Agent Enhance Reply asks the model to evaluate the Ask Forth transcript and to enhance its answer. The enhanced answer is appended to the AskForth-N.fth file with a header \"Agent Enhanced Reply\". Use INCLUDE in the status strip to load edited code into the live Forth console."
+                )
+            }
 
             HStack(alignment: .center, spacing: 10) {
                 Button(enhanceButtonTitle) {

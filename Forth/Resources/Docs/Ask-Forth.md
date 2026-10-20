@@ -1,6 +1,6 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**; **AskForth header** (`\\` … `{` with model / temperature / checked options), orange **setup banner**, and **nomic auto-pull / Prepare…** in **2.3.6**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**; **AskForth header** (`\\` … `{` with model / temperature / checked options), orange **setup banner**, and **nomic auto-pull / Prepare…** in **2.3.6**; Mac ANS **FALIGNED** and EditForth **Help → Show Boot Messages** in **2.3.7**; **Undock** floating panel, `info.circle` help tips, and tighter Prompt layout in **2.3.8**.
 
 ## Requirements (providers)
 
@@ -63,8 +63,8 @@ To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root
 
 ## Basic workflow
 
-1. Show the Ask Forth panel: trailing **sidebar** button on the tab bar, **View → Show Ask Forth**, or **⌥⌘A**. Hide the same way (or the sidebar button in the panel header) while you edit results in `AskForth-N.fth`.  
-2. Type a question in **Prompt**, or select editor text and click **Capture Selected to Prompt**.  
+1. Show Ask Forth: trailing **sidebar** button on the tab bar, **View → Show Ask Forth**, or **⌥⌘A**. Hide the same way (or the sidebar button in the panel header) while you edit results in `AskForth-N.fth`. Hover the **info** icon beside the title for a short how-to. Use **Undock** to float Ask Forth in its own window (**Dock** returns it to the trailing inspector).  
+2. Type a question in **Prompt** (paste editor text if needed).  
 2a. While **Ask** or **Agent Enhance Reply** is running, click **Stop** (or press Escape) to cancel EditForth’s in-flight request. Status shows **Stopped.** If a local server keeps generating on its own, unload the model or stop that server separately.  
 3. Optionally leave **Include Library context** on (default folder **`~/Documents/EditForth/Library/Sample`**; **Library…** to change).  
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  

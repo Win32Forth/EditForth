@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.7** / build **16** (shipped); previous ship **2.3.6** / build **15**. Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header metadata + setup banner + nomic auto-pull / Prepare… in **2.3.6**; model profiles + Temperature + 8192 completion budget + Stop + Library hybrid/semantic RAG (`nomic-embed-text`, cheat sheet, auto-rebuild) in **2.3.5**; web search, Tool agent, OpenAI-compatible provider, Library `.md`/`.swift` RAG in **2.3.3**; Ask Forth web + Reference in **2.3.2**; AskForth-N.fth / Agent Enhance Reply in **2.3.1**; Ask Forth first ship in **2.3.0**; BYE / Find-Replace in **2.2.1**; debugger polish in **2.2.0**.  
+**Baseline:** **2.3.8** / build **17** (shipped); previous ship **2.3.7** / build **16**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**.  
 **Updated:** 2026-10-19.
 
 **Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
