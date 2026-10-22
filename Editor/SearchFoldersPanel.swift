@@ -2,8 +2,9 @@
 //  SearchFoldersPanel.swift
 //  EditForth
 //
-//  Edit → Search in Folders… dialog with remembered queries, folder sets,
-//  and extension sets; nested (recursive) vs folder-level only.
+//  Edit → Search in Folders… dialog with remembered queries and extension
+//  sets. Up to three folder rows, each an editable path with Choose… and
+//  Clear. Nested (recursive) vs folder-level only.
 //  Accessory view is frame-laid-out (NSAlert clips Auto Layout tops).
 //
 
@@ -103,11 +104,14 @@ enum SearchHistory {
 
 enum SearchFoldersPanel {
     /// Present the dialog; on OK, open a search tab on `workspace`.
-    static func run(workspace: WorkspaceModel) {
+    /// `editing` fills the dialog from that results tab so Modify Search
+    /// changes the search that is already open.
+    static func run(workspace: WorkspaceModel, editing session: SearchSession? = nil) {
         let alert = NSAlert()
         alert.messageText = "Search in Folders"
         alert.informativeText =
-            "Pick or type a query, folder set, and extension set. " +
+            "Type a query and an extension set. Each folder row is one directory. " +
+            "Choose… picks a folder; Clear stops searching that row. " +
             "Nested searches subfolders; off searches only the listed folders."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Search")
@@ -115,10 +119,8 @@ enum SearchFoldersPanel {
 
         // Frame-based accessory layout: NSAlert clips Auto Layout accessory
         // views (the top "Find:" label was reduced to a few pixels).
-        let width: CGFloat = 440
+        let width: CGFloat = 520
         let labelH: CGFloat = 18
-        let fieldH: CGFloat = 26
-        let rootsH: CGFloat = 72
         let checkH: CGFloat = 18
         let gap: CGFloat = 6
         let sectionGap: CGFloat = 10
@@ -132,9 +134,9 @@ enum SearchFoldersPanel {
         // --- Find row: "Find:" + Match Case + Whole Word ---
         let queryLabel = makeLabel("Find:")
         let matchCaseBox = NSButton(checkboxWithTitle: "Match Case", target: nil, action: nil)
-        matchCaseBox.state = SearchHistory.caseSensitiveDefault ? .on : .off
+        matchCaseBox.state = (session?.caseSensitive ?? SearchHistory.caseSensitiveDefault) ? .on : .off
         let wholeWordBox = NSButton(checkboxWithTitle: "Whole Word", target: nil, action: nil)
-        wholeWordBox.state = SearchHistory.wholeWordDefault ? .on : .off
+        wholeWordBox.state = (session?.wholeWord ?? SearchHistory.wholeWordDefault) ? .on : .off
 
         let findHeader = NSView(frame: .zero)
         // Size checkboxes from their intrinsic titles, pack to the right of Find:.
@@ -176,43 +178,75 @@ enum SearchFoldersPanel {
             queryCombo.addItem(withObjectValue: q)
         }
         queryCombo.addItem(withObjectValue: "") // blank to clear / type new
-        queryCombo.stringValue = SearchHistory.queries.first ?? ""
+        queryCombo.stringValue = session?.query ?? SearchHistory.queries.first ?? ""
 
-        // --- Folders: history combo picks a set; text view edits the active set ---
-        let rootsLabel = makeLabel("Folders (one path per line):")
-        let folderCombo = NSComboBox(frame: .zero)
-        folderCombo.isEditable = false
-        folderCombo.numberOfVisibleItems = 12
-        folderCombo.addItem(withObjectValue: "(current)")
-        for set in SearchHistory.folderSets {
-            folderCombo.addItem(withObjectValue: Self.folderSetMenuTitle(set))
-        }
-        folderCombo.selectItem(at: 0)
-
-        let rootsScroll = NSScrollView(frame: .zero)
-        rootsScroll.hasVerticalScroller = true
-        rootsScroll.borderType = .bezelBorder
-        rootsScroll.autohidesScrollers = true
-        let rootsView = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: rootsH))
-        rootsView.minSize = NSSize(width: 0, height: 0)
-        rootsView.maxSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        rootsView.isVerticallyResizable = true
-        rootsView.isHorizontallyResizable = false
-        rootsView.autoresizingMask = [.width]
-        rootsView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        if let first = SearchHistory.folderSets.first {
-            rootsView.string = first
+        // --- Folders: three editable paths, each with Choose… and Clear ---
+        let rootsLabel = makeLabel("Folders:")
+        let savedFolders: [String]
+        if let session {
+            savedFolders = session.roots.map(\.path)
         } else {
-            rootsView.string = ForthMenuSupport.userTreeURL.path
+            savedFolders = SearchHistory.folderSets.first.map {
+                $0.split(whereSeparator: \.isNewline)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            } ?? []
         }
-        rootsScroll.documentView = rootsView
+        var initialFolders = Array(savedFolders.prefix(FolderPathRows.count))
+        if initialFolders.isEmpty {
+            initialFolders = [ForthMenuSupport.userTreeURL.path]
+        }
+        while initialFolders.count < FolderPathRows.count {
+            initialFolders.append("")
+        }
 
-        let folderBridge = FolderSetComboBridge(combo: folderCombo, textView: rootsView)
-        folderCombo.target = folderBridge
-        folderCombo.action = #selector(FolderSetComboBridge.selectionChanged(_:))
+        let chooseProbe = Self.folderButton("Choose…")
+        let clearProbe = Self.folderButton("Clear")
+        let buttonGap: CGFloat = 6
+        let rowH = max(26, chooseProbe.frame.height, clearProbe.frame.height)
+        let fieldW = width - chooseProbe.frame.width - clearProbe.frame.width - buttonGap * 2
+        var folderFields: [NSTextField] = []
+        var folderRows: [NSView] = []
+        for index in 0..<FolderPathRows.count {
+            let row = NSView(frame: NSRect(x: 0, y: 0, width: width, height: rowH))
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: fieldW, height: rowH))
+            field.stringValue = initialFolders[index]
+            field.placeholderString = index == 0 ? "Folder path" : "Optional folder"
+            field.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+            field.lineBreakMode = .byTruncatingHead
+            field.cell?.wraps = false
+            let choose = Self.folderButton("Choose…")
+            let clear = Self.folderButton("Clear")
+            choose.tag = index
+            clear.tag = index
+            choose.frame = NSRect(
+                x: fieldW + buttonGap,
+                y: (rowH - choose.frame.height) / 2,
+                width: choose.frame.width,
+                height: choose.frame.height
+            )
+            clear.frame = NSRect(
+                x: fieldW + buttonGap * 2 + choose.frame.width,
+                y: (rowH - clear.frame.height) / 2,
+                width: clear.frame.width,
+                height: clear.frame.height
+            )
+            row.addSubview(field)
+            row.addSubview(choose)
+            row.addSubview(clear)
+            folderFields.append(field)
+            folderRows.append(row)
+        }
+        let folderRowsController = FolderPathRows(fields: folderFields)
+        for row in folderRows {
+            for view in row.subviews {
+                guard let button = view as? NSButton else { continue }
+                button.target = folderRowsController
+                button.action = button.title == "Clear"
+                    ? #selector(FolderPathRows.clear(_:))
+                    : #selector(FolderPathRows.choose(_:))
+            }
+        }
 
         // --- Extensions (history of sets) ---
         let extLabel = makeLabel("Extensions (comma-separated sets):")
@@ -223,7 +257,8 @@ enum SearchFoldersPanel {
         for set in SearchHistory.extensionSets {
             extCombo.addItem(withObjectValue: set)
         }
-        extCombo.stringValue = SearchHistory.extensionSets.first
+        extCombo.stringValue = session.map { $0.extensions.joined(separator: ", ") }
+            ?? SearchHistory.extensionSets.first
             ?? FolderSearch.defaultExtensions.joined(separator: ", ")
 
         let nestedBox = NSButton(
@@ -231,26 +266,26 @@ enum SearchFoldersPanel {
             target: nil,
             action: nil
         )
-        nestedBox.state = SearchHistory.nestedDefault ? .on : .off
+        nestedBox.state = (session?.recursive ?? SearchHistory.nestedDefault) ? .on : .off
 
         // Top-down layout inside a fixed frame (y decreases from top).
-        let rows: [(NSView, CGFloat)] = [
+        var rows: [(NSView, CGFloat)] = [
             (findHeader, findHeaderH),
-            (queryCombo, fieldH),
-            (rootsLabel, labelH),
-            (folderCombo, fieldH),
-            (rootsScroll, rootsH),
-            (extLabel, labelH),
-            (extCombo, fieldH),
-            (nestedBox, checkH)
+            (queryCombo, 26),
+            (rootsLabel, labelH)
         ]
+        for row in folderRows {
+            rows.append((row, rowH))
+        }
+        rows.append((extLabel, labelH))
+        rows.append((extCombo, 26))
+        rows.append((nestedBox, checkH))
         var totalH: CGFloat = 4 // top pad so Find: is not clipped by the alert edge
         for (i, row) in rows.enumerated() {
             if i > 0 {
-                let afterRootsLabel = (rows[i - 1].0 === rootsLabel)
                 let beforeExt = (row.0 === extLabel)
                 let beforeNested = (row.0 === nestedBox)
-                totalH += (afterRootsLabel || beforeExt || beforeNested) ? sectionGap : gap
+                totalH += (beforeExt || beforeNested) ? sectionGap : gap
             }
             totalH += row.1
         }
@@ -260,10 +295,9 @@ enum SearchFoldersPanel {
         var y = totalH - 4
         for (i, row) in rows.enumerated() {
             if i > 0 {
-                let afterRootsLabel = (rows[i - 1].0 === rootsLabel)
                 let beforeExt = (row.0 === extLabel)
                 let beforeNested = (row.0 === nestedBox)
-                y -= (afterRootsLabel || beforeExt || beforeNested) ? sectionGap : gap
+                y -= (beforeExt || beforeNested) ? sectionGap : gap
             }
             y -= row.1
             row.0.frame = NSRect(x: 0, y: y, width: width, height: row.1)
@@ -271,11 +305,11 @@ enum SearchFoldersPanel {
         }
 
         alert.accessoryView = container
-        // Keep bridge alive for the modal session.
+        // Keep the row controller alive for the modal session.
         objc_setAssociatedObject(
             alert,
-            &FolderSetComboBridge.assocKey,
-            folderBridge,
+            &FolderPathRows.assocKey,
+            folderRowsController,
             .OBJC_ASSOCIATION_RETAIN
         )
         alert.window.initialFirstResponder = queryCombo
@@ -286,10 +320,9 @@ enum SearchFoldersPanel {
         let query = queryCombo.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
-        let rootLines = rootsView.string
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        let rootLines = folderFields.map {
+            $0.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
         let roots = rootLines.map {
             URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
         }
@@ -306,7 +339,7 @@ enum SearchFoldersPanel {
         let wholeWord = wholeWordBox.state == .on
 
         SearchHistory.rememberQuery(query)
-        SearchHistory.rememberFolderSet(rootsView.string)
+        SearchHistory.rememberFolderSet(rootLines.joined(separator: "\n"))
         SearchHistory.rememberExtensionSet(extRaw.isEmpty
             ? FolderSearch.defaultExtensions.joined(separator: ", ")
             : extRaw)
@@ -325,43 +358,65 @@ enum SearchFoldersPanel {
         )
     }
 
-    private static func folderSetMenuTitle(_ set: String) -> String {
-        let lines = set.split(whereSeparator: \.isNewline).map(String.init)
-        guard let first = lines.first else { return "(empty)" }
-        if lines.count == 1 {
-            return shortenedPath(first)
-        }
-        return "\(shortenedPath(first)) +\(lines.count - 1) more"
-    }
-
-    private static func shortenedPath(_ path: String) -> String {
-        let home = NSHomeDirectory()
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
+    private static func folderButton(_ title: String) -> NSButton {
+        let button = NSButton(title: title, target: nil, action: nil)
+        button.bezelStyle = .rounded
+        button.controlSize = .small
+        button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        button.sizeToFit()
+        return button
     }
 }
 
-/// Fills the folders text view when a remembered folder set is chosen.
-private final class FolderSetComboBridge: NSObject {
+/// Three folder paths for Search in Folders. Choose… uses a directory panel
+/// like CHDIR. Clear empties that row so it is not searched.
+private final class FolderPathRows: NSObject {
     static var assocKey: UInt8 = 0
+    static let count = 3
 
-    private weak var combo: NSComboBox?
-    private weak var textView: NSTextView?
+    private let fields: [NSTextField]
 
-    init(combo: NSComboBox, textView: NSTextView) {
-        self.combo = combo
-        self.textView = textView
+    init(fields: [NSTextField]) {
+        self.fields = fields
     }
 
-    @objc func selectionChanged(_ sender: NSComboBox) {
-        let idx = sender.indexOfSelectedItem
-        // 0 = "(current)" — leave the text view alone.
-        guard idx > 0 else { return }
-        let sets = SearchHistory.folderSets
-        let setIndex = idx - 1
-        guard sets.indices.contains(setIndex) else { return }
-        textView?.string = sets[setIndex]
+    @objc func choose(_ sender: NSButton) {
+        let index = sender.tag
+        guard fields.indices.contains(index) else { return }
+        let field = fields[index]
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Choose"
+        panel.message = "Choose a folder to search"
+        panel.directoryURL = Self.startURL(for: field.stringValue)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        field.stringValue = url.path
+    }
+
+    @objc func clear(_ sender: NSButton) {
+        let index = sender.tag
+        guard fields.indices.contains(index) else { return }
+        fields[index].stringValue = ""
+    }
+
+    private static func startURL(for raw: String) -> URL {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        let fm = FileManager.default
+        if !expanded.isEmpty {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: expanded, isDirectory: &isDir) {
+                let url = URL(fileURLWithPath: expanded, isDirectory: isDir.boolValue)
+                return isDir.boolValue ? url : url.deletingLastPathComponent()
+            }
+            let parent = (expanded as NSString).deletingLastPathComponent
+            if fm.fileExists(atPath: parent) {
+                return URL(fileURLWithPath: parent, isDirectory: true)
+            }
+        }
+        return ForthMenuSupport.userTreeURL
     }
 }

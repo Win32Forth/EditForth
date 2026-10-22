@@ -658,6 +658,16 @@ struct ContentView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
 
+            if let note = forth.statusNote {
+                Text(note)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(note.contains("failed") ? Color.red : Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
+            }
+
             if let err = forth.lastError {
                 Text(err)
                     .font(.system(size: 12, design: .monospaced))

@@ -868,6 +868,7 @@ XFACILITY_OP_GO_END:
 
 // ----- App-output char-graphics window (not Facility / not console) -----
 // Forth owns the cell buffer; these CODE words open/blit/keys + thin host helpers.
+.extern _host_hyper_reindex
 .extern _host_app_open
 .extern _host_oop_call
 .extern _host_app_close
@@ -4821,6 +4822,26 @@ XSYSTEM:
     ldr  x20, [x0]                 // TOS = n
     NEXT
 XSYSTEM_END:
+
+// (HX-BG-REINDEX) ( -- n )
+// Host builds Config/HYPER.NDX.building with a second 64Forth process, then
+// swaps it over the live index. n = 1: swap finished, caller reloads now.
+// n = 0: up to date, already running, or the reload is scheduled later.
+// End label so CODE-BOUNDS does not swallow the next primitive.
+    BOOT_WORD "(HX-BG-REINDEX)", "(HX-BG-REINDEX) ( -- n ) background HYPER-REINDEX; 1 = reload the index now", 0, XHX_BG_REINDEX, XHX_BG_REINDEX_END
+XHX_BG_REINDEX:
+    SAVE_VM
+    bl   _host_hyper_reindex       // x0 = n
+    adrp x1, host_tmp1@page
+    add  x1, x1, host_tmp1@pageoff
+    str  x0, [x1]
+    RESTORE_VM
+    str  x20, [x22, #-8]!          // push previous TOS
+    adrp x0, host_tmp1@page
+    add  x0, x0, host_tmp1@pageoff
+    ldr  x20, [x0]                 // TOS = n
+    NEXT
+XHX_BG_REINDEX_END:
 
 // ============================================================================
 // File load: INCLUDE / FLOAD / INCLUDED / REQUIRED / REQUIRE / .INCLUDED

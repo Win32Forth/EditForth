@@ -1,8 +1,27 @@
 # 64Forth development status
 
-**Current:** **2.3.8** (build **17**) — shipped  
+**Current:** **2.3.9** (build **18**) — shipped  
 
-**Last updated:** 2026-10-19
+**Last updated:** 2026-10-22
+
+---
+
+## v2.3.9 — background HYPER-REINDEX + search folders
+
+**Version strings:** marketing **2.3.9**, build **18** (EditForth + companion 64Forth lockstep). Dual-app DMG + GitHub **v2.3.9** (`Releases/EditForth-2.3.9-macOS.dmg`). Replaces **v2.3.8**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.3.9 === Oct 22, 2026 4:55 PM ===
+```
+
+### Highlights since 2.3.8
+
+- **Background HYPER-REINDEX** — companion returns at once. A second `64Forth --agent` process writes `HYPER.NDX.building` with the existing Forth scanner, then the host swaps that file over the live index and reloads it. Standalone waits so the next line sees the new file. An unchanged source list skips the scan. A second request while one is running is rejected. The live index is not truncated.
+- **Reindex result on the status strip** — `N entries, switched in Config/HYPER.NDX` (and a late failure) shows under **Engine connected** for 3 seconds. It does not print after `ok(n)>`.
+- **Search in Folders** — three folder rows. Each row is an editable path with **Choose…** (directory panel) and **Clear**. Empty rows are skipped.
+- **Modify Search** — button to the right of the hit and file count. Reopens that search’s dialog and replaces the same results tab.
 
 ---
 

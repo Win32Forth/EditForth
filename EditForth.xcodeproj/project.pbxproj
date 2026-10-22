@@ -24,6 +24,7 @@
 		B1000017 /* AgentChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000118 /* AgentChannel.swift */; };
 		B1000018 /* AppOutputHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000119 /* AppOutputHost.swift */; };
 		B1000019 /* FacilityEditorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100011A /* FacilityEditorHost.swift */; };
+		B1000020 /* HyperReindex.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000120 /* HyperReindex.swift */; };
 		EFEDD0CC0000000100000002 /* DockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000001 /* DockController.swift */; };
 		EFEDD0CC0000000100000012 /* CompanionChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000011 /* CompanionChannel.swift */; };
 		EFEDD0CC0000000100000022 /* CompanionMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDD0CC0000000100000021 /* CompanionMenus.swift */; };
@@ -75,6 +76,7 @@
 		B1000118 /* AgentChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChannel.swift; sourceTree = "<group>"; };
 		B1000119 /* AppOutputHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOutputHost.swift; sourceTree = "<group>"; };
 		B100011A /* FacilityEditorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilityEditorHost.swift; sourceTree = "<group>"; };
+		B1000120 /* HyperReindex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperReindex.swift; sourceTree = "<group>"; };
 		EFED17010000000100000001 /* EditForth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditForth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EFEDD0CC0000000100000001 /* DockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockController.swift; sourceTree = "<group>"; };
 		EFEDD0CC0000000100000011 /* CompanionChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChannel.swift; sourceTree = "<group>"; };
@@ -179,6 +181,7 @@
 				B1000114 /* FacilityTerminal.swift */,
 				B1000119 /* AppOutputHost.swift */,
 				B100011A /* FacilityEditorHost.swift */,
+				B1000120 /* HyperReindex.swift */,
 			);
 			path = Host;
 			sourceTree = "<group>";
@@ -552,6 +555,7 @@
 				FADE85D8306D82790035B509 /* IPCProtocol.swift in Sources */,
 				B1000018 /* AppOutputHost.swift in Sources */,
 				B1000019 /* FacilityEditorHost.swift in Sources */,
+				B1000020 /* HyperReindex.swift in Sources */,
 				B1000006 /* forth.s in Sources */,
 				FADE85DC306D83330035B509 /* ForthEngine.swift in Sources */,
 			);
@@ -580,7 +584,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -596,7 +600,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.8;
+				MARKETING_VERSION = 2.3.9;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -615,7 +619,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -631,7 +635,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.8;
+				MARKETING_VERSION = 2.3.9;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -775,7 +779,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -790,7 +794,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.8;
+				MARKETING_VERSION = 2.3.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -810,7 +814,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -825,7 +829,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.3.8;
+				MARKETING_VERSION = 2.3.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

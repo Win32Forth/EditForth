@@ -180,6 +180,11 @@ void kernel_set_edit_at(void (*fn)(const char *path, size_t n, int64_t line));
 typedef long long (*kernel_system_fn)(const char *cmd, size_t n);
 void kernel_set_system(kernel_system_fn fn);
 
+/// (HX-BG-REINDEX) — schedule or run the side-file hyper rebuild.
+/// Returns 1 if the live index was already replaced and Forth should HYPER-LOAD.
+/// Returns 0 if there is nothing for Forth to reload on this call.
+int64_t host_hyper_reindex(void);
+
 /// Facility terminal (PAGE / AT-XY / TERMINAL-REFRESH / FACILITY-OFF).
 /// op: 1=PAGE  2=AT-XY (a=col b=row, 0-based)  3=TERMINAL-REFRESH
 ///     4=FACILITY-OFF  5=resize (a=cols b=rows)

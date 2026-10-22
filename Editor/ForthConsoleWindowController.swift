@@ -81,17 +81,26 @@ struct UndockedConsoleRoot: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(forth.isConnected ? "Engine connected" : "Engine down")
-                    .font(.system(size: 12, design: .monospaced))
-                if forth.isDebugSessionArmed {
-                    Text("· debugging")
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(forth.isConnected ? "Engine connected" : "Engine down")
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.orange)
+                    if forth.isDebugSessionArmed {
+                        Text("· debugging")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.orange)
+                    }
+                    Spacer()
+                    Button("Dock") {
+                        forth.dockForth()
+                    }
                 }
-                Spacer()
-                Button("Dock") {
-                    forth.dockForth()
+                if let note = forth.statusNote {
+                    Text(note)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(note.contains("failed") ? Color.red : Color.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .padding(.horizontal, 8)

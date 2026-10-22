@@ -33,6 +33,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
     @Published private(set) var isConnected = false
     @Published private(set) var lastError: String?
+    /// Transient line under "Engine connected". Cleared after a short delay.
+    @Published private(set) var statusNote: String?
+    private var statusNoteToken: UInt = 0
     @Published private(set) var consoleLines: [String] = []
     /// True while 64Forth ITC DEBUG / TDBG is waiting for step/continue/abort.
     @Published private(set) var isDebugSessionArmed = false
@@ -777,6 +780,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 lastError = nil
             }
             appendConsole(text)
+        case .statusNote(let text):
+            showStatusNote(text)
         case .breakpointHit(let line, let stackTrace):
             appendConsole("BREAK line \(line)")
             stackTrace.forEach { appendConsole("  \($0)") }
@@ -888,6 +893,22 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             ForthConsoleWindowController.shared.closeQuietly()
             disconnectSock(closeUndockedWindow: true)
             terminateLaunchedCompanion()
+        }
+    }
+
+    /// Show `text` under "Engine connected" for 3 seconds. A newer note wins.
+    private func showStatusNote(_ text: String) {
+        let trimmed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        statusNoteToken &+= 1
+        let token = statusNoteToken
+        statusNote = trimmed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, self.statusNoteToken == token else { return }
+            self.statusNote = nil
         }
     }
 

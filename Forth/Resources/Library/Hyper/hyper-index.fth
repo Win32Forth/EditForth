@@ -12,6 +12,12 @@
 \
 \ Use:  HYPER-REINDEX   (FORTH wrapper; HX-DO-REINDEX + helpers in HYPER-VOC)
 \
+\ HYPER-REINDEX does not truncate Config/HYPER.NDX. The host runs HX-BUILD-INDEX
+\ in a second 64Forth process, which writes HYPER.NDX.building. The live index
+\ stays in use until that file is complete and renamed into place. With the
+\ editor companion, HYPER-REINDEX returns immediately. Standalone waits, then
+\ reloads. Unchanged sources and an unchanged spec list skip the scan.
+\
 \ Caller (hyper.fth) defines into HYPER-VOC; stay on that CURRENT.
 
 ONLY FORTH ALSO HYPER-VOC DEFINITIONS
@@ -596,10 +602,49 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
    HX-OUT-FLUSH
    HX-OUT-CLEAR HX-OUT-FLUSH ;
 
-\ Body in HYPER-VOC so HX-* / MIN-HYPER-NOISE compile against this wordlist.
-: HX-DO-REINDEX  ( -- )
-   S" Config/HYPER.NDX" HYPER-NDX-NAME PLACE
-   ." HYPER-REINDEX: writing " HYPER-NDX-NAME COUNT TYPE ." ..." CR
+\ Absolute output path for the side file. Not a counted string: paths can
+\ exceed 255 bytes. The host passes it; this word does not invent Config/.
+CREATE HX-BUILD-PATH  1024 ALLOT
+0 VALUE HX-BUILD-U
+
+: HX-SET-OUT  ( c-addr u -- )
+   DUP 1023 U>  OVER 0=  OR IF  2DROP 0 TO HX-BUILD-U EXIT  THEN
+   DUP TO HX-BUILD-U
+   HX-BUILD-PATH SWAP CMOVE ;
+
+\ Read one path from a file. kernel_eval accepts only 1023 characters, so the
+\ host cannot put a long absolute path on the same line as the build.
+: HX-SET-OUT-FILE  ( c-addr u -- )
+   R/O OPEN-FILE IF
+      DROP ." HYPER-REINDEX: no path file" CR 1 THROW
+   THEN
+   >R
+   HX-BUILD-PATH 1023 R@ READ-FILE
+   IF
+      DROP R> CLOSE-FILE DROP
+      ." HYPER-REINDEX: path read failed" CR 1 THROW
+   THEN
+   R> CLOSE-FILE DROP
+   BEGIN
+      DUP 0> IF
+         HX-BUILD-PATH OVER 1- + C@
+         DUP 10 =  OVER 13 =  OR  SWAP 32 =  OR
+      ELSE
+         FALSE
+      THEN
+   WHILE  1-  REPEAT
+   DUP 0= IF
+      DROP ." HYPER-REINDEX: empty path" CR 1 THROW
+   THEN
+   TO HX-BUILD-U ;
+
+\ Scan into the side file. The live Config/HYPER.NDX is not opened.
+\ THROW on failure so the host process exits non-zero and keeps the old index.
+: HX-BUILD-INDEX  ( -- )
+   HX-BUILD-U 0= IF
+      ." HYPER-REINDEX: no output path" CR
+      1 THROW
+   THEN
    0 TO HX-COUNT
    0 TO HX-FID
    HX-LOAD-CFG
@@ -607,26 +652,39 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
    IF   ." HX: " HX-PN . ." TYPE 0 prefixes" CR
    THEN
    HX-COLLECT-LABELS
-   HYPER-NDX-NAME COUNT W/O CREATE-FILE
+   HX-BUILD-PATH HX-BUILD-U W/O CREATE-FILE
    IF
       DROP
-      ." HYPER-REINDEX: CREATE-FILE failed for " HYPER-NDX-NAME COUNT TYPE CR
-      EXIT
+      ." HYPER-REINDEX: CREATE-FILE failed" CR
+      1 THROW
    THEN
    TO HX-FID
    HX-WRITE-HEADER
    HX-SCAN-ALL
    HX-FID CLOSE-FILE DROP
    0 TO HX-FID
-   MIN-HYPER-NOISE @ 0=
-   IF   ." HYPER-REINDEX: " HX-COUNT . ." entries" CR
-   THEN
-   \ Use HYPER-LOAD here (HYPER-VOC); HYPER-RELOAD is defined later in FORTH.
+   ." HX-BUILD-OK" CR ;
+
+\ Parent loads this file from hyper.fth, which has already defined HYPER-NDX-NAME.
+\ The background child loads this file alone and only needs HX-BUILD-INDEX.
+[DEFINED] HYPER-NDX-NAME [IF]
+
+\ After the host has renamed the side file over Config/HYPER.NDX.
+: HX-APPLY-INDEX  ( -- )
+   S" Config/HYPER.NDX" HYPER-NDX-NAME PLACE
    HYPER-LOAD IF
-      ." HYPER: " HYPER-NDX-NAME COUNT TYPE
-      ."  " HYPER-LEN . ." bytes" CR
+      MIN-HYPER-NOISE @ 0=
+      IF
+         ." HYPER: " HYPER-NDX-NAME COUNT TYPE
+         ."  " HYPER-LEN . ." bytes" CR
+      THEN
       HYPER-STAMP-COLD
    ELSE  ." HYPER: cannot open index" CR  THEN ;
+
+\ (HX-BG-REINDEX) returns 1 only when the new file is already in place.
+\ A background build returns 0 and the host calls HX-APPLY-INDEX later.
+: HX-DO-REINDEX  ( -- )
+   (HX-BG-REINDEX) IF  HX-APPLY-INDEX  THEN ;
 
 \ Public entry in FORTH — no ALSO needed at the call site.
 \ Note: FORTH replaces search_order[0] (does not push). Keep HYPER-VOC first
@@ -636,3 +694,5 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
 ONLY FORTH ALSO HYPER-VOC
 FORTH-WORDLIST SET-CURRENT
 : HYPER-REINDEX  ( -- )  ['] HX-DO-REINDEX EXECUTE ;
+
+[THEN]

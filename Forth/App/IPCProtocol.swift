@@ -64,6 +64,9 @@ enum EditorRequest: Codable, Equatable {
 
 enum ForthResponse: Codable, Equatable {
     case consoleOutput(text: String)
+    /// One-line note for the editor status strip. Not console text, so it cannot
+    /// land after `ok(n)>` while the user is typing.
+    case statusNote(text: String)
     case breakpointHit(line: Int, stackTrace: [String])
     case variableChanged(name: String, value: String)
     case executionFinished(exitCode: Int)

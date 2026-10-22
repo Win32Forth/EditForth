@@ -17,6 +17,11 @@ struct SearchResultsView: View {
                 Text(session.status)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
+                Button("Modify Search") {
+                    SearchFoldersPanel.run(workspace: workspace, editing: session)
+                }
+                .controlSize(.small)
+                .help("Change this search and run it again")
                 Spacer()
                 if session.isSearching {
                     ProgressView()

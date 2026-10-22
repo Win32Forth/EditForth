@@ -2869,6 +2869,32 @@ final class KernelBridge {
         }
     }
 
+    /// Run `HX-APPLY-INDEX` once the kernel is idle. The caller already swapped
+    /// Config/HYPER.NDX. Retries while another evaluate holds the VM, including
+    /// a KEY loop, so a background rebuild is not dropped.
+    func evaluateHyperReload() {
+        let line = "ALSO HYPER-VOC HX-APPLY-INDEX PREVIOUS"
+        forthQueue.async { [weak self] in
+            guard let self else { return }
+            while true {
+                if self.evalLock.try() {
+                    let status = self.runKernelEval(line)
+                    self.evalLock.unlock()
+                    if status != 0 {
+                        let note = "HYPER-REINDEX: switched the file, reload failed"
+                        if CompanionChannel.isRequested {
+                            ForthEditorServer.shared.broadcast(.statusNote(text: note))
+                        } else {
+                            self.emitHostNote(note + "\n")
+                        }
+                    }
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+    }
+
     /// Interpret one console line. Not re-entrant (returns −3 if busy).
     /// After eval, `replBatchStopRequested` is true if `\S` ran on the console line
     /// (SOURCE-ID 0); multi-line paste should stop further lines.
@@ -3473,6 +3499,11 @@ final class KernelBridge {
             Thread.sleep(forTimeInterval: 0.01)
         }
         return ready ? 1 : 0
+    }
+
+    /// Console note from a host thread (hyper reindex). Same path as kernel TYPE.
+    func emitHostNote(_ s: String) {
+        handleEmitString(s)
     }
 
     fileprivate func handleEmitString(_ s: String) {
