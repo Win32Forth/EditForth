@@ -8,14 +8,16 @@
 import Foundation
 
 /// One BREAK-table slot for sock sync (name + enable).
-struct BreakpointEntry: Codable, Equatable, Hashable {
+/// `nonisolated`: the EditForth target defaults to MainActor, and the companion
+/// decodes these values on a socket queue.
+nonisolated struct BreakpointEntry: Codable, Equatable, Hashable {
     var name: String
     var enabled: Bool
 }
 
 // MARK: - Messages from 64Edit to 64Forth
 
-enum EditorRequest: Codable, Equatable {
+nonisolated enum EditorRequest: Codable, Equatable {
     case loadSource(path: String)
     case executeCommand(command: String)
     /// ⌘-click / Hyper VIEW: evaluate `(VIEW)` and reply with `viewResult`.
@@ -62,7 +64,7 @@ enum EditorRequest: Codable, Equatable {
 
 // MARK: - Messages from 64Forth to 64Edit
 
-enum ForthResponse: Codable, Equatable {
+nonisolated enum ForthResponse: Codable, Equatable {
     case consoleOutput(text: String)
     /// One-line note for the editor status strip. Not console text, so it cannot
     /// land after `ok(n)>` while the user is typing.
@@ -105,7 +107,7 @@ enum ForthResponse: Codable, Equatable {
 
 // MARK: - JSON on the wire (NSXPC cannot pass Swift enums)
 
-enum IPCCodec {
+nonisolated enum IPCCodec {
     static let encoder: JSONEncoder = {
         let e = JSONEncoder()
         return e

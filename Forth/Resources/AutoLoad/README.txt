@@ -3,7 +3,8 @@
 
 This folder is copied into the app as:
 
-  64Forth.app/Contents/Resources/AutoLoad/
+  EditForth.app/Contents/Resources/AutoLoad/
+  (standalone 64Forth.app uses the same path inside that app)
 
 Boot (at launch)
 ----------------

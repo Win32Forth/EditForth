@@ -54,32 +54,44 @@ dmg_name_for_version() {
   echo "EditForth-$1-macOS.dmg"
 }
 
-# Resolve 64Forth.app to validate/emit against.
-# Order: staged archive apps → DerivedData Release → DerivedData Debug.
+# Resolve the app that contains the Forth engine.
+# 2.5.0+: EditForth.app (companion is the same binary).
+# Older trees: 64Forth.app.
+# Order within each name: staged archive → DerivedData Release → DerivedData Debug.
 resolve_forth_app() {
-  local candidates=(
-    "$STAGE_APPS/64Forth.app"
-    "$ROOT/DerivedData/EditForth-release/Build/Products/Release/64Forth.app"
-    "$ROOT/DerivedData/EditForth-debug/Build/Products/Debug/64Forth.app"
-  )
-  local dd
-  for dd in "$ROOT"/DerivedData/*/Build/Products/*/64Forth.app; do
-    [[ -d "$dd" ]] && candidates+=("$dd")
+  local names=("EditForth.app" "64Forth.app")
+  local candidates=()
+  local name
+  for name in "${names[@]}"; do
+    candidates+=(
+      "$STAGE_APPS/$name"
+      "$ROOT/DerivedData/EditForth-release/Build/Products/Release/$name"
+      "$ROOT/DerivedData/EditForth-debug/Build/Products/Debug/$name"
+    )
   done
-  local c
+  local dd
+  for dd in "$ROOT"/DerivedData/*/Build/Products/*/*.app; do
+    [[ -d "$dd" ]] || continue
+    case "$(basename "$dd")" in
+      EditForth.app|64Forth.app) candidates+=("$dd") ;;
+    esac
+  done
+  local c base
   for c in "${candidates[@]}"; do
-    if [[ -x "$c/Contents/MacOS/64Forth" ]]; then
+    base=$(basename "$c" .app)
+    if [[ -x "$c/Contents/MacOS/$base" ]]; then
       echo "$c"
       return 0
     fi
   done
-  die "no 64Forth.app found (run archive or build Debug/Release first)"
+  die "no EditForth.app (or legacy 64Forth.app) found (run archive or build Debug/Release first)"
 }
 
 forth_bin() {
-  local app
+  local app base
   app=$(resolve_forth_app)
-  echo "$app/Contents/MacOS/64Forth"
+  base=$(basename "$app" .app)
+  echo "$app/Contents/MacOS/$base"
 }
 
 run_agent() {

@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Companion process uses this subclass for SZ-EDITOR hotkeys.
+	     sendEvent ignores the kernel unless --companion is set, so the editor
+	     process does not start Forth on keystrokes. -->
+	<key>NSPrincipalClass</key>
+	<string>ForthApplication</string>
 	<!-- Tab workspace (not NSDocument / DocumentGroup). AppDelegate.application(_:open:) opens tabs. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>

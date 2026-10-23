@@ -370,21 +370,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         readSource = src
     }
 
-    /// Launch this project’s 64Forth.app in headless companion mode (`--companion`).
+    /// Launch this same executable in headless companion mode (`--companion`).
     @discardableResult
     private func launchSixtyFourForth() -> Bool {
-        guard let app = SixtyFourForthLocator.locateApp() else { return false }
-        let exe = app.appendingPathComponent("Contents/MacOS/64Forth")
-        guard FileManager.default.isExecutableFile(atPath: exe.path) else {
-            // Fallback: Launch Services with arguments.
-            let config = NSWorkspace.OpenConfiguration()
-            config.arguments = ["--companion"]
-            config.activates = false
-            config.environment = ["FORTH64_COMPANION": "1"]
-            NSWorkspace.shared.openApplication(at: app, configuration: config) { _, _ in }
-            launchedForthURL = app
-            return true
-        }
+        guard let exe = SixtyFourForthLocator.locateBinary() else { return false }
         // Terminate a prior Ping companion before relaunch.
         terminateLaunchedCompanion()
         let task = Process()
@@ -396,7 +385,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         do {
             try task.run()
             companionProcess = task
-            launchedForthURL = app
+            launchedForthURL = Bundle.main.bundleURL
             return true
         } catch {
             companionProcess = nil
@@ -404,23 +393,16 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Quit the 64Forth we launched via Ping (EditForth lifecycle tie).
+    /// Quit the companion process this editor launched.
+    /// The companion is the same EditForth.app, so do not terminate by bundle id
+    /// (that would quit the editor).
     func terminateLaunchedCompanion() {
         ForthConsoleWindowController.shared.closeQuietly()
         if let proc = companionProcess, proc.isRunning {
             proc.terminate()
-            companionProcess = nil
         }
-        guard let launched = launchedForthURL else { return }
-        let matches = NSWorkspace.shared.runningApplications.filter {
-            $0.bundleIdentifier == "com.win32forth.SixtyFourForth"
-                && $0.bundleURL?.standardizedFileURL == launched.standardizedFileURL
-        }
-        for app in matches {
-            app.terminate()
-        }
-        launchedForthURL = nil
         companionProcess = nil
+        launchedForthURL = nil
     }
 
     /// After launching Forth, retry `start()` until sock connects or attempts run out.
@@ -446,8 +428,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 }
                 if i == delays.count - 1 {
                     self.companionLaunchInFlight = false
-                    self.lastError = self.lastError ?? "64Forth launched but edit.sock not ready"
-                    self.appendConsole("Start Forth: launched 64Forth, still not connected\n")
+                    self.lastError = self.lastError ?? "companion launched but edit.sock not ready"
+                    self.appendConsole("Start Forth: launched companion, still not connected\n")
                     self.syncUndockedWindow()
                 }
             }
@@ -642,8 +624,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     /// Reconnect only — never evaluates Forth (safe while DEBUG is paused).
-    /// If edit.sock is down, launches this EditForth project’s 64Forth.app
-    /// (Debug→sibling / EditForth DerivedData; Release→sibling or `/Applications`)
+    /// If edit.sock is down, launches this same executable with `--companion`
     /// and retries connect.
     func ping() {
         // Banner before any "Starting…" so undocked (window mounts later) still
@@ -666,14 +647,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             return
         }
 
-        #if DEBUG
-        let missingHint = "64Forth Debug not found — Product → Build (EditForth scheme builds 64Forth too)"
-        #else
-        let missingHint = "64Forth not found — install beside EditForth or in /Applications"
-        #endif
-        guard SixtyFourForthLocator.locateApp() != nil else {
-            lastError = missingHint
-            appendConsole("Start Forth: \(missingHint)\n")
+        guard SixtyFourForthLocator.locateBinary() != nil else {
+            lastError = "EditForth companion binary missing"
+            appendConsole("Start Forth: companion binary missing\n")
             return
         }
 
@@ -688,8 +664,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         }
         guard launchSixtyFourForth() else {
             companionLaunchInFlight = false
-            lastError = "failed to launch 64Forth"
-            appendConsole("Start Forth: failed to launch 64Forth\n")
+            lastError = "failed to launch Forth companion"
+            appendConsole("Start Forth: failed to launch companion\n")
             DispatchQueue.main.async { [weak self] in
                 self?.syncUndockedWindow()
             }

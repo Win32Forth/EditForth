@@ -2,7 +2,7 @@
 
 ## Version
 
-Marketing **2.3.9** / build **18** for both targets (EditForth + companion 64Forth). Shipped DMG/tag **v2.3.9** (`Releases/EditForth-2.3.9-macOS.dmg`); previous public release **v2.3.8**. First public release was **v2.0.0**. **2.3.9:** background HYPER-REINDEX (side file, then swap; result on the status strip); Search in Folders uses three path rows with Choose… and Clear; search results have **Modify Search**. Since 2.3.7: Ask Forth **Undock** floating window (visibility survives quit); `info.circle` help tips; Capture Selected button removed; tighter Prompt spacing. Shipped in 2.3.7: Mac ANS **`FALIGNED` / `SFALIGNED` / `DFALIGNED`** address round-up; EditForth **Help → Show Boot Messages**. Shipped in 2.3.6: **AskForth-N.fth** F-PC header (`\\` … `{`); orange **setup banner**; **nomic** auto-pull / **Prepare…**. Shipped in 2.3.5: **model profiles**, Temperature 0.3, **8192** tokens, **Stop**, Library hybrid/semantic RAG. Requires Ollama + a pulled chat model (default `gemma4:e4b`), or an OpenAI-compatible endpoint; Hybrid/Semantic also need `nomic-embed-text`. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
+Marketing **2.5.0** / build **19**. **EditForth.app** is one app: the editor process and a companion process of the same executable. The **64Forth** target remains for a standalone Forth app. Shipped DMG/tag is still **v2.3.9** (`Releases/EditForth-2.3.9-macOS.dmg`, two apps); previous public release **v2.3.8**. First public release was **v2.0.0**. **2.5.0:** one app, companion via `--companion`. **2.3.9:** background HYPER-REINDEX (side file, then swap; result on the status strip); Search in Folders uses three path rows with Choose… and Clear; search results have **Modify Search**. Since 2.3.7: Ask Forth **Undock** floating window (visibility survives quit); `info.circle` help tips; Capture Selected button removed; tighter Prompt spacing. Shipped in 2.3.7: Mac ANS **`FALIGNED` / `SFALIGNED` / `DFALIGNED`** address round-up; EditForth **Help → Show Boot Messages**. Shipped in 2.3.6: **AskForth-N.fth** F-PC header (`\\` … `{`); orange **setup banner**; **nomic** auto-pull / **Prepare…**. Shipped in 2.3.5: **model profiles**, Temperature 0.3, **8192** tokens, **Stop**, Library hybrid/semantic RAG. Requires Ollama + a pulled chat model (default `gemma4:e4b`), or an OpenAI-compatible endpoint; Hybrid/Semantic also need `nomic-embed-text`. How-to: `Forth/Resources/Docs/Ask-Forth.md`.
 
 ## Why a new project
 
@@ -22,10 +22,10 @@ Earlier working name **64Forth2** was dropped for that reason.
 
 ```text
 EditForth/                 # repo root
-  EditForth.xcodeproj      # ONE project, two targets
-  Editor/                  # EditForth target (64Edit sources)
-  Forth/                   # 64Forth target (64Forth sources)
-  Releases/                # versioned dual-app DMG + Gatekeeper aids
+  EditForth.xcodeproj      # ONE project; EditForth scheme builds one app
+  Editor/                  # editor UI + EditForthMain (companion/agent dispatch)
+  Forth/                   # engine sources linked into EditForth.app
+  Releases/                # versioned DMG + Gatekeeper aids (2.5.0+ is one app)
   README.md
   DESIGN.md
   ROADMAP.md               # planned release automation + editor/emit UX
@@ -35,22 +35,22 @@ EditForth/                 # repo root
 
 `(APP-OPEN)` and pixel blits must not `main.sync` from the Forth thread during sock evaluate — they use a pending-UI queue serviced by `KernelBridge`’s evaluate pump. Sock `pushKey` feeds App Output only while that window is open (idle typing must not poison `KEY?`). Bare `FLOAD`/`INCLUDE` and `EDIT` request EditForth panels over IPC. Editor status **INCLUDE** / **RUN** / **EMIT** and `EMIT-NO-*` directives: see `ROADMAP.md` and `Forth/Resources/Docs/EMIT-AUTO.md`. Live Autoload uses `~/Documents/EditForth/Library`; copy Sample/Emitter edits back into `Forth/Resources/Library/` before shipping. **File → Compare with Disk** (menu only) opens a colored hunk-list tab for the selected saved buffer vs disk (Reload / Revert); no FSEvents watch yet.
 
-Two **separate processes**, one Xcode project. Schemes: `EditForth` and `64Forth`.
+Two **separate processes** of one executable, one Xcode project. Schemes: `EditForth` (the app) and `64Forth` (standalone Forth, optional).
 
-Ping in the editor launches the **EditForth** project’s `64Forth.app` (same Products folder, then `EditForth-*` DerivedData). It does not prefer the standalone Win32Forth/64Forth DerivedData tree.
+Ping launches `Bundle.main.executableURL` with `--companion`. It does not look for a sibling `64Forth.app`.
 
 ### Companion embed (current)
 
 Window overlay docking (separate NSWindow `setFrame` into a slot) failed UX (float/z-order/overhang). Replaced by:
 
-- **64Forth `--companion` / `FORTH64_COMPANION=1`**: `CompanionChannel` — kernel + `edit.sock`, `NSApp` activation policy `.accessory`, no WindowGroup.
+- **`--companion` / `FORTH64_COMPANION=1`**: `CompanionChannel` — kernel + `edit.sock`, `NSApp` activation policy `.regular` (Dock icon and its menu bar when that process is frontmost), no editor window.
 - **Editor** `DockedConsoleView` under Ping: protected transcript + editable tail; `executeCommand` / `pushKey` / streamed `consoleOutput`.
 - IPC: `EditorRequest.pushKey`; legacy `dock`/`undock` are no-ops that ack `dockState`.
-- Lifecycle: editor quit terminates Ping-launched companion (Process + bundle-URL match). Full quit-either-ends-both still open.
+- Lifecycle: editor quit terminates the Ping-launched child `Process` only. The companion shares EditForth’s bundle id, so quit must not match running apps by bundle id. Full quit-either-ends-both still open.
 - GRAPHICS App Output / facility windows remain out of scope while headless.
 - **Undock**: EditForth-owned floating `NSWindow` hosting `DockedConsoleView` (same companion / sock). Not a second 64Forth GUI process.
 - **Dock** / closing the floating window: console returns under Ping. Preference `forthDocked` (default true).
-- **Menus while EditForth is frontmost:** Forth INCLUDE/FLOAD/CLS and **Help → Show Boot Messages** live on EditForth’s menu bar (`ForthMenuSupport` / `EditorRequest`). Companion File/Tools/Help (including Show Boot Messages) appear only when the Dock **64Forth** icon is frontmost. Cold-bootstrap `Loading:` / `Finished Loading:` emit stays in `KernelBridge.bootTranscript` until requested (`showBootMessages` over edit.sock).
+- **Menus while EditForth is frontmost:** Forth INCLUDE/FLOAD/CLS and **Help → Show Boot Messages** live on EditForth’s menu bar (`ForthMenuSupport` / `EditorRequest`). Companion File/Tools/Help (including Show Boot Messages) appear only when the companion process’s Dock icon is frontmost. Cold-bootstrap `Loading:` / `Finished Loading:` emit stays in `KernelBridge.bootTranscript` until requested (`showBootMessages` over edit.sock).
 
 ## Intended architecture (dock / detach)
 

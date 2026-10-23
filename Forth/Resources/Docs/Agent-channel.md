@@ -2,7 +2,7 @@
 
 **Public domain.** Headless control so tools (Grok, CI, scripts) can load Forth files and capture console output without driving the GUI.
 
-**Status:** shipped (**64Forth 1.1.2+**; current **2.3.9**, build **18**, banner `Oct 22, 2026 4:55 PM`). Rebuild the app in Xcode before the installed binary supports `--agent`. See also [STATUS.md](STATUS.md) (section **v1.1.2 — agent channel**).
+**Status:** shipped (**64Forth 1.1.2+**; current **2.5.0**, build **19**, banner `Oct 23, 2026 6:54 AM`). Rebuild EditForth in Xcode before the installed binary supports `--agent`. See also [STATUS.md](STATUS.md) (section **v1.1.2 — agent channel**).
 ## Why
 
 The GUI app does not treat stdin as a REPL. Accessibility can type keys but cannot reliably read the SwiftUI console. The agent channel runs the same kernel (`kernel_eval`) with EMIT captured to **stdout** and an optional transcript file.
@@ -24,7 +24,7 @@ FORTH64_AGENT=1 64Forth …
 Invoke the **binary inside the bundle**, not `open -a` (open does not give a clean stdout pipe):
 
 ```bash
-/Applications/64Forth.app/Contents/MacOS/64Forth --agent -e '2 2 + .'
+/Applications/EditForth.app/Contents/MacOS/EditForth --agent -e '2 2 + .'
 ```
 
 Helper:
@@ -83,7 +83,8 @@ You do **not** need to restart Grok from the 64Forth project folder. A session r
 
 | File | Role |
 |------|------|
-| `App/AppMain.swift` | `@main` — agent branch or `SixtyFourForthApp.main()` |
+| `Editor/EditForthMain.swift` | `@main` in EditForth.app — agent, companion, or the editor |
+| `App/AppMain.swift` | `@main` for the standalone 64Forth scheme only |
 | `App/AgentChannel.swift` | Args, cwd, eval/load, transcript, exit codes |
 | `Host/KernelBridge.swift` | `setAgentSyncEmit`, `forceFlushEmitSync`; skip key monitor in agent mode |
 | `tools/64forth-agent` | Find binary + pass `--agent` |
@@ -91,9 +92,9 @@ You do **not** need to restart Grok from the 64Forth project folder. A session r
 
 ## Build
 
-1. Open `64Forth.xcodeproj` in **Xcode** (full Xcode, not only Command Line Tools).  
-2. Build (Debug or Release).  
-3. Run the **built** binary, or copy/install to `/Applications/64Forth.app`.  
-4. Smoke: `…/MacOS/64Forth --agent -e '2 2 + .'` → expect `4` and `DONE (ok)`.
+1. Open `EditForth.xcodeproj` in **Xcode** (full Xcode, not only Command Line Tools).  
+2. Build the **EditForth** scheme (Debug or Release).  
+3. Run the **built** binary, or copy/install to `/Applications/EditForth.app`.  
+4. Smoke: `…/MacOS/EditForth --agent -e '2 2 + .'` → expect `4` and `DONE (ok)`.
 
-Optional: `FORTH64_APP=/path/to/64Forth.app ./tools/64forth-agent -e '2 2 + .'`
+The standalone **64Forth** scheme still builds `64Forth.app` if you want Forth without the editor. Optional: `FORTH64_APP=/path/to/EditForth.app ./tools/64forth-agent -e '2 2 + .'`.

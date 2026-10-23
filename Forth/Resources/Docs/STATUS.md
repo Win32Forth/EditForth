@@ -1,10 +1,31 @@
 # 64Forth development status
 
-**Current:** **2.3.9** (build **18**) — shipped  
+**Current:** **2.5.0** (build **19**) — one app, companion process
 
-**Last updated:** 2026-10-22
+**Last updated:** 2026-10-23
 
 ---
+
+## v2.5.0 — one EditForth.app
+
+**Version strings:** marketing **2.5.0**, build **19**. Console stamp `Oct 23, 2026 6:54 AM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.0 === Oct 23, 2026 6:54 AM ===
+```
+
+### Highlights since 2.3.9
+
+- **One app** — `EditForth.app` holds the editor and the Forth engine (`forth.s`, host, AutoLoad, Library, Docs, Config). The EditForth scheme no longer builds a second `64Forth.app`. The **64Forth** scheme still builds a standalone app when you want Forth without the editor.
+- **Companion process** — Start Forth launches this same executable with `--companion` and `FORTH64_COMPANION=1`. Ask Forth `--agent` uses that binary. Entry is `Editor/EditForthMain.swift`.
+- **Quit** — stops the child process this editor launched. It does not quit every process with EditForth’s bundle id (that would quit the editor too).
+- **Paths unchanged** — socket `~/Library/Application Support/64Forth/edit.sock`. User tree `~/Documents/EditForth`.
+- **JIT signing** — the kernel runs inside EditForth.app, so that target is signed with `Forth/64Forth.entitlements` (`allow-jit`, unsigned executable memory). Hardened runtime without those entitlements SIGTRAPs in `pthread_jit_write_protect_np`.
+- **Release image** — `scripts/release.sh` archives the EditForth scheme and packs **EditForth.app** only.
+
+A 2.5.0 DMG is not cut yet; `Releases/EditForth-2.3.9-macOS.dmg` remains the last shipped image (two apps).
 
 ## v2.3.9 — background HYPER-REINDEX + search folders
 

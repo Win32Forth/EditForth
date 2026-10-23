@@ -2,7 +2,7 @@
 //  ForthAgentRunner.swift
 //  EditForth
 //
-//  Headless 64Forth --agent eval for Ask Forth. Separate process from the
+//  Headless EditForth --agent eval for Ask Forth. Separate process from the
 //  live companion console (see Agent-channel.md).
 //
 
@@ -24,11 +24,11 @@ enum ForthAgentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .binaryNotFound:
-            return "Could not find EditForth’s 64Forth.app binary for --agent. Build the Debug companion first."
+            return "Could not find EditForth’s executable for --agent."
         case .emptySource:
             return "Nothing to evaluate."
         case .launchFailed(let detail):
-            return "Failed to launch 64Forth --agent (\(detail))."
+            return "Failed to launch EditForth --agent (\(detail))."
         case .timedOut(let seconds):
             return "Agent eval timed out after \(Int(seconds))s."
         }

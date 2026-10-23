@@ -22,10 +22,10 @@ usage() {
   cat <<EOF
 EditForth release helper
 
-  validate              ANS-VALIDATE + Hayes against resolved 64Forth.app
+  validate              ANS-VALIDATE + Hayes against EditForth.app
   emit-smoke            EMIT Sample/VED64.fth; require VED64.app
-  bump <ver> <build>    Lockstep version stamps (+ optional --stamp)
-  archive               Archive EditForth (+64Forth if needed); stage apps
+  bump <ver> <build>    Version stamps (+ optional --stamp)
+  archive               Archive the EditForth scheme; stage EditForth.app
   dmg [--force]         Build Releases/EditForth-<ver>-macOS.dmg
   prep <ver> <build>    bump → archive → validate → emit-smoke → dmg
 
@@ -194,24 +194,11 @@ cmd_archive() {
     die "EditForth.app missing from archive"
   fi
 
-  if ! copy_app_from_archive "$ARCHIVE_PATH" "64Forth.app" "$STAGE_APPS"; then
-    note "64Forth.app not in EditForth archive — archiving 64Forth scheme"
-    xcodebuild \
-      -project "$ROOT/EditForth.xcodeproj" \
-      -scheme 64Forth \
-      -configuration Release \
-      -archivePath "$ARCHIVE_64" \
-      archive \
-      | tee "$LOG_DIR/archive-64forth.txt" \
-      | tail -20
-    copy_app_from_archive "$ARCHIVE_64" "64Forth.app" "$STAGE_APPS" \
-      || die "64Forth.app missing from 64Forth archive"
-  fi
-
-  [[ -d "$STAGE_APPS/EditForth.app" && -d "$STAGE_APPS/64Forth.app" ]] \
+  [[ -d "$STAGE_APPS/EditForth.app" ]] \
     || die "stage incomplete under $STAGE_APPS"
 
-  # Drop archives after extract (apps kept in STAGE_APPS)
+  # Drop archives after extract (app kept in STAGE_APPS).
+  # 2.5.0+ ships one app. The 64Forth scheme is not part of this archive.
   rm -rf "$ARCHIVE_PATH" "$ARCHIVE_64"
   ok "archive → $STAGE_APPS"
 }
@@ -238,8 +225,8 @@ cmd_dmg() {
   if [[ -f "$dest" && "$force" -ne 1 ]]; then
     die "DMG exists: $dest (pass --force to replace this version only)"
   fi
-  [[ -d "$STAGE_APPS/EditForth.app" && -d "$STAGE_APPS/64Forth.app" ]] \
-    || die "missing staged apps — run archive first ($STAGE_APPS)"
+  [[ -d "$STAGE_APPS/EditForth.app" ]] \
+    || die "missing staged EditForth.app — run archive first ($STAGE_APPS)"
 
   local jpg="$RELEASES/Getting EditForth to run.jpg"
   local pdf="$RELEASES/README.pdf"
@@ -249,7 +236,6 @@ cmd_dmg() {
   rm -rf "$STAGE_DMG"
   mkdir -p "$STAGE_DMG"
   ditto --norsrc "$STAGE_APPS/EditForth.app" "$STAGE_DMG/EditForth.app"
-  ditto --norsrc "$STAGE_APPS/64Forth.app" "$STAGE_DMG/64Forth.app"
   cp "$jpg" "$STAGE_DMG/"
   cp "$pdf" "$STAGE_DMG/"
 

@@ -157,7 +157,7 @@ enum FindSupport {
         var view: NSView? = fr
         while let v = view {
             if let tv = v as? EditorNSTextView { return tv }
-            if let tv = v as? ConsoleNSTextView { return tv }
+            if let tv = v as? TranscriptNSTextView { return tv }
             if let tv = v as? DockedConsoleTextView { return tv }
             view = v.superview
         }
@@ -176,7 +176,7 @@ enum FindSupport {
         let editor = firstVisibleEditor(in: root)
             ?? firstSubview(ofType: EditorNSTextView.self, in: root)
         let console = firstSubview(ofType: DockedConsoleTextView.self, in: root)
-            ?? firstSubview(ofType: ConsoleNSTextView.self, in: root)
+            ?? firstSubview(ofType: TranscriptNSTextView.self, in: root)
         if let editor, findBarVisible(for: editor) { return editor }
         if let console, findBarVisible(for: console) { return console }
         return editor ?? console

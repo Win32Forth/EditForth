@@ -3,7 +3,8 @@
 
 This folder is copied into the app as:
 
-  64Forth.app/Contents/Resources/Config/
+  EditForth.app/Contents/Resources/Config/
+  (standalone 64Forth.app uses the same path inside that app)
 
 Purpose
 -------

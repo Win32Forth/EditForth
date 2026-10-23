@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-@main
+/// Editor UI. Process entry is `EditForthMain`, so `--companion` and `--agent`
+/// run this same executable without opening the workspace window.
 struct SixtyFourEditApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var workspace = WorkspaceModel()

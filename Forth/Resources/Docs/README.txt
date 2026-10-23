@@ -1,16 +1,18 @@
 64Forth — Swift host + PickleForth ARM64 kernel
 ================================================
 
-Version 2.0.0 (build 1) — EditForth baseline (release/DMG not cut yet)
+Version 2.5.0 (build 19)
 
-Console header (ConsoleView banner), e.g.:
-  === 64Forth 2.0.0 === Oct 5, 2026 5:28 PM ===
+Console header (standalone 64Forth ConsoleView banner), e.g.:
+  === 64Forth 2.5.0 === Oct 23, 2026 6:54 AM ===
+EditForth’s own console banner is the same stamp with the name EditForth.
 Update the date/time only when finishing a version change set, just before
 DMG + commit/push — not on every intermediate build.
 
-In the EditForth project, keep EditForth.app and companion 64Forth.app
-marketing versions matched (both 2.0.0 / build 1). They link via
+EditForth 2.5.0 is one app. The editor launches a second process of
+EditForth.app with --companion. They link via
 ~/Library/Application Support/64Forth/edit.sock — no extra pairing.
+The 64Forth scheme can still build a standalone 64Forth.app.
 
 Hybrid macOS app: ARM64 ITC kernel (assembly) + SwiftUI console/host
 (TZForth-style FileHost, AutoLoad, Library, FROMLIB).

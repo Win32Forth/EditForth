@@ -29,7 +29,7 @@ struct ConsoleTranscriptView: NSViewRepresentable {
         scroll.backgroundColor = .controlBackgroundColor
         scroll.findBarPosition = .aboveContent
 
-        let tv = ConsoleNSTextView()
+        let tv = TranscriptNSTextView()
         tv.isEditable = false
         tv.isSelectable = true
         tv.isRichText = false
@@ -68,7 +68,7 @@ struct ConsoleTranscriptView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.parent = self
-        guard let tv = scroll.documentView as? ConsoleNSTextView else { return }
+        guard let tv = scroll.documentView as? TranscriptNSTextView else { return }
         context.coordinator.installCommandClick(on: tv)
 
         let wantFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
@@ -155,12 +155,12 @@ struct ConsoleTranscriptView: NSViewRepresentable {
 
     final class Coordinator {
         var parent: ConsoleTranscriptView
-        weak var textView: ConsoleNSTextView?
+        weak var textView: TranscriptNSTextView?
         var lastRefreshSeq: UInt = 0
 
         init(_ parent: ConsoleTranscriptView) { self.parent = parent }
 
-        func installCommandClick(on tv: ConsoleNSTextView) {
+        func installCommandClick(on tv: TranscriptNSTextView) {
             tv.onCommandClickWord = { [weak self] word in
                 self?.parent.onCommandClickWord?(word)
             }
@@ -191,7 +191,7 @@ final class ConsoleScrollView: NSScrollView {
 
 /// Console transcript NSTextView — ⌘-click VIEW; distinct from `EditorNSTextView`
 /// so DEBUG key routing still defers only when the source editor is focused.
-final class ConsoleNSTextView: NSTextView {
+final class TranscriptNSTextView: NSTextView {
     var onCommandClickWord: ((String) -> Void)?
 
     override func mouseDown(with event: NSEvent) {

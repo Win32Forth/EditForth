@@ -1,9 +1,9 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.3.9** / build **18** (shipped); previous ship **2.3.8** / build **17**. Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
-**Updated:** 2026-10-22.
+**Baseline:** **2.5.0** / build **19**. One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.3.9** / build **18** (two apps on the DMG). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
+**Updated:** 2026-10-23.
 
-**Scope:** EditForth editor + companion 64Forth in this repo. EditForth is the forward product. Standalone 64Forth **1.5.4** / 64Edit are historical; no backport (see 3.3).
+**Scope:** EditForth is one app as of 2.5.0 (editor process + companion process). The 64Forth scheme still builds a standalone app. Standalone 64Forth **1.5.4** / 64Edit repos are historical; no backport (see 3.3).
 
 ## Status key
 
