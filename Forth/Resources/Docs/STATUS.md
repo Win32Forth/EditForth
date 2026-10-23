@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.5.1** (build **20**) — BYE quits the editor; emit beside the source; INCLUDE on a clean Untitled. Disk image still 2.5.0.
+**Current:** **2.5.1** (build **21**) — BYE quits the editor; emit beside the source; INCLUDE on a clean Untitled.
 
 **Last updated:** 2026-10-23
 
@@ -8,12 +8,12 @@
 
 ## v2.5.1 — BYE, emit folder, clean INCLUDE
 
-**Version strings:** marketing **2.5.1**, build **20**. Prepared for release. No disk image in this commit. Shipped image remains **v2.5.0** (`Releases/EditForth-2.5.0-macOS.dmg`). Console stamp `Oct 23, 2026 10:45 AM`.
+**Version strings:** marketing **2.5.1**, build **21**. One-app DMG + GitHub **v2.5.1** (`Releases/EditForth-2.5.1-macOS.dmg`). Replaces **v2.5.0**. Console stamp `Oct 23, 2026 3:54 PM`.
 
 **Console header stamp:**
 
 ```text
-=== 64Forth 2.5.1 === Oct 23, 2026 10:45 AM ===
+=== 64Forth 2.5.1 === Oct 23, 2026 3:54 PM ===
 ```
 
 ### Highlights since 2.5.0
@@ -21,6 +21,13 @@
 - **BYE quits EditForth.** Typing `BYE` follows the same path as Cmd-Q. Dirty tabs get Save / Don’t Save / Cancel. Cancel leaves the editor and Forth running. A confirmed quit stops only the companion process this editor launched. Standalone 64Forth (no editor client) still exits on `BYE`.
 - **Emit folder.** `EMIT-APP` and `EMIT-WINDOW-APP` (and the XT forms) write the app, image, and log in `<source-dir>/<STEM>/` beside the last included file. The folder name is the uppercase file stem. The app name is still the word (`EMIT-WINDOW-APP GO` after `side.fth` → `SIDE/GO.app`). The status **EMIT** button already used that folder and names the app after the file (`HELLO.fth` → `HELLO/HELLO.app`). `EMIT-APP-TO` / `EMIT-WINDOW-APP-TO` still take an explicit directory. With no included file, the default is still the companion folder (`~/Documents/EditForth`). Restart Forth after updating `Library/Emitter/app.fth` so Autoload picks it up.
 - **INCLUDE on a clean Untitled.** INCLUDE and F4 open the load panel, open the picked file, close that empty Untitled tab, then `ANEW <stem>_MODULE` and INCLUDE. A dirty Untitled still asks to save first. A file that already has a path is unchanged (save in place if dirty, then INCLUDE). Forth → FLOAD… still includes without opening the editor and without `ANEW`.
+- **Terminal emit.** `EMIT-APP` / `EMIT-NO-WINDOW` no longer abort on `KEY`'s plain branch to `next_debug`. A copyable stand-alone target is a tail branch; a host-only target is `NOP`. `(PUTCHAR)` / `(WRITE-STDOUT)` / `(GETCHAR)` run with a null hook, so `." hi"` prints and the app exits.
+- **Failed emit log.** The source path after `S"` is trimmed, so a failed emit writes `<source-dir>/<STEM>/<STEM>.emit.log` instead of `Documents/EditForth/emit-failed.emit.log`.
+- **Shipped library refresh.** Launch and **Update User Data** copy newer `Library`, `AutoLoad`, and `Docs` files into `~/Documents/EditForth`. A user file newer than the app is left alone.
+- **BYE after a load fault.** A console `BYE` still quits the editor when the companion exits on its own after `memory access error`. A companion crash does not quit the editor.
+- **FORGET and a vocabulary.** `FORGET` drops a `VOCABULARY` or `WORDLIST` whose body lived in the dictionary it reclaimed, including the search order and `CURRENT`. Reloading `Library/Sample/DISKVALUES.fth` no longer faults on the third INCLUDE.
+- **DISKVALUES.fth.** File-backed `diskvalue` / `diskto` / `TO`. Values are stored in `values.dat`. The load-time demo prints `0 79 3 42` the first time and `3 79 3 42` after that.
+- **VIEW '.** The Hyper indexer keeps `\"` inside a `BOOT_WORD` help string, so `'` is indexed at `Library/Sources/forth.s:4128`. Restart Forth after the new index is in place.
 
 ---
 

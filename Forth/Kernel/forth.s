@@ -6365,6 +6365,14 @@ XFORGET:
     add  x4, x4, #1
     b    40b
 6:
+    // A VOCABULARY / WORDLIST defined after the cut lives in the dictionary
+    // we just reclaimed. Prune walked it while the heads were still intact.
+    // Drop it now so the next FORGET/FIND does not chase that address after
+    // the next load reuses the space (third ANEW of DISKVALUES.fth).
+    adrp x1, forget_cut@page
+    add  x1, x1, forget_cut@pageoff
+    ldr  x1, [x1]
+    bl   _forget_drop_stale
     RESTORE_VM
     NEXT
 7:
@@ -6408,6 +6416,90 @@ _prune_wid:
     add  x5, x5, #1
     b    0b
 9:
+    ret
+
+// x1 = cut CFA. Remove registered wids and search-order entries whose body
+// is at or above the cut. CURRENT follows. An empty order becomes FORTH.
+// Clobbers x0, x2–x7. Does not touch VM regs.
+_forget_drop_stale:
+    adrp x2, wordlist_reg_n@page
+    add  x2, x2, wordlist_reg_n@pageoff
+    ldr  x3, [x2]
+    adrp x4, wordlist_reg@page
+    add  x4, x4, wordlist_reg@pageoff
+    mov  x5, #0
+1:
+    cmp  x5, x3
+    b.hs 3f
+    ldr  x0, [x4, x5, lsl #3]
+    cbz  x0, 2f
+    cmp  x0, x1
+    b.lo 2f
+    mov  x6, x5
+11:
+    add  x0, x6, #1
+    cmp  x0, x3
+    b.hs 12f
+    ldr  x7, [x4, x0, lsl #3]
+    str  x7, [x4, x6, lsl #3]
+    add  x6, x6, #1
+    b    11b
+12:
+    sub  x3, x3, #1
+    b    1b
+2:
+    add  x5, x5, #1
+    b    1b
+3:
+    str  x3, [x2]
+
+    adrp x2, search_order_n@page
+    add  x2, x2, search_order_n@pageoff
+    ldr  x3, [x2]
+    adrp x4, search_order@page
+    add  x4, x4, search_order@pageoff
+    mov  x5, #0
+4:
+    cmp  x5, x3
+    b.hs 6f
+    ldr  x0, [x4, x5, lsl #3]
+    cbz  x0, 5f
+    cmp  x0, x1
+    b.lo 5f
+    mov  x6, x5
+41:
+    add  x0, x6, #1
+    cmp  x0, x3
+    b.hs 42f
+    ldr  x7, [x4, x0, lsl #3]
+    str  x7, [x4, x6, lsl #3]
+    add  x6, x6, #1
+    b    41b
+42:
+    sub  x3, x3, #1
+    b    4b
+5:
+    add  x5, x5, #1
+    b    4b
+6:
+    cbnz x3, 7f
+    adrp x0, latest_var@page
+    add  x0, x0, latest_var@pageoff
+    str  x0, [x4]
+    mov  x3, #1
+7:
+    str  x3, [x2]
+
+    adrp x2, current_var@page
+    add  x2, x2, current_var@pageoff
+    ldr  x0, [x2]
+    cbz  x0, 8f
+    cmp  x0, x1
+    b.lo 8f
+    adrp x0, latest_var@page
+    add  x0, x0, latest_var@pageoff
+    str  x0, [x2]
+8:
     ret
 
 // ALLOCATE ( u -- a-addr ior )  libc malloc; ior 0 ok, -1 fail

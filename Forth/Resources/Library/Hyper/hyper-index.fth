@@ -409,15 +409,22 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
 \ BOOT_WORD "name", "help", imm, CodeLabel
 \ -----------------------------------------------------------------------------
 
-\ In at open quote → after close quote
+\ In at open quote → after close quote.
+\ \" is an escaped quote inside the string, not the closer.
+\ BOOT_WORD "'", "' ( \"<spaces>name\" -- xt )" otherwise loses XTICK.
 : HX-SKIP-QUOTED  ( a u -- a' u' )
    DUP 0= IF  EXIT  THEN
    OVER C@ [CHAR] " <> IF  EXIT  THEN
    HX-SKIP1
    BEGIN
       DUP 0= IF  EXIT  THEN
-      OVER C@ [CHAR] " = IF  HX-SKIP1 EXIT  THEN
-      HX-SKIP1
+      OVER C@ [CHAR] \ = IF
+         HX-SKIP1
+         DUP IF  HX-SKIP1  THEN
+      ELSE
+         OVER C@ [CHAR] " = IF  HX-SKIP1 EXIT  THEN
+         HX-SKIP1
+      THEN
    AGAIN ;
 
 \ ( a u dest -- a' u' flag )  in at open quote; fills dest counted string

@@ -3101,6 +3101,7 @@ final class KernelBridge {
             let afterS = start.upperBound
             guard let end = before[afterS...].range(of: "\"") else { break }
             let path = String(before[afterS..<end.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             if path.hasPrefix("/") || path.hasPrefix("~") {
                 last = (path as NSString).expandingTildeInPath
             }

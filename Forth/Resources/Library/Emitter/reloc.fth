@@ -141,21 +141,24 @@ VARIABLE HOST-RELOC-N
   THEN
 ;
 
-\ SA out-of-span BL: deferred so HOST-PRIM-VA can be defined first.
-\ Default NOPs (EXIT→_local_frame_try_exit). Real handler installed below.
+\ SA out-of-span BL/B: deferred so HOST-PRIM-VA can be defined first.
+\ Default NOPs (EXIT→_local_frame_try_exit, KEY's b next_debug). Real
+\ handlers installed below. A plain B is a tail branch (ENC-B-TO), not a call.
 DEFER SA-PATCH-BL-HELPER  ( npc tgt -- )
+DEFER SA-PATCH-B-HELPER   ( npc tgt -- )
 : (SA-PATCH-BL-NOP)  ( npc tgt -- )  DROP ARM-NOP SWAP W! ;
 ' (SA-PATCH-BL-NOP) IS SA-PATCH-BL-HELPER
+' (SA-PATCH-BL-NOP) IS SA-PATCH-B-HELPER
 
 : PATCH-BL-ABS  ( npc insn tgt -- )
   {: npc insn tgt | ven ret -- :}
-  \ Stand-alone: no host process. SA-PATCH-BL-HELPER embeds pure helpers
-  \ (e.g. _udivmod128); host-only BLs (EXIT locals) stay NOP.
+  \ Stand-alone: no host process. Helpers embed pure spans
+  \ (e.g. _udivmod128). Host-only targets (debugger next_debug) stay NOP.
   ?EMIT-STANDALONE IF
     insn $FC000000 AND $94000000 = IF
       npc tgt SA-PATCH-BL-HELPER  EXIT
     THEN
-    ." PATCH-BL-ABS: stand-alone cannot veneer abs B to " tgt U. CR ABORT
+    npc tgt SA-PATCH-B-HELPER  EXIT
   THEN
   TGT-END-ALIGN4
   TGT-END @ TO ven
@@ -955,6 +958,52 @@ $D63F0120 CONSTANT ARM-BLR-X9
   REPEAT
   ;
 
+\ Host (PUTCHAR)/(WRITE-STDOUT)/(GETCHAR) ADRP a hook. In a stand-alone
+\ image that pointer is the editor's trampoline, so force it to 0 and the
+\ word uses write(1) / read(0). External BLs in those spans are debugger
+\ notes; NOP them. The ADRP becomes LDR of a pointer to a zero cell
+\ (just after the copy), so the following LDR [reg] reads 0 and the
+\ word takes its write(1) / read(0) path. Offset stays forward.
+: SA-IO-SPAN?  ( code -- flag )
+  DUP ['] (PUTCHAR)      PRIM-SPAN DROP =
+  OVER ['] (WRITE-STDOUT) PRIM-SPAN DROP = OR
+  SWAP ['] (GETCHAR)     PRIM-SPAN DROP = OR ;
+
+\ Copy code/u, null every ADRP target, NOP branches that leave the span.
+: SA-IO-EMBED  ( code u -- new )
+  {: code u | new off insn tgt z lit rt -- :}
+  code SA-HELP-FIND ?DUP IF  EXIT  THEN
+  code u SA-HELP-COPY TO new
+  TGT-END-ALIGN8
+  TGT-END @ TO z
+  0 VEN-,
+  TGT-END @ TO lit
+  z VEN-,
+  lit 0 PTR-RELOC-ADD
+  0 TO off
+  BEGIN  off u <  WHILE
+    code off + W@ TO insn
+    insn ADRP?  off 4 + u <  AND  IF
+      code off + 4 + W@ ADD64-IMM12? IF
+        new off + W@ $1F AND TO rt
+        new off +  lit rt ENC-LDR64-LIT  new off + W!
+        ARM-NOP  new off + 4 + W!
+        off 8 + TO off
+      ELSE
+        off 4 + TO off
+      THEN
+    ELSE
+      insn B/BL? IF
+        insn code off + B/BL-TGT TO tgt
+        tgt code u IN-SPAN? 0= IF
+          ARM-NOP  new off + W!
+        THEN
+      THEN
+      off 4 + TO off
+    THEN
+  REPEAT
+  new ;
+
 \ Install once SA-HELP-RELOC-BSS exists (DEFER was NOP above).
 : (SA-PATCH-BL-HELPER)  ( npc tgt -- )
   {: npc tgt | code u new patch -- :}
@@ -973,6 +1022,11 @@ $D63F0120 CONSTANT ARM-BLR-X9
   THEN
   tgt EMM-SPAN-OF TO u TO code
   code 0= IF  ARM-NOP npc W!  EXIT  THEN
+  code SA-IO-SPAN? IF
+    code u SA-IO-EMBED TO new
+    npc  new tgt code - +  ENC-BL-TO npc W!
+    EXIT
+  THEN
   code u SPAN-SA-PURE? 0= IF  ARM-NOP npc W!  EXIT  THEN
   code SA-HELP-FIND ?DUP IF
     TO new
@@ -983,6 +1037,42 @@ $D63F0120 CONSTANT ARM-BLR-X9
   npc  new tgt code - +  ENC-BL-TO npc W!
   ;
 ' (SA-PATCH-BL-HELPER) IS SA-PATCH-BL-HELPER
+
+\ Same copy as the BL helper, but the site is a tail B (KEY → next_debug,
+\ and any other out-of-span B). Uncopyable host/debugger targets become NOP
+\ so a console emit is not aborted.
+: (SA-PATCH-B-HELPER)  ( npc tgt -- )
+  {: npc tgt | code u new patch -- :}
+  tgt SA-BLOCK-OF TO u TO code
+  code IF
+    code SA-HELP-FIND ?DUP IF
+      TO new
+    ELSE
+      code u SA-HELP-COPY TO new
+      code SA-BLOCK-PATCH-OF TO patch
+      patch IF  new u patch EXECUTE  THEN
+      code new u SA-HELP-RELOC-BSS
+    THEN
+    npc  new tgt code - +  ENC-B-TO npc W!
+    EXIT
+  THEN
+  tgt EMM-SPAN-OF TO u TO code
+  code 0= IF  ARM-NOP npc W!  EXIT  THEN
+  code SA-IO-SPAN? IF
+    code u SA-IO-EMBED TO new
+    npc  new tgt code - +  ENC-B-TO npc W!
+    EXIT
+  THEN
+  code u SPAN-SA-PURE? 0= IF  ARM-NOP npc W!  EXIT  THEN
+  code SA-HELP-FIND ?DUP IF
+    TO new
+  ELSE
+    code u SA-HELP-COPY TO new
+    code new u SA-HELP-RELOC-BSS
+  THEN
+  npc  new tgt code - +  ENC-B-TO npc W!
+  ;
+' (SA-PATCH-B-HELPER) IS SA-PATCH-B-HELPER
 
 : PATCH  {: npc insn tgt -- :}
   npc TGT-ORG @ TGT-END @ WITHIN 0= IF

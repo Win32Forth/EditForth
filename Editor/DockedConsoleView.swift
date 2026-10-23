@@ -183,7 +183,7 @@ struct DockedConsoleView: NSViewRepresentable {
                 historyIndex = -1
             }
             // Empty Return still asks the companion for a fresh ok(n)> (depth-correct).
-            forth.send(.executeCommand(command: line))
+            forth.sendConsoleLine(line)
         }
 
         func recall(up: Bool) {

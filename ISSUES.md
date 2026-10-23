@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.5.1** / build **20** (prepared; shipped disk image is still **2.5.0** / build **19**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.3.9** / build **18** (two apps on the DMG). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
+**Baseline:** **2.5.1** / build **21**. One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.5.0** / build **19**. Before that **2.3.9** / build **18** (two apps on the DMG). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
 **Updated:** 2026-10-23.
 
 **Scope:** EditForth is one app as of 2.5.0 (editor process + companion process). The 64Forth scheme still builds a standalone app. Standalone 64Forth **1.5.4** / 64Edit repos are historical; no backport (see 3.3).
@@ -94,7 +94,7 @@
 
 **Problem:** Autoload reads `~/Documents/EditForth/Library`. The ship copy is `Forth/Resources/Library`. They are not the same files. Update User Data only copies missing files, so a newer Debugger library in the app never replaced a stale Documents copy.
 
-**Solution:** `FileHost.syncNewerShippedDebugger` copies each `Resources/Library/Debugger/*.fth` into Documents when the shipped file is missing or newer. A Documents file that is newer than the app is left alone. Called at the end of `installUserTree` (launch and **Update User Data**). Other Library folders are not overwritten. **Restore Shipped Files** still replaces the whole tree.
+**Solution:** `FileHost.syncNewerShippedFiles` copies shipped `Library`, `AutoLoad`, and `Docs` files into Documents when the shipped file is missing or newer. A Documents file that is newer than the app is left alone. Called at the end of `installUserTree` (launch and **Update User Data**). **Restore Shipped Files** still replaces the whole tree.
 
 ### 2.1 Compare with Disk did not watch the file — **Fixed**
 
@@ -159,6 +159,18 @@ A clean Untitled tab has nothing to save. INCLUDE and F4 open the load panel, op
 ### 3.8 Emitted app landed in Documents/EditForth — **Fixed**
 
 `EMIT-APP` and `EMIT-WINDOW-APP` used the companion working directory (`~/Documents/EditForth`). They now write `<source-dir>/<STEM>/` beside the last included file (app, image, and log). The status EMIT button already did that and names the app after the file. `*-TO` still takes an explicit directory. With no included file, the default is still the companion folder.
+
+### 3.9 Terminal emit aborted in PATCH-BL-ABS — **Fixed**
+
+`EMIT-APP` and `EMIT-NO-WINDOW` died on a plain `B` inside `KEY` (`b next_debug`) with `stand-alone cannot veneer abs B`. Stand-alone now tail-branches a copyable target and NOPs a host-only one (the debugger edge). `(PUTCHAR)`, `(WRITE-STDOUT)`, and `(GETCHAR)` are copied with a null hook so they use `write(1)` / `read(0)`. Window emit was already fine.
+
+### 3.10 Failed emit log ignored the source path — **Fixed**
+
+`parseEmitAutoFilePath` kept the space after `S"`, so ` /path` failed the absolute-path test and the log fell back to `Documents/EditForth/emit-failed.emit.log`. The space is trimmed. A failed `EMIT-AUTO-FILE` logs in `<source-dir>/<STEM>/`.
+
+### 3.11 BYE after a load memory fault left the editor — **Fixed**
+
+A load that prints `memory access error` returns to the console. `BYE` after that can exit the companion without `requestQuit`. The editor remembers a console `BYE`, and a companion process that exits on its own (not a crash, and not a stop the editor asked for) quits EditForth the same way as Cmd-Q.
 
 ### 3.4 Show Boot Messages missing from EditForth Help — **Fixed**
 

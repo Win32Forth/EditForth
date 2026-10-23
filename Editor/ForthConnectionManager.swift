@@ -147,6 +147,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// BYE started an editor quit. The sock close that follows must not
     /// show a connection error. Cleared if the user cancels the dirty-file sheets.
     private var forthQuitExpected = false
+    /// Console line was BYE. If the companion then dies without requestQuit
+    /// (a load fault can leave BYE exiting the process), quit the editor too.
+    private var consoleByeOutstanding = false
+    /// Editor asked the child to stop. Its exit must not start another quit.
+    private var companionStopRequested = false
     private var showConsoleOnNextConnect = false
 
     override init() {
@@ -382,7 +387,13 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         var env = ProcessInfo.processInfo.environment
         env["FORTH64_COMPANION"] = "1"
         task.environment = env
+        task.terminationHandler = { [weak self] proc in
+            DispatchQueue.main.async {
+                self?.companionExited(proc)
+            }
+        }
         do {
+            companionStopRequested = false
             try task.run()
             companionProcess = task
             launchedForthURL = Bundle.main.bundleURL
@@ -393,9 +404,35 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         }
     }
 
+    /// Companion left on its own (BYE's process exit). A crash keeps the editor.
+    private func companionExited(_ proc: Process) {
+        let requested = companionStopRequested
+        if companionProcess === proc {
+            companionProcess = nil
+            launchedForthURL = nil
+        }
+        guard !requested else { return }
+        guard proc.terminationReason == .exit else { return }
+        forthQuitExpected = true
+        consoleByeOutstanding = false
+        NSApp.terminate(nil)
+    }
+
     /// Dirty-file Cancel after BYE. Forth stays up, so a later sock drop is a real error.
     func noteTerminateCancelled() {
         forthQuitExpected = false
+        consoleByeOutstanding = false
+    }
+
+    /// Console Return. A bare BYE is remembered so a companion exit still quits
+    /// the editor when requestQuit never arrives (after a load memory fault).
+    func sendConsoleLine(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let first = trimmed.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init) ?? ""
+        if first.caseInsensitiveCompare("bye") == .orderedSame {
+            consoleByeOutstanding = true
+        }
+        send(.executeCommand(command: line))
     }
 
     /// Quit the companion process this editor launched.
@@ -403,6 +440,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// (that would quit the editor).
     func terminateLaunchedCompanion() {
         ForthConsoleWindowController.shared.closeQuietly()
+        companionStopRequested = true
         if let proc = companionProcess, proc.isRunning {
             proc.terminate()
         }
@@ -714,9 +752,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 self.isDebugPaused = false
                 self.debugLocation = nil
                 self.breakpointEntries = []
-                if expected {
-                    // App quit is in progress. Do not show a connection error.
+                if expected || self.consoleByeOutstanding {
+                    // App quit is in progress, or BYE killed the companion
+                    // before requestQuit arrived. Do not show a connection error.
                     self.lastError = nil
+                    if !expected {
+                        self.forthQuitExpected = true
+                        self.consoleByeOutstanding = false
+                        NSApp.terminate(nil)
+                    }
                 } else {
                     self.consoleHidden = false
                     self.isForthDocked = self.preferDocked
@@ -864,6 +908,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             // A confirmed quit stops that child from applicationShouldTerminate.
             lastError = nil
             forthQuitExpected = true
+            consoleByeOutstanding = false
             isDebugSessionArmed = false
             isDebugPaused = false
             debugLocation = nil
