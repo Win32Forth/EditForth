@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.5.0** (build **19**). **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. Latest shipped DMG is still `Releases/EditForth-2.3.9-macOS.dmg` (tag **v2.3.9**, two apps). First public release was **v2.0.0**.
+**Version:** **2.5.0** (build **19**). **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. Latest shipped DMG is `Releases/EditForth-2.5.0-macOS.dmg` (tag **v2.5.0**, one app). First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -86,7 +86,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 
 ## Install (DMG)
 
-1. Open `Releases/EditForth-2.3.9-macOS.dmg` until a 2.5.0 DMG is cut (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
+1. Open `Releases/EditForth-2.5.0-macOS.dmg` (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
 2. Drag **EditForth.app** into Applications.
 3. Approve it once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`).
 
