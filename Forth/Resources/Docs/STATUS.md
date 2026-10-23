@@ -1,8 +1,25 @@
 # 64Forth development status
 
-**Current:** **2.5.1** (build **21**) — BYE quits the editor; emit beside the source; INCLUDE on a clean Untitled.
+**Current:** **2.5.2** (build **22**) — VIEW opens quoted kernel words. DISKVALUES.fth is not in Sample.  
 
 **Last updated:** 2026-10-23
+
+---
+
+## v2.5.2 — VIEW for quoted words
+
+**Version strings:** marketing **2.5.2**, build **22**. One-app DMG + GitHub **v2.5.2** (`Releases/EditForth-2.5.2-macOS.dmg`). Replaces **v2.5.1**. Console stamp `Oct 23, 2026 4:16 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.2 === Oct 23, 2026 4:16 PM ===
+```
+
+### Highlights since 2.5.1
+
+- **VIEW quoted words.** `VIEW '`, `VIEW ."`, `VIEW S"`, `VIEW C"`, `VIEW S\"`, and `VIEW \` open the matching `BOOT_WORD` in `Library/Sources/forth.s`. The indexer turns `\"` and `\\` in the assembler source back into the real name, and it no longer drops a name that is only `\`. Restart Forth once so the new index is stamped onto those primitives.
+- **DISKVALUES.fth removed from Sample.** That file was included in **2.5.1** before permission to ship it. It is not in this tree or this disk image.
 
 ---
 
@@ -25,8 +42,7 @@
 - **Failed emit log.** The source path after `S"` is trimmed, so a failed emit writes `<source-dir>/<STEM>/<STEM>.emit.log` instead of `Documents/EditForth/emit-failed.emit.log`.
 - **Shipped library refresh.** Launch and **Update User Data** copy newer `Library`, `AutoLoad`, and `Docs` files into `~/Documents/EditForth`. A user file newer than the app is left alone.
 - **BYE after a load fault.** A console `BYE` still quits the editor when the companion exits on its own after `memory access error`. A companion crash does not quit the editor.
-- **FORGET and a vocabulary.** `FORGET` drops a `VOCABULARY` or `WORDLIST` whose body lived in the dictionary it reclaimed, including the search order and `CURRENT`. Reloading `Library/Sample/DISKVALUES.fth` no longer faults on the third INCLUDE.
-- **DISKVALUES.fth.** File-backed `diskvalue` / `diskto` / `TO`. Values are stored in `values.dat`. The load-time demo prints `0 79 3 42` the first time and `3 79 3 42` after that.
+- **FORGET and a vocabulary.** `FORGET` drops a `VOCABULARY` or `WORDLIST` whose body lived in the dictionary it reclaimed, including the search order and `CURRENT`. Reloading a file that creates a vocabulary no longer faults on the third INCLUDE.
 - **VIEW '.** The Hyper indexer keeps `\"` inside a `BOOT_WORD` help string, so `'` is indexed at `Library/Sources/forth.s:4128`. Restart Forth after the new index is in place.
 
 ---

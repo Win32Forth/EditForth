@@ -427,22 +427,30 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
       THEN
    AGAIN ;
 
-\ ( a u dest -- a' u' flag )  in at open quote; fills dest counted string
+\ ( a u dest -- a' u' flag )  in at open quote; fills dest counted string.
+\ C escapes in the assembler source: \\ → one backslash, \" → one quote.
+\ "S\"" is the word S" ; "\\" is the word \ ; ".\"" is the word ." .
 : HX-PARSE-QUOTED
    TO HX-TMP
    DUP 0= IF  FALSE EXIT  THEN
    OVER C@ [CHAR] " <> IF  FALSE EXIT  THEN
    HX-SKIP1
-   0
-   BEGIN  1 PICK OVER > WHILE
-      2 PICK OVER + C@ [CHAR] " = IF
-         >R                        \ R: wlen  ( a u )
-         OVER R@ HX-TMP PLACE
-         SWAP R@ + 1+ SWAP R@ - 1-
-         R> DROP TRUE EXIT
-      THEN  1+
-   REPEAT
-   DROP 2DROP FALSE ;
+   0 HX-TMP C!
+   BEGIN
+      DUP 0= IF  2DROP FALSE EXIT  THEN
+      OVER C@ [CHAR] \ = IF
+         HX-SKIP1
+         DUP 0= IF  2DROP FALSE EXIT  THEN
+         OVER C@
+      ELSE
+         OVER C@ [CHAR] " = IF  HX-SKIP1 TRUE EXIT  THEN
+         OVER C@
+      THEN
+      HX-TMP C@ 62 > IF  DROP 2DROP FALSE EXIT  THEN
+      HX-TMP COUNT + C!
+      HX-TMP C@ 1+ HX-TMP C!
+      HX-SKIP1
+   AGAIN ;
 
 \ ( a u dest -- a' u' flag )
 : HX-PARSE-IDENT
@@ -483,7 +491,9 @@ CREATE HX-LTAB  HX-LMAX HX-ESIZE * ALLOT
    HX-SKIP-COMMA-BL
    HX-CODE HX-PARSE-IDENT 0= IF  2DROP FALSE EXIT  THEN
    2DROP
-   HX-NAME COUNT HX-PLAUSIBLE? 0= IF  FALSE EXIT  THEN
+   \ Do not use HX-PLAUSIBLE? here. It rejects a leading \, so the
+   \ word \ ( BOOT_WORD "\\" ) would never be indexed.
+   HX-NAME C@ 0= IF  FALSE EXIT  THEN
    HX-CODE COUNT HX-FIND-LABEL IF
       HX-NAME COUNT ROT HX-EMIT-CODE
    ELSE
