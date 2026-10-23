@@ -1,8 +1,24 @@
 # 64Forth development status
 
-**Current:** **2.5.2** (build **22**) — VIEW opens quoted kernel words. DISKVALUES.fth is not in Sample.  
+**Current:** **2.5.3** (build **23**) — Forth menu opens the EditForth folder.  
 
 **Last updated:** 2026-10-23
+
+---
+
+## v2.5.3 — Open EditForth Folder
+
+**Version strings:** marketing **2.5.3**, build **23**. One-app DMG + GitHub **v2.5.3** (`Releases/EditForth-2.5.3-macOS.dmg`). Replaces **v2.5.2**. Console stamp `Oct 23, 2026 4:31 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.3 === Oct 23, 2026 4:31 PM ===
+```
+
+### Highlights since 2.5.2
+
+- **Open EditForth Folder.** The Forth menu no longer has separate Show Library, Show AutoLoad, Show Docs, and Show Config items. One item, **Open EditForth Folder**, opens `~/Documents/EditForth`.
 
 ---
 

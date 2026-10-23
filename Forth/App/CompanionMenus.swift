@@ -96,17 +96,8 @@ enum CompanionMenus {
         add(fileMenu, title: "Restore Shipped Files to EditForth Folder", key: "", mods: []) {
             FileHost.shared.confirmRestoreShippedFiles()
         }
-        add(fileMenu, title: "Show Library Folder", key: "", mods: []) {
-            FileHost.shared.revealInFinder(FileHost.shared.libraryURL)
-        }
-        add(fileMenu, title: "Show AutoLoad Folder", key: "", mods: []) {
-            FileHost.shared.revealInFinder(FileHost.shared.autoLoadURL)
-        }
-        add(fileMenu, title: "Show Docs Folder", key: "", mods: []) {
-            FileHost.shared.revealInFinder(FileHost.shared.docsURL)
-        }
-        add(fileMenu, title: "Show Config Folder", key: "", mods: []) {
-            FileHost.shared.revealInFinder(FileHost.shared.configURL)
+        add(fileMenu, title: "Open EditForth Folder", key: "", mods: []) {
+            FileHost.shared.revealInFinder(FileHost.shared.userTreeURL)
         }
         main.addItem(fileItem)
 

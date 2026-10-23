@@ -67,17 +67,8 @@ struct SixtyFourForthApp: App {
                 Button("Restore Shipped Files to EditForth Folder") {
                     FileHost.shared.confirmRestoreShippedFiles()
                 }
-                Button("Show Library Folder") {
-                    FileHost.shared.revealInFinder(FileHost.shared.libraryURL)
-                }
-                Button("Show AutoLoad Folder") {
-                    FileHost.shared.revealInFinder(FileHost.shared.autoLoadURL)
-                }
-                Button("Show Docs Folder") {
-                    FileHost.shared.revealInFinder(FileHost.shared.docsURL)
-                }
-                Button("Show Config Folder") {
-                    FileHost.shared.revealInFinder(FileHost.shared.configURL)
+                Button("Open EditForth Folder") {
+                    FileHost.shared.revealInFinder(FileHost.shared.userTreeURL)
                 }
             }
             // Suppress document-style Save items; editing is in 64Edit.

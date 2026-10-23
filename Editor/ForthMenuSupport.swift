@@ -17,8 +17,14 @@ enum ForthMenuSupport {
             .appendingPathComponent("EditForth", isDirectory: true)
     }
 
-    static var configURL: URL {
-        userTreeURL.appendingPathComponent("Config", isDirectory: true)
+    /// Finder window on Documents/EditForth (Library, AutoLoad, Docs, Config).
+    static func openUserTree() {
+        let url = userTreeURL
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.open(url)
+        } else {
+            revealInFinder(url)
+        }
     }
 
     static func revealInFinder(_ url: URL?) {

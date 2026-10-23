@@ -304,23 +304,8 @@ struct SixtyFourEditApp: App {
                 }
                 .disabled(!forth.isConnected)
 
-                Button("Show Library Folder") {
-                    ForthMenuSupport.revealInFinder(
-                        ForthMenuSupport.userTreeURL.appendingPathComponent("Library", isDirectory: true)
-                    )
-                }
-                Button("Show AutoLoad Folder") {
-                    ForthMenuSupport.revealInFinder(
-                        ForthMenuSupport.userTreeURL.appendingPathComponent("AutoLoad", isDirectory: true)
-                    )
-                }
-                Button("Show Docs Folder") {
-                    ForthMenuSupport.revealInFinder(
-                        ForthMenuSupport.userTreeURL.appendingPathComponent("Docs", isDirectory: true)
-                    )
-                }
-                Button("Show Config Folder") {
-                    ForthMenuSupport.revealInFinder(ForthMenuSupport.configURL)
+                Button("Open EditForth Folder") {
+                    ForthMenuSupport.openUserTree()
                 }
             }
 
