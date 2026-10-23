@@ -144,8 +144,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var launchedForthURL: URL?
     /// Retained so Process deinit does not SIGTERM the companion.
     private var companionProcess: Process?
-    /// BYE asked us to drop the console. The sock close that follows must not
-    /// treat that as an error or unhide the console. Next connect shows it again.
+    /// BYE started an editor quit. The sock close that follows must not
+    /// show a connection error. Cleared if the user cancels the dirty-file sheets.
     private var forthQuitExpected = false
     private var showConsoleOnNextConnect = false
 
@@ -391,6 +391,11 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             companionProcess = nil
             return false
         }
+    }
+
+    /// Dirty-file Cancel after BYE. Forth stays up, so a later sock drop is a real error.
+    func noteTerminateCancelled() {
+        forthQuitExpected = false
     }
 
     /// Quit the companion process this editor launched.
@@ -710,7 +715,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
                 self.debugLocation = nil
                 self.breakpointEntries = []
                 if expected {
-                    // BYE already hid the console. Do not pop it back or show an error.
+                    // App quit is in progress. Do not show a connection error.
                     self.lastError = nil
                 } else {
                     self.consoleHidden = false
@@ -854,21 +859,16 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         case .cwdChanged(let path):
             rememberWorkingDirectory(path)
         case .requestQuit:
-            // BYE: drop the console and clear the debugger. Leave editor files open.
-            // The companion VM has already exited; stop that process so Ping can start fresh.
+            // BYE quits EditForth the same way as Cmd-Q, including dirty-file sheets.
+            // Do not stop the companion here: Cancel must leave Forth running.
+            // A confirmed quit stops that child from applicationShouldTerminate.
             lastError = nil
             forthQuitExpected = true
-            showConsoleOnNextConnect = true
             isDebugSessionArmed = false
             isDebugPaused = false
             debugLocation = nil
             breakpointEntries = []
-            appendConsole("\nBYE — Forth quit. Editor stays open.\n")
-            consoleHidden = true
-            isForthDocked = false
-            ForthConsoleWindowController.shared.closeQuietly()
-            disconnectSock(closeUndockedWindow: true)
-            terminateLaunchedCompanion()
+            NSApp.terminate(nil)
         }
     }
 

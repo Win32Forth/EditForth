@@ -157,6 +157,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if allow {
                 AskForthWindowController.shared.prepareForAppTermination()
                 self?.forth?.terminateLaunchedCompanion()
+            } else {
+                self?.forth?.noteTerminateCancelled()
             }
             NSApp.reply(toApplicationShouldTerminate: allow)
         }

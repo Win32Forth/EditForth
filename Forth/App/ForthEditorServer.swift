@@ -28,6 +28,9 @@ final class ForthEditorServer {
     private let queue = DispatchQueue(label: "com.64forth.editor-server")
     private var clients: [Int32] = []
     private var clientSources: [Int32: DispatchSourceRead] = [:]
+    /// BYE asked the editor to quit. Exit this process once that client is gone
+    /// (confirmed quit). Cancel keeps the client, so Forth stays up.
+    private var byeExitWhenIdle = false
     private var debugPoll: DispatchSourceTimer?
     private var lastDebugArmed = false
     /// Tail of console text for late sock clients (DEBUG often opens 64Edit after first prints).
@@ -177,6 +180,14 @@ final class ForthEditorServer {
         if let src = clientSources.removeValue(forKey: fd) {
             src.cancel()
         }
+        // Editor confirmed BYE and closed. A companion this editor did not
+        // launch is not stopped by terminateLaunchedCompanion.
+        if byeExitWhenIdle && clients.isEmpty {
+            byeExitWhenIdle = false
+            DispatchQueue.main.async {
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
 
     private func readClient(_ fd: Int32) {
@@ -196,6 +207,8 @@ final class ForthEditorServer {
 
     private func handleLine(_ data: Data, fd: Int32) {
         NSLog("64Forth editor server: request %s", String(data: data, encoding: .utf8) ?? "?")
+        // A later command means the user cancelled BYE and kept typing.
+        byeExitWhenIdle = false
         let request: EditorRequest
         do {
             request = try IPCCodec.decodeRequest(data)
@@ -389,15 +402,12 @@ final class ForthEditorServer {
                         self.broadcastOkPrompt()
                         response = .consoleOutput(text: "")
                     } else if st == 1 {
-                        // BYE — editor drops the console and stops this companion.
-                        // Do not report status=1 as an error or exit here.
+                        // BYE — editor runs the Cmd-Q quit path (dirty sheets).
+                        // Stay alive until that client disconnects, so Cancel works.
+                        // Flag is set on this queue before the quit line is written.
+                        self.queue.async { self.byeExitWhenIdle = true }
                         self.broadcast(.requestQuit)
                         response = .consoleOutput(text: "")
-                        // After the sock line is written, exit. EditForth has dropped
-                        // the console. Covers a companion that was not started by Ping.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            NSApplication.shared.terminate(nil)
-                        }
                     } else {
                         response = .error(message: "status=\(st)")
                     }

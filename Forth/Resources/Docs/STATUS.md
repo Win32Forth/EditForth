@@ -1,8 +1,26 @@
 # 64Forth development status
 
-**Current:** **2.5.0** (build **19**) — one app, companion process
+**Current:** **2.5.1** (build **20**) — BYE quits the editor; emit beside the source; INCLUDE on a clean Untitled. Disk image still 2.5.0.
 
 **Last updated:** 2026-10-23
+
+---
+
+## v2.5.1 — BYE, emit folder, clean INCLUDE
+
+**Version strings:** marketing **2.5.1**, build **20**. Prepared for release. No disk image in this commit. Shipped image remains **v2.5.0** (`Releases/EditForth-2.5.0-macOS.dmg`). Console stamp `Oct 23, 2026 10:45 AM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.1 === Oct 23, 2026 10:45 AM ===
+```
+
+### Highlights since 2.5.0
+
+- **BYE quits EditForth.** Typing `BYE` follows the same path as Cmd-Q. Dirty tabs get Save / Don’t Save / Cancel. Cancel leaves the editor and Forth running. A confirmed quit stops only the companion process this editor launched. Standalone 64Forth (no editor client) still exits on `BYE`.
+- **Emit folder.** `EMIT-APP` and `EMIT-WINDOW-APP` (and the XT forms) write the app, image, and log in `<source-dir>/<STEM>/` beside the last included file. The folder name is the uppercase file stem. The app name is still the word (`EMIT-WINDOW-APP GO` after `side.fth` → `SIDE/GO.app`). The status **EMIT** button already used that folder and names the app after the file (`HELLO.fth` → `HELLO/HELLO.app`). `EMIT-APP-TO` / `EMIT-WINDOW-APP-TO` still take an explicit directory. With no included file, the default is still the companion folder (`~/Documents/EditForth`). Restart Forth after updating `Library/Emitter/app.fth` so Autoload picks it up.
+- **INCLUDE on a clean Untitled.** INCLUDE and F4 open the load panel, open the picked file, close that empty Untitled tab, then `ANEW <stem>_MODULE` and INCLUDE. A dirty Untitled still asks to save first. A file that already has a path is unchanged (save in place if dirty, then INCLUDE). Forth → FLOAD… still includes without opening the editor and without `ANEW`.
 
 ---
 

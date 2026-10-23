@@ -3271,8 +3271,8 @@ final class KernelBridge {
 
         if status == 1 {
             #if os(macOS)
-            // Companion / edit.sock: EditForth drops the console and terminates
-            // a Ping-launched companion. Editor files stay open.
+            // Companion / edit.sock: EditForth quits (dirty sheets). This process
+            // stays up until that quit is confirmed, so Cancel can keep Forth.
             // Standalone GUI BYE still terminates this process.
             let deferQuit = CompanionChannel.isRequested
                 || ForthEditorServer.shared.hasConnectedClients

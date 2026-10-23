@@ -7,7 +7,7 @@
 \
 \ High-level stand-alone packaging lives in FORTH: EMIT-APP / EMIT-APP-TO
 \ (see app.fth). Load, compile your entry word normally, then:
-\   EMIT-APP MAIN              \ parses name; → ./MAIN.app
+\   EMIT-APP MAIN              \ parses name; → <source-dir>/<STEM>/MAIN.app
 \   S" /tmp" EMIT-APP-TO MAIN
 \   ' MAIN EMIT-APP-XT         \ stack-xt variant
 \

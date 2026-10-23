@@ -41,6 +41,58 @@ enum ForthMenuSupport {
     }
 
     static func presentFload(forth: ForthConnectionManager) {
+        let panel = makeFloadPanel(forth: forth)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        includeFile(at: url, forth: forth, autoAnew: false)
+    }
+
+    /// Status-panel / F4: save the current tab if needed, `ANEW <stem>_MODULE`, then `INCLUDED`.
+    /// Auto-ANEW lets the same file reload without an `ANEW` line in the source.
+    /// A clean Untitled tab has nothing to save. Pick a file, show it, then INCLUDE it.
+    /// A dirty Untitled still asks to save first.
+    static func includeCurrentTab(workspace: WorkspaceModel, forth: ForthConnectionManager) {
+        guard forth.isConnected else { return }
+        guard !forth.isDebugSessionArmed else {
+            forth.noteUserError("debugger paused — use Step/Continue")
+            return
+        }
+        guard let tab = workspace.selectedTab else {
+            forth.noteUserError("INCLUDE needs an open editor tab")
+            return
+        }
+        if tab.fileURL == nil && !tab.isDirty {
+            includePickedFile(workspace: workspace, forth: forth, replacingTabID: tab.id)
+            return
+        }
+        if tab.isDirty || tab.fileURL == nil {
+            guard workspace.saveSelected() else { return }
+        }
+        guard let url = tab.fileURL else {
+            forth.noteUserError("INCLUDE needs a saved file")
+            return
+        }
+        includeFile(at: url, forth: forth, autoAnew: true)
+    }
+
+    /// Clean Untitled INCLUDE: same panel as bare FLOAD, open the file, then INCLUDE it.
+    private static func includePickedFile(
+        workspace: WorkspaceModel,
+        forth: ForthConnectionManager,
+        replacingTabID: UUID
+    ) {
+        let panel = makeFloadPanel(forth: forth)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let opened = workspace.openURL(url, viewMode: false, line: nil) else {
+            forth.noteUserError("INCLUDE could not open \(url.lastPathComponent)")
+            return
+        }
+        if opened.id != replacingTabID {
+            workspace.closeTab(id: replacingTabID)
+        }
+        includeFile(at: opened.fileURL ?? url, forth: forth, autoAnew: true)
+    }
+
+    private static func makeFloadPanel(forth: ForthConnectionManager) -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -54,30 +106,7 @@ enum ForthMenuSupport {
         panel.directoryURL = forth.panelStartURL
         panel.prompt = "Load"
         panel.message = "FLOAD / INCLUDE a Forth source file"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        includeFile(at: url, forth: forth, autoAnew: false)
-    }
-
-    /// Status-panel / F4: save the current tab if needed, `ANEW <stem>_MODULE`, then `INCLUDED`.
-    /// Auto-ANEW lets the same file reload without an `ANEW` line in the source.
-    static func includeCurrentTab(workspace: WorkspaceModel, forth: ForthConnectionManager) {
-        guard forth.isConnected else { return }
-        guard !forth.isDebugSessionArmed else {
-            forth.noteUserError("debugger paused — use Step/Continue")
-            return
-        }
-        guard let tab = workspace.selectedTab else {
-            forth.noteUserError("INCLUDE needs an open editor tab")
-            return
-        }
-        if tab.isDirty || tab.fileURL == nil {
-            guard workspace.saveSelected() else { return }
-        }
-        guard let url = tab.fileURL else {
-            forth.noteUserError("INCLUDE needs a saved file")
-            return
-        }
-        includeFile(at: url, forth: forth, autoAnew: true)
+        return panel
     }
 
     /// Status-panel EMIT: re-INCLUDE current tab (flags from source), then `EMIT-AUTO-FILE`.

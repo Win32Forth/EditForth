@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.5.0** / build **19**. One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.3.9** / build **18** (two apps on the DMG). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
+**Baseline:** **2.5.1** / build **20** (prepared; shipped disk image is still **2.5.0** / build **19**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.3.9** / build **18** (two apps on the DMG). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
 **Updated:** 2026-10-23.
 
 **Scope:** EditForth is one app as of 2.5.0 (editor process + companion process). The 64Forth scheme still builds a standalone app. Standalone 64Forth **1.5.4** / 64Edit repos are historical; no backport (see 3.3).
@@ -148,9 +148,17 @@ The 2.2.0 DMG includes this working tree: kernel rebuild, `DBG-MAP-SPAN-RESOLVE`
 
 Dock and undock move the Forth console only. GCLOCK and other App Output windows stay separate. Esc in the graphics window quits that app. q / Stop in the debugger aborts the session. The windows are not merged.
 
-### 3.2 BYE drops the console — **Fixed**
+### 3.2 BYE quits EditForth — **Fixed**
 
-`BYE` used to send `requestQuit`, and EditForth called `NSApp.terminate` (same as Cmd-Q). Now the editor stays open with its files. The console is hidden, the debugger is cleared, and a Ping-launched companion is stopped so the VM is not left dead on `edit.sock`. The next successful connect shows the console again. Standalone 64Forth (no editor client) still quits on `BYE`.
+`BYE` in the console quits the editor the same way as Cmd-Q. Dirty tabs get Save / Don’t Save / Cancel. Cancel leaves the editor and Forth running. A confirmed quit stops only the companion process this editor launched. Standalone 64Forth (no editor client) still quits on `BYE`.
+
+### 3.7 INCLUDE on a clean Untitled — **Fixed**
+
+A clean Untitled tab has nothing to save. INCLUDE and F4 open the load panel, open the picked file, close that Untitled tab, then `ANEW <stem>_MODULE` and INCLUDE. A dirty Untitled still saves first. Forth → FLOAD… still includes without opening the editor and without `ANEW`.
+
+### 3.8 Emitted app landed in Documents/EditForth — **Fixed**
+
+`EMIT-APP` and `EMIT-WINDOW-APP` used the companion working directory (`~/Documents/EditForth`). They now write `<source-dir>/<STEM>/` beside the last included file (app, image, and log). The status EMIT button already did that and names the app after the file. `*-TO` still takes an explicit directory. With no included file, the default is still the companion folder.
 
 ### 3.4 Show Boot Messages missing from EditForth Help — **Fixed**
 

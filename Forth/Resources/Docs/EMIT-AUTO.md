@@ -12,7 +12,7 @@ Example: `…/Library/Sample/HELLO.fth` → `…/Library/Sample/HELLO/HELLO.app`
 
 That works for any writable folder (including Downloads). Emitting a file that lives inside a read-only app bundle (`…/EditForth.app/Contents/Resources/…`) fails at `mkdir` with a clear message — copy or open the source under Documents (or elsewhere writable) first.
 
-Override the outdir with `EMIT-AUTO-FILE-TO` / `EMIT-AUTO-TO` when needed. Plain `EMIT-APP` / `EMIT-WINDOW-APP` still default to the companion cwd (`.`).
+Override the outdir with `EMIT-AUTO-FILE-TO` / `EMIT-AUTO-TO` / `EMIT-APP-TO` / `EMIT-WINDOW-APP-TO` when needed. Plain `EMIT-APP` / `EMIT-WINDOW-APP` use that same `<source-dir>/<STEM>/` folder when a file has been included. With no included file they still default to the companion cwd (`.`); `FROMLIB` still sends that cwd case under Library.
 
 ## Default (no directives)
 

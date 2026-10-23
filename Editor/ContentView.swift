@@ -614,7 +614,7 @@ struct ContentView: View {
                     ForthMenuSupport.includeCurrentTab(workspace: workspace, forth: forth)
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed || workspace.selectedTab == nil)
-                .help("INCLUDE current tab (F4) — save if needed, ANEW <file>_MODULE, then INCLUDED")
+                .help("INCLUDE current tab (F4) — save if needed, ANEW <file>_MODULE, then INCLUDED. A clean Untitled picks a file, opens it, then INCLUDEs it.")
                 .controlSize(.small)
                 Button("RUN") {
                     forth.prepareRunLine(
