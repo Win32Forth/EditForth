@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.5.3** (build **23**). Latest shipped DMG is `Releases/EditForth-2.5.3-macOS.dmg` (tag **v2.5.3**, one app). **2.5.3:** the Forth menu **Open EditForth Folder** opens `~/Documents/EditForth`. **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. First public release was **v2.0.0**.
+**Version:** **2.5.4** (build **24**). Latest shipped DMG is `Releases/EditForth-2.5.4-macOS.dmg` (tag **v2.5.4**, one app). **2.5.4:** Ask Forth keeps one `AskForth-N.fth` session (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/) adds or removes a leading `\ `. **2.5.3:** the Forth menu **Open EditForth Folder** opens `~/Documents/EditForth`. **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -24,7 +24,7 @@ ollama pull gemma4:e4b
 
 Leave Ollama running. The panel default is **`gemma4:e4b`**. Other tags that work: **`gemma4:12b`** (better answers, much more memory) and **`gemma4:31b-cloud`** (fast cloud path — not fully local).
 
-Typical use: open **Ask Forth**, ask a question, and watch a new `~/Documents/EditForth/AskForth/AskForth-N.fth` tab fill as the reply **streams** (wrapped at 80 columns). **Agent Enhance Reply** improves that answer in one click (appends an **Agent Enhanced Reply** section). Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample` and also searches **`Library/Reference`** (Forth 2012); **Library…** can use **Hybrid** retrieve with Ollama **`nomic-embed-text`** (pull once, then **Rebuild Index…**) so paraphrased questions still find ANS stack effects. Optional **Fetch URLs in Prompt** and **View → Open Web Page** (⇧⌘L) bring web pages into Ask. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
+Typical use: open **Ask Forth**, ask a question, and watch `~/Documents/EditForth/AskForth/AskForth-N.fth` fill as the reply streams. Later Asks continue that file until **New session**. Earlier drafts stay as `\` line comments; INCLUDE loads only the newest section. **Agent Enhance Reply** replaces that live section after a headless test. Edit as needed, then **INCLUDE**. **Library context** defaults to `Library/Sample` and also searches **`Library/Reference`** (Forth 2012); **Library…** can use **Hybrid** retrieve with Ollama **`nomic-embed-text`** (pull once, then **Rebuild Index…**) so paraphrased questions still find ANS stack effects. Optional **Fetch URLs in Prompt** and **View → Open Web Page** (⇧⌘L) bring web pages into Ask. Full how-to: [`Forth/Resources/Docs/Ask-Forth.md`](Forth/Resources/Docs/Ask-Forth.md).
 
 ## Not eForth
 
@@ -86,7 +86,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 
 ## Install (DMG)
 
-1. Open `Releases/EditForth-2.5.3-macOS.dmg` (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
+1. Open `Releases/EditForth-2.5.4-macOS.dmg` (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
 2. Drag **EditForth.app** into Applications.
 3. Approve it once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`).
 

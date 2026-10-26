@@ -2,8 +2,8 @@
 //  AIAssistantPanel.swift
 //  EditForth
 //
-//  Trailing Ask-Forth inspector: local Ollama chat; replies stream into
-//  AskForth-N.fth in the editor. Agent transcript is optional / collapsed.
+//  Trailing Ask-Forth inspector. Replies stream into one AskForth-N.fth
+//  session until New session. Agent transcript is optional / collapsed.
 //
 
 import SwiftUI
@@ -73,6 +73,10 @@ struct AIAssistantPanel: View {
             refreshLibraryFolderLeaf()
             model.reloadProfilesFromSettings()
             model.prepareAskForthEnvironment()
+            model.detachSessionIfDisplaced(in: workspace)
+        }
+        .onChange(of: sessionTabPath) { _, _ in
+            model.detachSessionIfDisplaced(in: workspace)
         }
         .onChange(of: showLibrarySettings) { _, isOpen in
             if !isOpen {
@@ -123,7 +127,11 @@ struct AIAssistantPanel: View {
                     .font(.headline)
                 askForthInfoHint(
                     """
-                    Type in your Prompt (question), click Ask, and your reply will be sent to a file AskForth-N.fth in Documents/EditForth/AskForth which will be opened at the left. Then Click Agent Enhance Reply to ask the agent to improve the answer, which will be appended to the same file. Library defaults to Library/Sample.
+                    Type a prompt and click Ask. The reply is written to Documents/EditForth/AskForth/AskForth-N.fth and opened in the editor. Later Asks keep that same file: earlier drafts stay as line comments, and only the newest section is live Forth. New session keeps the old file and starts a new one on the next Ask. Renaming, moving, or Save As of that file also starts a new session; the next Ask creates a new file in the AskForth folder.
+
+                    Reference is an optional read-only file already open in the editor. Ask Forth never writes that file. Changing it does not start a new session.
+
+                    Agent Enhance Reply runs the latest live section in a headless 64Forth --agent, then replaces that live section. Use INCLUDE in the status strip when you want the session file in the live console. Library defaults to Library/Sample.
 
                     Local Ask needs Ollama (https://ollama.com) running and a chat model (default: ollama pull gemma4:e4b). Library Hybrid/Semantic also needs nomic-embed-text — EditForth downloads that automatically when Ollama is available and builds the Library index in the background.
 
@@ -236,6 +244,40 @@ struct AIAssistantPanel: View {
                     model.persistToolAgent()
                 }
 
+            HStack(spacing: 6) {
+                Text("Session")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(model.askOutputFileName ?? "New on next Ask")
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(model.askOutputFileURL?.path ?? "The next Ask creates AskForth-N.fth.")
+                Spacer(minLength: 4)
+                Button("New session") {
+                    model.startNewSession()
+                }
+                .font(.caption)
+                .disabled(model.isBusy || model.askOutputFileURL == nil)
+                .help("Keep this AskForth file and start the next Ask in a new file. Does not delete the previous file.")
+            }
+
+            HStack(spacing: 6) {
+                Text("Reference")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Reference", selection: referenceSelection) {
+                    Text("(none)").tag("")
+                    ForEach(referenceChoices) { choice in
+                        Text(choice.label).tag(choice.path)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity)
+                .help("Read-only file already open in the editor. Ask Forth sends it as context and never writes it. Changing this does not start a new session or rewrite earlier prompts.")
+            }
+
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text("Prompt")
@@ -285,6 +327,63 @@ struct AIAssistantPanel: View {
         }
     }
 
+    /// Path of the open session tab. Changes when that tab is renamed or Save As'd.
+    private var sessionTabPath: String {
+        guard let id = model.askOutputTabID,
+              let tab = workspace.tab(id: id) else { return "" }
+        return tab.fileURL?.standardizedFileURL.path ?? ""
+    }
+
+    private struct AskForthReferenceChoice: Identifiable {
+        var id: String { path }
+        var path: String
+        var label: String
+    }
+
+    /// Open file tabs only. The session file is excluded. Duplicate names show the parent folder.
+    private var referenceChoices: [AskForthReferenceChoice] {
+        let session = model.askOutputFileURL?.standardizedFileURL.path
+        var rows: [(path: String, leaf: String)] = []
+        var seen = Set<String>()
+        for tab in workspace.tabs {
+            guard let url = tab.fileURL?.standardizedFileURL else { continue }
+            let path = url.path
+            if path == session || seen.contains(path) { continue }
+            seen.insert(path)
+            rows.append((path, url.lastPathComponent))
+        }
+        var counts: [String: Int] = [:]
+        for row in rows {
+            counts[row.leaf, default: 0] += 1
+        }
+        return rows.map { row in
+            let label: String
+            if counts[row.leaf, default: 0] > 1 {
+                let parent = URL(fileURLWithPath: row.path).deletingLastPathComponent().lastPathComponent
+                label = parent.isEmpty ? row.path : "\(parent)/\(row.leaf)"
+            } else {
+                label = row.leaf
+            }
+            return AskForthReferenceChoice(path: row.path, label: label)
+        }
+    }
+
+    private var referenceSelection: Binding<String> {
+        Binding(
+            get: {
+                let path = model.referenceFilePath
+                guard !path.isEmpty else { return "" }
+                let standard = URL(fileURLWithPath: path).standardizedFileURL.path
+                if referenceChoices.contains(where: { $0.path == standard }) { return standard }
+                return ""
+            },
+            set: { newValue in
+                model.referenceFilePath = newValue
+                model.persistReferenceFile()
+            }
+        )
+    }
+
     /// Compact help affordance beside a section title (hover for the full tip).
     private func askForthInfoHint(_ text: String) -> some View {
         Image(systemName: "info.circle")
@@ -319,7 +418,7 @@ struct AIAssistantPanel: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                 askForthInfoHint(
-                    "Agent Enhance Reply asks the model to evaluate the Ask Forth transcript and to enhance its answer. The enhanced answer is appended to the AskForth-N.fth file with a header \"Agent Enhanced Reply\". Use INCLUDE in the status strip to load edited code into the live Forth console."
+                    "Agent Enhance Reply evaluates the latest live Forth in a headless 64Forth --agent (Autoload on), then asks the model for an improved answer. The previous live section stays in the file as line comments. Only the new section is loaded by INCLUDE. The transcript stays in this panel. Ask Forth does not modify the Reference file."
                 )
             }
 
@@ -328,7 +427,7 @@ struct AIAssistantPanel: View {
                     model.evalReplyAndAgentFix(workspace: workspace)
                 }
                 .disabled(model.isBusy || model.reply.isEmpty)
-                .help("After Ask: run the reply in a headless 64Forth --agent (Autoload on), then ask the model to improve it and append “Agent Enhanced Reply” to the same AskForth file. Does not type into the live console — use INCLUDE after you edit.")
+                .help("Run the latest live section in a headless 64Forth --agent (Autoload on), then replace that section with an improved answer. Earlier drafts stay as line comments. Does not type into the live console — use INCLUDE on the session file when you want it loaded.")
 
                 if model.isBusy {
                     Button("Stop") {

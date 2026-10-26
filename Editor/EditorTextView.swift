@@ -442,6 +442,7 @@ struct EditorTextView: NSViewRepresentable {
         /// SZ-style 5-column line-number gutter (source editor only).
         weak var lineNumberRuler: LineNumberRulerView?
         private var toggleBreakpointObserver: NSObjectProtocol?
+        private var toggleLineCommentObserver: NSObjectProtocol?
 
         init(_ parent: EditorTextView) { self.parent = parent }
 
@@ -617,6 +618,9 @@ struct EditorTextView: NSViewRepresentable {
             if let toggleBreakpointObserver {
                 NotificationCenter.default.removeObserver(toggleBreakpointObserver)
             }
+            if let toggleLineCommentObserver {
+                NotificationCenter.default.removeObserver(toggleLineCommentObserver)
+            }
         }
 
         func installCommandClick(on tv: EditorNSTextView) {
@@ -653,6 +657,15 @@ struct EditorTextView: NSViewRepresentable {
                     queue: .main
                 ) { [weak self] _ in
                     self?.toggleBreakpointUnderCaret()
+                }
+            }
+            if toggleLineCommentObserver == nil {
+                toggleLineCommentObserver = NotificationCenter.default.addObserver(
+                    forName: .sixtyFourEditToggleLineComment,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    self?.toggleLineComments()
                 }
             }
         }
@@ -832,6 +845,11 @@ struct EditorTextView: NSViewRepresentable {
                 return nil
             }
 
+            // ⌘/ — add or remove a leading "\ " on the selected lines.
+            if tryHandleLineCommentKey(event) {
+                return nil
+            }
+
             // Idle F5 family — steal from NSTextView Complete (default F5 binding).
             if !parent.isDebugArmed, tryHandleRunKey(event) {
                 return nil
@@ -881,6 +899,31 @@ struct EditorTextView: NSViewRepresentable {
                 return nil
             }
             return event
+        }
+
+        /// ⌘/ toggles a leading `\ ` on every line in the selection.
+        private func tryHandleLineCommentKey(_ event: NSEvent) -> Bool {
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard mods.contains(.command),
+                  !mods.contains(.shift),
+                  !mods.contains(.option),
+                  !mods.contains(.control),
+                  (event.charactersIgnoringModifiers ?? "") == "/"
+            else { return false }
+            toggleLineComments()
+            return true
+        }
+
+        /// Edit menu or ⌘/. One undo step. Browse mode leaves the text alone.
+        func toggleLineComments() {
+            guard let tv = textView, editorIsFocused(tv), !parent.isViewMode else { return }
+            let edit = ForthLineCommentToggle.edit(in: tv.string, selection: tv.selectedRange())
+            guard tv.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+            tv.undoManager?.beginUndoGrouping()
+            tv.replaceCharacters(in: edit.range, with: edit.replacement)
+            tv.setSelectedRange(edit.newSelection)
+            tv.didChangeText()
+            tv.undoManager?.endUndoGrouping()
         }
 
         /// F9 or ⌘\ toggles BREAK on the token under the caret.

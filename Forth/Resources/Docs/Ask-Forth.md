@@ -1,6 +1,6 @@
 # Ask Forth
 
-**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**; **AskForth header** (`\\` … `{` with model / temperature / checked options), orange **setup banner**, and **nomic auto-pull / Prepare…** in **2.3.6**; Mac ANS **FALIGNED** and EditForth **Help → Show Boot Messages** in **2.3.7**; **Undock** floating panel, `info.circle` help tips, and tighter Prompt layout in **2.3.8**. Background HYPER-REINDEX in **2.3.9**.
+**Public domain.** Local AI assistant built into EditForth (**View → Ask Forth**, ⌥⌘A). First shipped in **EditForth 2.3.0**; editor-file / Agent Enhance Reply in **2.3.1**; Library Reference, URL fetch, standard boost, and Web tabs in **2.3.2**; web search, Tool agent, OpenAI-compatible provider, and Library `.md`/`.swift` / project-folder RAG in **2.3.3**; **model profiles** (Models…), per-profile Temperature, **8192** completion tokens, **Stop**, and **Library hybrid/semantic RAG** (`nomic-embed-text`, stack-effects cheat sheet, auto-rebuild) in **2.3.5**; **AskForth header** (`\\` … `{` with model / temperature / checked options), orange **setup banner**, and **nomic auto-pull / Prepare…** in **2.3.6**; Mac ANS **FALIGNED** and EditForth **Help → Show Boot Messages** in **2.3.7**; **Undock** floating panel, `info.circle` help tips, and tighter Prompt layout in **2.3.8**. Background HYPER-REINDEX in **2.3.9**. **2.5.4:** one session file until **New session**; earlier drafts are `\` line comments; **Agent Enhance Reply** replaces the live section.
 
 ## Requirements (providers)
 
@@ -70,20 +70,22 @@ To **fine-tune** a local model for 64Forth style (MLX → Ollama), see repo root
 4. Optionally leave **Fetch URLs in Prompt** on. If the Prompt contains `http://` or `https://` links, EditForth fetches those pages (plain text / HTML stripped), caps the excerpts, and adds them to the model context before Ask / Agent Enhance Reply.  
 5. Optionally turn on **Include web search** (default **off**). EditForth searches the web (DuckDuckGo Lite, no API key) using the Prompt text and adds top hit titles, URLs, and snippets to the model context.  
 6. Optionally turn on **Tool agent** (default **off**). The model may call `web_search`, `fetch_url`, or `library_search` before answering (Ollama tools; needs a tools-capable model such as `gemma4:e4b`). Slower; use **Show Agent Transcript** to see tool steps. When Tool agent is on, automatic URL fetch / web search are skipped.  
-7. Click **Ask** (below the Prompt, on the right). EditForth creates **`~/Documents/EditForth/AskForth/AskForth-N.fth`**, writes an F-PC block-comment header (`\\` … `{`) with the active **model**, **temperature**, any checked options (**Include Library context** with Library path / retrieve mode / max snippets / context lines / max characters, **Fetch URLs**, **web search**, **Tool agent**), and a **Prompt:** section, then **streams the model reply into that tab**.  
-8. Click **Agent Enhance Reply** to improve the answer in one step: a headless `64Forth --agent` run (Library **Autoload** always on) captures a transcript, then the model appends an **`Agent Enhanced Reply`** section to the same file.  
-9. Hand-edit the file as needed (model prose/comments are often not loadable as-is), then use the status-strip **INCLUDE** button to load it into the live companion.
+7. Click **Ask** (below the Prompt, on the right). The first Ask creates **`~/Documents/EditForth/AskForth/AskForth-N.fth`**. Later Asks keep that file until **New session**. The host writes an F-PC block-comment header (`\\` … `{`) with the active **model**, **temperature**, checked options, and a **Prompt N:** block (the prompt text and the reference path, if any). The model reply streams into the section after `\ --- live ---`. Earlier live text is kept above that marker, each line prefixed with `\ `, so INCLUDE loads only the newest section. Live Forth is not wrapped to 80 columns.  
+7a. **Reference** is a menu of file tabs already open in the editor, or (none). Ask reads that buffer and does not write the file. Changing the menu does not start a new session.  
+7b. **New session** keeps the old file and the next Ask creates the next `AskForth-N.fth`. Save As, rename, or a missing session file does the same: the next Ask does not follow the renamed tab.  
+8. Click **Agent Enhance Reply** to test the live section in a headless `EditForth --agent` run (Library **Autoload** on). The transcript stays in the panel. The model’s corrected Forth replaces the live section. The header records the last `status=` and stack depth.  
+9. Hand-edit the live section as needed, then use the status-strip **INCLUDE** button to load the session file into the live companion. INCLUDE still sends `ANEW <stem>_MODULE` for that file.
 
-Typical pattern: a broad Ask (“Make me a small database”) often produces a full but flawed draft; **Agent Enhance Reply** usually yields a much better second section in the same file.
+Clear the Prompt before a follow-up. The earlier prompt is already in the session file.
 
 ## Agent Enhance Reply (64Forth Agent)
 
 This is the improve-answer button. It does **not** type into the live Forth console.
 
-1. **Eval** — extract Forth from the latest Ask/Enhance segment (fenced ```forth if present) and run it in a fresh `64Forth --agent` with Autoload. Autoload output and errors go to the agent transcript.  
-2. **Enhance** — send that transcript plus the prior answer back to the model; append a new section prefixed with `Agent Enhanced Reply`.
+1. **Eval** — take the live section (the text after `\ --- live ---`) and run it in a fresh `EditForth --agent` with Autoload. Autoload output and errors go to the agent transcript.  
+2. **Enhance** — send that transcript plus the previous live text back to the model. The host comments out the previous live section and writes the new Forth after `\ --- live ---`.
 
-Turn on **Show Agent Transcript** (beside the button) if you want to read the eval output. For loading into your real session, edit the `AskForth-N.fth` tab and use **INCLUDE**.
+Turn on **Show Agent Transcript** (beside the button) if you want to read the eval output. The transcript is not pasted into the file. For loading into your real session, edit the live section and use **INCLUDE**.
 
 ## Library context
 

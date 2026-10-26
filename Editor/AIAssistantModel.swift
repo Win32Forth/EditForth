@@ -2,8 +2,9 @@
 //  AIAssistantModel.swift
 //  EditForth
 //
-//  Ask-Forth panel state: prompt → local LLM → AskForth-N.fth in the editor,
-//  then optional headless 64Forth --agent eval and Fix-from-Agent append.
+//  Ask-Forth panel state: prompt → local LLM → one AskForth-N.fth session.
+//  Follow-up Asks keep that file. Earlier drafts are line-commented.
+//  Agent Enhance tests the live section, then replaces it.
 //
 
 import Foundation
@@ -36,6 +37,8 @@ final class AIAssistantModel: ObservableObject {
     @Published var useToolAgent: Bool
     /// When true, show the headless --agent transcript box.
     @Published var showAgentTranscript: Bool
+    /// Open editor file sent as read-only context. Empty means (none).
+    @Published var referenceFilePath: String
     /// Active profile id (panel picker). Details edited in Models….
     @Published var activeProfileID: UUID
     @Published var profiles: [AskForthModelProfile]
@@ -52,10 +55,19 @@ final class AIAssistantModel: ObservableObject {
     /// Tab / path that receives streamed Ask / Fix output.
     private(set) var askOutputTabID: UUID?
     private(set) var askOutputFileURL: URL?
-    /// UTF-16 offset in the AskForth tab where the current streamed body starts (wrap target).
+    /// UTF-16 offset where the live section starts, after the `\ --- live ---` marker.
     private var askStreamBodyStart: Int?
+    /// Session text from before this turn's archive rewrite. Restored if the model returns nothing.
+    private var sessionSnapshot: String?
+    /// Earlier prompts and previous live Forth for a follow-up. Not sent to web search.
+    private var pendingSessionPreface: String = ""
+    /// Read-only reference captured when the Ask or Enhance started.
+    private var pendingReferencePath: String?
+    /// Prepended to the done status when this Ask had to start a new file.
+    private var sessionStatusPrefix: String = ""
 
-    private static let askFileWrapWidth = 80
+    static let sessionFileKey = "askForthSessionFilePath"
+    static let referenceFileKey = "askForthReferenceFilePath"
 
     private var client: LLMClient
 
@@ -83,6 +95,23 @@ final class AIAssistantModel: ObservableObject {
         // Default off (slower; model-driven browsing).
         self.useToolAgent = UserDefaults.standard.bool(forKey: Self.toolAgentKey)
         self.showAgentTranscript = UserDefaults.standard.bool(forKey: Self.showAgentTranscriptKey)
+        self.referenceFilePath = UserDefaults.standard.string(forKey: Self.referenceFileKey) ?? ""
+        if let path = UserDefaults.standard.string(forKey: Self.sessionFileKey), !path.isEmpty {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            if FileManager.default.fileExists(atPath: url.path) {
+                self.askOutputFileURL = url
+                if let text = try? String(contentsOf: url, encoding: .utf8) {
+                    let live = AskForthSession.parse(text).live
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !live.isEmpty {
+                        self.reply = live
+                    }
+                }
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.sessionFileKey)
+                self.status = "Previous Ask Forth session file is missing. The next Ask starts a new session."
+            }
+        }
         refreshAPIKeyStatus()
     }
 
@@ -243,7 +272,6 @@ final class AIAssistantModel: ObservableObject {
         activeJob?.cancel()
         activeJob = nil
         isBusy = false
-        askStreamBodyStart = nil
         status = "Stopped."
     }
 
@@ -293,6 +321,47 @@ final class AIAssistantModel: ObservableObject {
         UserDefaults.standard.set(showAgentTranscript, forKey: Self.showAgentTranscriptKey)
     }
 
+    func persistReferenceFile() {
+        UserDefaults.standard.set(referenceFilePath, forKey: Self.referenceFileKey)
+    }
+
+    /// Keep the current AskForth file and start a new one on the next Ask.
+    func startNewSession(status message: String? = nil) {
+        guard !isBusy else { return }
+        UserDefaults.standard.removeObject(forKey: Self.sessionFileKey)
+        askOutputTabID = nil
+        askOutputFileURL = nil
+        askStreamBodyStart = nil
+        sessionSnapshot = nil
+        pendingSessionPreface = ""
+        pendingReferencePath = nil
+        sessionStatusPrefix = ""
+        reply = ""
+        agentTranscript = ""
+        status = message ?? "New session. The next Ask starts a new file. The previous file was kept."
+    }
+
+    /// Drop the session when its file is gone from the AskForth folder, or the open tab was renamed or Save As'd elsewhere.
+    /// The next Ask creates a new AskForth-N.fth in that folder. Returns true when a session was dropped.
+    @discardableResult
+    func detachSessionIfDisplaced(in workspace: WorkspaceModel) -> Bool {
+        guard !isBusy else { return false }
+        guard let stored = askOutputFileURL?.standardizedFileURL else { return false }
+        guard let reason = sessionDisplacementReason(stored: stored, workspace: workspace) else { return false }
+        startNewSession(status: reason)
+        return true
+    }
+
+    /// Reference path only when that file is still an open editor tab, and it is not the session file.
+    func effectiveReferencePath(in workspace: WorkspaceModel) -> String? {
+        let raw = referenceFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        let path = URL(fileURLWithPath: raw).standardizedFileURL.path
+        if path == askOutputFileURL?.standardizedFileURL.path { return nil }
+        guard workspace.tabs.contains(where: { $0.fileURL?.standardizedFileURL.path == path }) else { return nil }
+        return path
+    }
+
     /// Copy the editor selection into the Prompt box.
     func captureSelectedToPrompt(from workspace: WorkspaceModel) {
         guard let tab = workspace.selectedTab else {
@@ -308,25 +377,36 @@ final class AIAssistantModel: ObservableObject {
     }
 
     func ask(workspace: WorkspaceModel) {
+        guard !isBusy else { return }
         let userPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userPrompt.isEmpty else {
             status = "Enter a question or capture editor context first."
             return
         }
         // New question: drop the previous Eval transcript so Show Agent Transcript is not stale.
+        let displaced = detachSessionIfDisplaced(in: workspace)
         agentTranscript = ""
+        sessionStatusPrefix = displaced
+            ? "Started a new session in the AskForth folder. "
+            : ""
+        let reference = effectiveReferencePath(in: workspace)
+        let continuing = sessionFileIsPresent
+        let fileHint = reference.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let destination: StreamDestination = continuing
+            ? .continueSession(prompt: userPrompt, referencePath: reference)
+            : .newSession(prompt: userPrompt, referencePath: reference)
         runCompletion(
             workspace: workspace,
-            system: Self.systemPrompt(fileName: nil),
+            system: Self.systemPrompt(fileName: fileHint, continuing: continuing),
             user: userPrompt,
             ragQuery: userPrompt,
-            destination: .newAskFile(prompt: userPrompt),
+            destination: destination,
             busyStatus: "Asking \(client.providerName) (\(modelName))…",
-            doneStatus: "Done."
+            doneStatus: continuing ? "Continued session." : "Done."
         )
     }
 
-    /// Send prior reply + agent transcript back to the model; append Fix into the Ask file.
+    /// Send the live section and agent transcript back to the model. The new reply replaces the live section.
     private func askFixFromAgent(workspace: WorkspaceModel) {
         let transcript = agentTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else {
@@ -340,9 +420,12 @@ final class AIAssistantModel: ObservableObject {
             return
         }
 
+        sessionStatusPrefix = ""
+        let reference = effectiveReferencePath(in: workspace)
         var parts: [String] = [
             "The previous Forth answer was evaluated with a headless 64Forth --agent process.",
-            "Fix the Forth so it works on EditForth / 64Forth (ANS-style ITC). Prefer a single ```forth fenced block with the corrected source. Briefly note what you changed."
+            "Fix the Forth so it works on EditForth / 64Forth (ANS-style ITC). Prefer a single ```forth fenced block with the corrected source. Briefly note what you changed.",
+            "Return only the corrected live Forth. The host comments out the previous live section. Do not repeat the session header or earlier drafts."
         ]
         if !priorPrompt.isEmpty {
             parts.append("Original request / context:\n\(priorPrompt)")
@@ -353,24 +436,25 @@ final class AIAssistantModel: ObservableObject {
         parts.append("Agent transcript (exit status is in the status line if shown):\n\(transcript)")
 
         let ragQuery = [priorPrompt, priorReply, transcript].joined(separator: "\n")
-        let fileHint = askOutputFileName ?? workspace.selectedTab?.fileURL?.lastPathComponent
+        let fileHint = reference.map { URL(fileURLWithPath: $0).lastPathComponent }
         runCompletion(
             workspace: workspace,
-            system: Self.systemPrompt(fileName: fileHint)
+            system: Self.systemPrompt(fileName: fileHint, continuing: true)
                 + "\nYou are correcting Forth that failed or needs improvement after a real kernel eval."
                 + " Prefer Library/Reference stack effects and Sample idioms when they match."
                 + " Do not claim a fix unless the change is concrete; keep stack comments accurate.",
             user: parts.joined(separator: "\n\n"),
             ragQuery: ragQuery,
-            destination: .appendFix,
+            destination: .enhanceReply(referencePath: reference),
             busyStatus: "Asking \(client.providerName) to enhance reply…",
-            doneStatus: "Agent Enhanced Reply appended."
+            doneStatus: "Agent Enhanced Reply written."
         )
     }
 
     private enum StreamDestination {
-        case newAskFile(prompt: String)
-        case appendFix
+        case newSession(prompt: String, referencePath: String?)
+        case continueSession(prompt: String, referencePath: String?)
+        case enhanceReply(referencePath: String?)
     }
 
     private func runCompletion(
@@ -399,6 +483,9 @@ final class AIAssistantModel: ObservableObject {
         isBusy = true
         status = busyStatus
         reply = ""
+        sessionSnapshot = nil
+        pendingSessionPreface = ""
+        pendingReferencePath = nil
 
         let model = modelName
         let client = self.client
@@ -422,6 +509,7 @@ final class AIAssistantModel: ObservableObject {
                 await MainActor.run {
                     self.isBusy = false
                     self.status = "No API key — open Models…, paste a key, and click Save (or export XAI_API_KEY)."
+                    self.recoverReplyIfEmpty(in: workspace)
                 }
                 return
             }
@@ -437,42 +525,38 @@ final class AIAssistantModel: ObservableObject {
                     case .openAICompatible:
                         self.status = "Cannot reach \(baseURLSnapshot) (network). Check Base URL in Models… and connectivity."
                     }
+                    self.recoverReplyIfEmpty(in: workspace)
                 }
                 return
             }
 
-            // Prepare editor destination before streaming.
+            // Prepare the session file before streaming. A failed request restores the previous text.
             let prepared: Bool = await MainActor.run {
-                switch destination {
-                case .newAskFile(let askPrompt):
-                    let header = self.askFileHeader(prompt: askPrompt)
-                    guard let tab = workspace.createAskForthFile(initialText: header) else {
-                        self.isBusy = false
-                        self.status = "Could not create AskForth file."
-                        return false
-                    }
-                    self.askOutputTabID = tab.id
-                    self.askOutputFileURL = tab.fileURL
-                    self.askStreamBodyStart = (tab.text as NSString).length
-                    self.status = "Streaming into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
-                    return true
-                case .appendFix:
-                    guard let tab = self.resolveAskOutputTab(in: workspace) else {
-                        self.isBusy = false
-                        self.status = "No AskForth file to append — Ask first."
-                        return false
-                    }
-                    workspace.selectedTabID = tab.id
-                    tab.appendStreamingText("\n\nAgent Enhanced Reply\n\n")
-                    self.askStreamBodyStart = (tab.text as NSString).length
-                    self.status = "Streaming Agent Enhanced Reply into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
-                    return true
-                }
+                self.prepareDestination(destination, workspace: workspace)
             }
-            guard prepared else { return }
+            guard prepared else {
+                await MainActor.run {
+                    self.recoverReplyIfEmpty(in: workspace)
+                }
+                return
+            }
 
             var contextPrefix = ""
             var contextNote = ""
+
+            // Session history and the read-only reference go to the model only.
+            // Web search still uses the Prompt box, not the reference file or the session.
+            let sessionBits: (String, String) = await MainActor.run {
+                let preface = self.pendingSessionPreface
+                let block = self.referenceContextBlock(in: workspace, path: self.pendingReferencePath)
+                return (preface, block)
+            }
+            if !sessionBits.0.isEmpty {
+                contextPrefix += sessionBits.0 + "\n\n"
+            }
+            if !sessionBits.1.isEmpty {
+                contextPrefix += sessionBits.1 + "\n\n"
+            }
 
             // Tool agent decides when to browse/search; skip automatic URL/web pre-fetch.
             if !useTools {
@@ -601,7 +685,7 @@ final class AIAssistantModel: ObservableObject {
                         onDelta: { delta in
                             await MainActor.run {
                                 self.reply += delta
-                                self.writeWrappedStreamBody(self.reply, in: workspace)
+                                self.writeLiveStreamBody(self.reply, in: workspace, closeParens: false)
                             }
                         }
                     )
@@ -623,44 +707,46 @@ final class AIAssistantModel: ObservableObject {
                     ) { delta in
                         await MainActor.run {
                             self.reply += delta
-                            self.writeWrappedStreamBody(self.reply, in: workspace)
+                            self.writeLiveStreamBody(self.reply, in: workspace, closeParens: false)
                         }
                     }
                 }
                 await MainActor.run {
-                    guard !Task.isCancelled else { return }
+                    if Task.isCancelled {
+                        self.finishInterruptedStream(in: workspace, cancelled: true, error: nil)
+                        return
+                    }
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        self.reply = trimmed
+                    let body = trimmed.isEmpty
+                        ? self.reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                        : trimmed
+                    if body.isEmpty {
+                        let restored = self.sessionSnapshot != nil
+                        self.recoverReplyIfEmpty(in: workspace)
+                        self.askStreamBodyStart = nil
+                        self.pendingSessionPreface = ""
+                        self.isBusy = false
+                        self.sessionStatusPrefix = ""
+                        self.status = restored
+                            ? "The model returned nothing. The session file was left unchanged."
+                            : "The model returned nothing."
+                        return
                     }
-                    self.writeWrappedStreamBody(self.reply, in: workspace)
-                    if let tab = self.resolveAskOutputTab(in: workspace) {
-                        _ = workspace.saveTab(tab)
-                    }
+                    self.commitLiveReply(body, in: workspace)
                     self.askStreamBodyStart = nil
+                    self.pendingSessionPreface = ""
                     self.isBusy = false
                     let fileNote = self.askOutputFileName.map { " · \($0)" } ?? ""
-                    self.status = doneStatus + fileNote + contextNote
+                    self.status = self.sessionStatusPrefix + doneStatus + fileNote + contextNote
+                    self.sessionStatusPrefix = ""
                 }
             } catch {
                 await MainActor.run {
-                    if !self.reply.isEmpty {
-                        self.writeWrappedStreamBody(self.reply, in: workspace)
-                    }
-                    if let tab = self.resolveAskOutputTab(in: workspace) {
-                        _ = workspace.saveTab(tab)
-                    }
-                    self.askStreamBodyStart = nil
-                    // stop() already cleared busy + status; don't overwrite with a network error.
-                    if Task.isCancelled || error is CancellationError {
-                        if self.isBusy {
-                            self.isBusy = false
-                            self.status = "Stopped."
-                        }
-                        return
-                    }
-                    self.isBusy = false
-                    self.status = self.statusForCaughtError(error)
+                    self.finishInterruptedStream(
+                        in: workspace,
+                        cancelled: Task.isCancelled || error is CancellationError,
+                        error: error
+                    )
                 }
             }
         }
@@ -668,68 +754,45 @@ final class AIAssistantModel: ObservableObject {
         attachJob(job)
     }
 
-    /// Replace the current streamed body in the AskForth tab with `body` wrapped at 80 columns.
-    /// Keeps `reply` unwrapped for Eval; only the file/editor buffer is wrapped.
-    private func writeWrappedStreamBody(_ body: String, in workspace: WorkspaceModel) {
+    /// Replace the live section. Does not wrap columns: wrapping can split a comment into code.
+    /// `reply` stays the latest answer. The file gets the sanitized text.
+    private func writeLiveStreamBody(_ body: String, in workspace: WorkspaceModel, closeParens: Bool) {
         guard let tab = resolveAskOutputTab(in: workspace),
               let start = askStreamBodyStart else { return }
         let ns = tab.text as NSString
         let safeStart = min(max(0, start), ns.length)
         let prefix = ns.substring(to: safeStart)
-        let wrapped = Self.wrapToWidth(body, width: Self.askFileWrapWidth)
-        tab.text = prefix + wrapped
+        let safe = AskForthSession.sanitizeLive(body, closeParens: closeParens)
+        tab.text = prefix + safe
         tab.isDirty = true
         // Do not move selection to end on every chunk — that forces the editor to
         // fight the user when they scroll up to read while Ask / Enhance streams.
     }
 
-    /// Word-wrap each existing line to `width` columns (hard-break only if a word is longer).
-    private static func wrapToWidth(_ text: String, width: Int) -> String {
-        guard width > 0 else { return text }
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        var out: [String] = []
-        out.reserveCapacity(lines.count)
-        for line in lines {
-            out.append(contentsOf: wrapSingleLine(String(line), width: width))
-        }
-        return out.joined(separator: "\n")
-    }
-
-    private static func wrapSingleLine(_ line: String, width: Int) -> [String] {
-        if line.isEmpty { return [""] }
-        if line.count <= width { return [line] }
-
-        var result: [String] = []
-        var remaining = Substring(line)
-        while remaining.count > width {
-            let end = remaining.index(remaining.startIndex, offsetBy: width)
-            let window = remaining[..<end]
-            if let space = window.lastIndex(of: " "), space > remaining.startIndex {
-                result.append(String(remaining[..<space]))
-                remaining = remaining[remaining.index(after: space)...]
-            } else {
-                result.append(String(window))
-                remaining = remaining[end...]
-            }
-        }
-        result.append(String(remaining))
-        return result
-    }
-
     private func resolveAskOutputTab(in workspace: WorkspaceModel) -> EditorTab? {
+        guard let stored = askOutputFileURL?.standardizedFileURL,
+              sessionFileIsInAskForthFolder(stored),
+              FileManager.default.fileExists(atPath: stored.path) else {
+            return nil
+        }
         if let id = askOutputTabID, let tab = workspace.tab(id: id) {
-            return tab
+            if tab.fileURL?.standardizedFileURL.path == stored.path {
+                return tab
+            }
+            // Save As / rename changed this tab. Do not follow it.
+            askOutputTabID = nil
         }
-        if let url = askOutputFileURL {
-            let tab = workspace.openURL(url, viewMode: false, line: nil)
-            askOutputTabID = tab?.id
-            return tab
-        }
-        return nil
+        let tab = workspace.openURL(stored, viewMode: false, line: nil)
+        askOutputTabID = tab?.id
+        return tab
     }
 
-    /// Headless eval of the latest Ask/Fix segment, then Fix from Agent (append improved answer).
+    /// Headless eval of the latest live section, then replace that section with the enhanced reply.
     func evalReplyAndAgentFix(workspace: WorkspaceModel) {
+        if detachSessionIfDisplaced(in: workspace) {
+            return
+        }
+        syncReplyFromSession(in: workspace)
         let source = ForthAgentRunner.extractForthSource(from: reply)
         runAgent(source: source, workspace: workspace, label: "reply") { [weak self] ok in
             guard let self, ok else { return }
@@ -854,60 +917,284 @@ final class AIAssistantModel: ObservableObject {
         askStreamBodyStart = safeStart + (block as NSString).length
     }
 
-    /// F-PC block comment (`\\` … `{`) with Ask settings and the user Prompt.
-    private func askFileHeader(prompt: String) -> String {
-        let profile = profiles.first(where: { $0.id == activeProfileID })
-            ?? AskForthLLMSettings.activeProfile
-        let model = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let temperature = String(format: "%.2f", profile.temperature)
-
-        var lines: [String] = [
-            "\\\\ Ask Forth",
-            "\\ Model: \(model.isEmpty ? "(none)" : model)",
-            "\\ Temperature: \(temperature)",
-        ]
-
-        if includeLibraryContext {
-            let settings = ForthLibraryRAGSettings.load()
-            lines.append("\\ Include Library context: on")
-            lines.append("\\ Library: \(settings.folderPath)")
-            lines.append("\\ Retrieve mode: \(settings.retrieveMode.displayName)")
-            lines.append("\\ Max snippets: \(settings.maxSnippets)")
-            lines.append("\\ Context lines: \(settings.contextLines)")
-            lines.append("\\ Max characters: \(settings.maxChars)")
-        }
-        if fetchURLsInPrompt {
-            lines.append("\\ Fetch URLs in Prompt: on")
-        }
-        if includeWebSearch {
-            lines.append("\\ Include web search: on")
-        }
-        if useToolAgent {
-            lines.append("\\ Tool agent: on")
-        }
-
-        lines.append("\\")
-        lines.append("\\ Prompt:")
-        for raw in prompt.split(separator: "\n", omittingEmptySubsequences: false) {
-            lines.append("\\ \(raw)")
-        }
-        lines.append("{")
-        lines.append("")
-        lines.append("")
-        return lines.joined(separator: "\n")
+    private var sessionFileIsPresent: Bool {
+        guard let url = askOutputFileURL?.standardizedFileURL else { return false }
+        return sessionFileIsInAskForthFolder(url) && FileManager.default.fileExists(atPath: url.path)
     }
 
-    private static func systemPrompt(fileName: String?) -> String {
+    private func sessionFileIsInAskForthFolder(_ url: URL) -> Bool {
+        let folder = ForthMenuSupport.userTreeURL
+            .appendingPathComponent("AskForth", isDirectory: true)
+            .standardizedFileURL
+        return url.deletingLastPathComponent().standardizedFileURL.path == folder.path
+    }
+
+    /// Nil when this session should continue. A string when the next Ask must create a new file in the AskForth folder.
+    private func sessionDisplacementReason(stored: URL, workspace: WorkspaceModel) -> String? {
+        if !sessionFileIsInAskForthFolder(stored) || !FileManager.default.fileExists(atPath: stored.path) {
+            return "The Ask Forth session file is not in the AskForth folder. Started a new session. The next Ask creates a new file there."
+        }
+        if let id = askOutputTabID,
+           let tab = workspace.tab(id: id),
+           let current = tab.fileURL?.standardizedFileURL.path,
+           current != stored.path {
+            return "The Ask Forth file was renamed or saved elsewhere. Started a new session. The next Ask creates a new file in the AskForth folder."
+        }
+        return nil
+    }
+
+    private func prepareDestination(_ destination: StreamDestination, workspace: WorkspaceModel) -> Bool {
+        switch destination {
+        case .newSession(let prompt, let reference):
+            return prepareNewSession(prompt: prompt, reference: reference, workspace: workspace)
+        case .continueSession(let prompt, let reference):
+            if let tab = resolveAskOutputTab(in: workspace) {
+                return prepareContinuation(
+                    tab: tab,
+                    workspace: workspace,
+                    newPrompt: prompt,
+                    reference: reference,
+                    enhanceNote: nil
+                )
+            }
+            UserDefaults.standard.removeObject(forKey: Self.sessionFileKey)
+            askOutputFileURL = nil
+            askOutputTabID = nil
+            sessionStatusPrefix = "Previous session file was missing. "
+            return prepareNewSession(prompt: prompt, reference: reference, workspace: workspace)
+        case .enhanceReply(let reference):
+            guard let tab = resolveAskOutputTab(in: workspace) else {
+                isBusy = false
+                status = "No Ask Forth session file — Ask first."
+                return false
+            }
+            let note = AskForthSession.agentEnhanceNote(from: agentTranscript)
+            return prepareContinuation(
+                tab: tab,
+                workspace: workspace,
+                newPrompt: nil,
+                reference: reference,
+                enhanceNote: note
+            )
+        }
+    }
+
+    private func prepareNewSession(prompt: String, reference: String?, workspace: WorkspaceModel) -> Bool {
+        let header = makeSessionHeader(
+            entries: [.prompt(text: prompt, reference: reference)],
+            sessionReference: reference
+        )
+        let initial = AskForthSession.renderPrefix(header: header, archive: "")
+        guard let tab = workspace.createAskForthFile(initialText: initial) else {
+            isBusy = false
+            status = "Could not create AskForth file."
+            return false
+        }
+        rememberSession(tab)
+        pendingSessionPreface = ""
+        pendingReferencePath = reference
+        sessionSnapshot = nil
+        status = "Streaming into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
+        return true
+    }
+
+    private func prepareContinuation(
+        tab: EditorTab,
+        workspace: WorkspaceModel,
+        newPrompt: String?,
+        reference: String?,
+        enhanceNote: String?
+    ) -> Bool {
+        let previous = tab.text
+        let parsed = AskForthSession.parse(previous)
+        var entries = parsed.entries
+        if let newPrompt {
+            pendingSessionPreface = AskForthSession.modelPreface(
+                entries: parsed.entries,
+                previousLive: parsed.live
+            )
+            entries.append(.prompt(text: newPrompt, reference: reference))
+        } else {
+            pendingSessionPreface = ""
+        }
+        if let enhanceNote {
+            entries.append(.note(enhanceNote))
+        }
+        let sessionRef = newPrompt != nil ? reference : (reference ?? lastReference(in: parsed.entries))
+        let archive = AskForthSession.combineArchive(
+            existing: parsed.archive,
+            added: AskForthSession.archiveLive(parsed.live)
+        )
+        let header = makeSessionHeader(entries: entries, sessionReference: sessionRef)
+        let prefix = AskForthSession.renderPrefix(header: header, archive: archive)
+        sessionSnapshot = previous
+        // Only an open editor tab is sent. The header can still record an older path.
+        pendingReferencePath = reference
+        tab.text = prefix
+        tab.isDirty = true
+        workspace.selectedTabID = tab.id
+        rememberSession(tab)
+        _ = workspace.saveTab(tab)
+        status = "Streaming into \(tab.fileURL?.lastPathComponent ?? "AskForth")…"
+        return true
+    }
+
+    private func makeSessionHeader(entries: [AskForthSession.Entry], sessionReference: String?) -> String {
+        let profile = profiles.first(where: { $0.id == activeProfileID })
+            ?? AskForthLLMSettings.activeProfile
+        let temperature = String(format: "%.2f", profile.temperature)
+        return AskForthSession.renderHeader(
+            model: modelName,
+            temperature: temperature,
+            settingLines: sessionSettingLines(),
+            sessionReference: sessionReference,
+            entries: entries
+        )
+    }
+
+    private func sessionSettingLines() -> [String] {
+        var lines: [String] = []
+        if includeLibraryContext {
+            let settings = ForthLibraryRAGSettings.load()
+            lines.append("Include Library context: on")
+            lines.append("Library: \(settings.folderPath)")
+            lines.append("Retrieve mode: \(settings.retrieveMode.displayName)")
+            lines.append("Max snippets: \(settings.maxSnippets)")
+            lines.append("Context lines: \(settings.contextLines)")
+            lines.append("Max characters: \(settings.maxChars)")
+        }
+        if fetchURLsInPrompt {
+            lines.append("Fetch URLs in Prompt: on")
+        }
+        if includeWebSearch {
+            lines.append("Include web search: on")
+        }
+        if useToolAgent {
+            lines.append("Tool agent: on")
+        }
+        return lines
+    }
+
+    private func lastReference(in entries: [AskForthSession.Entry]) -> String? {
+        for entry in entries.reversed() {
+            if case .prompt(_, let reference) = entry, let reference, !reference.isEmpty {
+                return reference
+            }
+        }
+        return nil
+    }
+
+    private func rememberSession(_ tab: EditorTab) {
+        askOutputTabID = tab.id
+        if let url = tab.fileURL?.standardizedFileURL {
+            askOutputFileURL = url
+            UserDefaults.standard.set(url.path, forKey: Self.sessionFileKey)
+        }
+        askStreamBodyStart = (tab.text as NSString).length
+    }
+
+    private func referenceContextBlock(in workspace: WorkspaceModel, path: String?) -> String {
+        guard let path, !path.isEmpty else { return "" }
+        let tab = workspace.tabs.first { $0.fileURL?.standardizedFileURL.path == path }
+        let contents: String?
+        if let tab {
+            contents = tab.text
+        } else {
+            contents = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+        }
+        return AskForthSession.referenceContextBlock(path: path, contents: contents)
+    }
+
+    private func currentSessionText(in workspace: WorkspaceModel) -> String? {
+        if let id = askOutputTabID, let tab = workspace.tab(id: id) {
+            return tab.text
+        }
+        guard let url = askOutputFileURL, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    private func syncReplyFromSession(in workspace: WorkspaceModel) {
+        guard let text = currentSessionText(in: workspace) else { return }
+        let live = AskForthSession.parse(text).live.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !live.isEmpty {
+            reply = live
+        }
+    }
+
+    /// Write the sanitized reply into the live section and drop the rollback snapshot.
+    private func commitLiveReply(_ text: String, in workspace: WorkspaceModel) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            recoverReplyIfEmpty(in: workspace)
+            return
+        }
+        reply = AskForthSession.sanitizeLive(trimmed, closeParens: true)
+        writeLiveStreamBody(reply, in: workspace, closeParens: false)
+        if let tab = resolveAskOutputTab(in: workspace) {
+            _ = workspace.saveTab(tab)
+        }
+        sessionSnapshot = nil
+    }
+
+    /// Put the previous session text back when this turn produced no reply.
+    private func recoverReplyIfEmpty(in workspace: WorkspaceModel) {
+        guard reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if sessionSnapshot != nil {
+            restoreSessionSnapshot(in: workspace)
+            return
+        }
+        if let text = currentSessionText(in: workspace) {
+            reply = AskForthSession.parse(text).live.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func restoreSessionSnapshot(in workspace: WorkspaceModel) {
+        guard let snap = sessionSnapshot else { return }
+        if let id = askOutputTabID, let tab = workspace.tab(id: id) {
+            tab.text = snap
+            tab.isDirty = true
+            _ = workspace.saveTab(tab)
+        } else if let url = askOutputFileURL {
+            try? snap.write(to: url, atomically: true, encoding: .utf8)
+        }
+        reply = AskForthSession.parse(snap).live.trimmingCharacters(in: .whitespacesAndNewlines)
+        sessionSnapshot = nil
+        askStreamBodyStart = nil
+    }
+
+    private func finishInterruptedStream(in workspace: WorkspaceModel, cancelled: Bool, error: Error?) {
+        if reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            recoverReplyIfEmpty(in: workspace)
+        } else {
+            commitLiveReply(reply, in: workspace)
+        }
+        askStreamBodyStart = nil
+        pendingSessionPreface = ""
+        isBusy = false
+        if cancelled {
+            status = "Stopped."
+            return
+        }
+        if let error {
+            status = statusForCaughtError(error)
+        }
+    }
+
+    private static func systemPrompt(fileName: String?, continuing: Bool) -> String {
         var lines = [
             "You are a Forth programming assistant for EditForth / 64Forth (ANS-style ITC Forth on Apple Silicon).",
             "Prefer idiomatic Forth: clear stack comments ( a b -- c ), short words, and explanations that match classic Forth style.",
             "When asked for code, return Forth source the user can paste inside a ```forth fenced block when possible.",
             "Never invent ANS or 64Forth word names, stack effects, or APIs. If you are unsure, say so and suggest looking in Library/Reference or forth-standard.org.",
             "Stack comments must match real argument order (e.g. c-addr u for strings, not a single invented string cell).",
+            "Line comments use one backslash and run to the end of the line. Never start a word with \\\\, \\S, or \\\\S. Those swallow or stop the rest of an INCLUDE. Close every ( comment with ). Do not wrap Forth to a fixed column width.",
             "Be concise."
         ]
+        if continuing {
+            lines.append("This is a continuation of an Ask Forth session. The host owns the file header and comments out earlier drafts. Reply with only the new live Forth for the latest request. Do not repeat the header, the prompt log, or earlier drafts.")
+        }
         if let fileName, !fileName.isEmpty {
-            lines.append("The user is editing: \(fileName).")
+            lines.append("The user has a read-only reference file open: \(fileName). Do not write that file. Put suggestions only in your reply.")
         }
         return lines.joined(separator: "\n")
     }

@@ -147,6 +147,13 @@ struct SixtyFourEditApp: App {
                     FindSupport.perform(.replaceAll)
                 }
                 Divider()
+                Button("Toggle Line Comment") {
+                    NotificationCenter.default.post(name: .sixtyFourEditToggleLineComment, object: nil)
+                }
+                .keyboardShortcut("/", modifiers: .command)
+                .disabled(workspace.selectedTab == nil || workspace.selectedTab?.isViewMode == true)
+                .help("Add or remove a leading backslash and space on each selected line. A caret with no selection toggles that line.")
+                Divider()
                 Button("Search in Folders…") {
                     SearchFoldersPanel.run(workspace: workspace)
                 }

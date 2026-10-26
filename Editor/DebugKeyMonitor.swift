@@ -16,6 +16,8 @@ extension Notification.Name {
     static let sixtyFourEditFocusEditor = Notification.Name("com.Win32Forth.64Edit.focusEditor")
     /// Debug → Toggle Breakpoint / ⌘\: toggle BREAK on the Forth token under the caret.
     static let sixtyFourEditToggleBreakpoint = Notification.Name("com.Win32Forth.64Edit.toggleBreakpoint")
+    /// Edit → Toggle Line Comment / ⌘/: add or remove a leading `\ ` on the selected lines.
+    static let sixtyFourEditToggleLineComment = Notification.Name("com.Win32Forth.64Edit.toggleLineComment")
 }
 
 enum EditorFocus {

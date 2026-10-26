@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.5.3** (build **23**) — Forth menu opens the EditForth folder.  
+**Current:** **2.5.4** (build **24**) — Ask Forth keeps one session; ⌘/ toggles `\ `.
 
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-25
+
+---
+
+## v2.5.4 — Ask Forth session and line-comment toggle
+
+**Version strings:** marketing **2.5.4**, build **24**. One-app DMG + GitHub **v2.5.4** (`Releases/EditForth-2.5.4-macOS.dmg`). Replaces **v2.5.3**. Console stamp `Oct 25, 2026 8:46 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.4 === Oct 25, 2026 8:46 PM ===
+```
+
+### Highlights since 2.5.3
+
+- **Ask Forth keeps one session.** The first Ask creates `~/Documents/EditForth/AskForth/AskForth-N.fth`. Later Asks rewrite that same file until **New session**. Earlier drafts stay in the file as `\` line comments, under `\ --- earlier draft ---`. INCLUDE loads only the section after `\ --- live ---`. The host owns the `\\` … `{` header. Live Forth is not wrapped to 80 columns.
+- **Reference file.** A menu of editor tabs already open, plus (none). Ask reads that file and does not write it. Each prompt records the path it used.
+- **Save As starts a new session.** If the session file is renamed, moved, or missing from the AskForth folder, the next Ask creates a new `AskForth-N.fth` there. It does not follow the renamed tab.
+- **Agent Enhance Reply** tests the live section, then replaces it. The transcript stays in the panel. The header records the last `status=` and stack depth.
+- **Toggle Line Comment.** **Edit → Toggle Line Comment** (⌘/) adds `\ ` at the start of each selected line, or removes that prefix when every non-empty line in the selection already has it. A caret with no selection toggles that line. One undo. Browse mode does not change the text.
 
 ---
 
