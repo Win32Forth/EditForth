@@ -15,13 +15,17 @@ struct OllamaClient: LLMClient {
     var baseURL: URL
     /// Sampling temperature (`options.temperature`).
     var temperature: Double
+    /// Context window (`options.num_ctx`). Stops Ollama from reserving the model's full card window.
+    var contextTokens: Int
 
     init(
         baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
-        temperature: Double = AskForthLLMSettings.defaultTemperature
+        temperature: Double = AskForthLLMSettings.defaultTemperature,
+        contextTokens: Int = AskForthLLMSettings.defaultContextTokens
     ) {
         self.baseURL = baseURL
         self.temperature = AskForthLLMSettings.clampTemperature(temperature)
+        self.contextTokens = AskForthLLMSettings.clampContextTokens(contextTokens)
     }
 
     func ping() async -> Bool {
@@ -95,7 +99,8 @@ struct OllamaClient: LLMClient {
             // Avoid short Modelfile / daemon defaults cutting off long Forth answers.
             "options": [
                 "num_predict": LLMGenerationLimits.maxCompletionTokens,
-                "temperature": temperature
+                "temperature": temperature,
+                "num_ctx": contextTokens
             ]
         ]
         if let tools, !tools.isEmpty {

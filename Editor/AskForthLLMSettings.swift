@@ -50,6 +50,8 @@ struct AskForthModelProfile: Equatable, Identifiable, Hashable {
     var baseURL: String
     /// Sampling temperature sent on each chat request (0 = deterministic … ~2 = wild).
     var temperature: Double
+    /// Ollama `options.num_ctx`. Total tokens for the prompt and the reply.
+    var contextTokens: Int
 
     init(
         id: UUID = UUID(),
@@ -57,7 +59,8 @@ struct AskForthModelProfile: Equatable, Identifiable, Hashable {
         provider: AskForthLLMProvider,
         model: String,
         baseURL: String = "",
-        temperature: Double = AskForthLLMSettings.defaultTemperature
+        temperature: Double = AskForthLLMSettings.defaultTemperature,
+        contextTokens: Int = AskForthLLMSettings.defaultContextTokens
     ) {
         self.id = id
         self.name = name
@@ -65,6 +68,7 @@ struct AskForthModelProfile: Equatable, Identifiable, Hashable {
         self.model = model
         self.baseURL = baseURL
         self.temperature = AskForthLLMSettings.clampTemperature(temperature)
+        self.contextTokens = AskForthLLMSettings.clampContextTokens(contextTokens)
     }
 
     var resolvedBaseURLString: String {
@@ -79,18 +83,19 @@ struct AskForthModelProfile: Equatable, Identifiable, Hashable {
 
     var caption: String {
         let temp = String(format: "T%.2f", temperature)
+        let ctx = AskForthLLMSettings.contextLabel(contextTokens)
         switch provider {
         case .ollama:
-            return "\(provider.shortLabel) · \(model) · \(temp)"
+            return "\(provider.shortLabel) · \(model) · \(temp) · \(ctx)"
         case .openAICompatible:
-            return "\(provider.shortLabel) · \(resolvedBaseURLString) · \(temp)"
+            return "\(provider.shortLabel) · \(resolvedBaseURLString) · \(temp) · \(ctx)"
         }
     }
 }
 
 extension AskForthModelProfile: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, name, provider, model, baseURL, temperature
+        case id, name, provider, model, baseURL, temperature, contextTokens
     }
 
     init(from decoder: Decoder) throws {
@@ -103,6 +108,9 @@ extension AskForthModelProfile: Codable {
         let rawTemp = try c.decodeIfPresent(Double.self, forKey: .temperature)
             ?? AskForthLLMSettings.defaultTemperature
         temperature = AskForthLLMSettings.clampTemperature(rawTemp)
+        let rawCtx = try c.decodeIfPresent(Int.self, forKey: .contextTokens)
+            ?? AskForthLLMSettings.defaultContextTokens
+        contextTokens = AskForthLLMSettings.clampContextTokens(rawCtx)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -113,6 +121,7 @@ extension AskForthModelProfile: Codable {
         try c.encode(model, forKey: .model)
         try c.encode(baseURL, forKey: .baseURL)
         try c.encode(temperature, forKey: .temperature)
+        try c.encode(contextTokens, forKey: .contextTokens)
     }
 }
 
@@ -134,9 +143,21 @@ enum AskForthLLMSettings {
     /// Coding-friendly default (Ollama/OpenAI often default ~0.7–0.8 when unset).
     static let defaultTemperature: Double = 0.3
     static let temperatureRange: ClosedRange<Double> = 0...2
+    /// Matches the 32K window on `qwen2.5-coder:7b` and `:14b`.
+    static let defaultContextTokens = 32_768
+    /// Choices Ollama will actually allocate. 256K is omitted; that window thrashes a 24 GB Mac.
+    static let contextChoices = [2_048, 4_096, 8_192, 16_384, 32_768, 65_536]
 
     static func clampTemperature(_ value: Double) -> Double {
         min(max(value, temperatureRange.lowerBound), temperatureRange.upperBound)
+    }
+
+    static func clampContextTokens(_ value: Int) -> Int {
+        contextChoices.min(by: { abs($0 - value) < abs($1 - value) }) ?? defaultContextTokens
+    }
+
+    static func contextLabel(_ tokens: Int) -> String {
+        "\(tokens / 1024)K"
     }
 
     /// Readable from `@Sendable` / nonisolated client defaults.
@@ -322,9 +343,10 @@ enum AskForthLLMSettings {
     static func makeClient() -> LLMClient {
         let profile = activeProfile
         let temperature = clampTemperature(profile.temperature)
+        let contextTokens = clampContextTokens(profile.contextTokens)
         switch profile.provider {
         case .ollama:
-            return OllamaClient(temperature: temperature)
+            return OllamaClient(temperature: temperature, contextTokens: contextTokens)
         case .openAICompatible:
             let profileID = profile.id
             return OpenAICompatibleClient(

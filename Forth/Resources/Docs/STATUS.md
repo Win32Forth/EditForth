@@ -1,8 +1,24 @@
 # 64Forth development status
 
-**Current:** **2.5.4** (build **24**) — Ask Forth keeps one session; ⌘/ toggles `\ `.
+**Current:** **2.5.5** (build **25**) — Ask Forth context window. Disk image still 2.5.4.
 
-**Last updated:** 2026-10-25
+**Last updated:** 2026-10-26
+
+---
+
+## v2.5.5 — Ask Forth context window
+
+**Version strings:** marketing **2.5.5**, build **25**. Prepared for release. No disk image in this commit. Shipped image remains **v2.5.4** (`Releases/EditForth-2.5.4-macOS.dmg`). Console stamp `Oct 26, 2026 9:35 AM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.5 === Oct 26, 2026 9:35 AM ===
+```
+
+### Highlights since 2.5.4
+
+- **Context window per model profile.** **Models…** has a **Context window** menu. Ollama receives `options.num_ctx` on every Ask and Agent Enhance Reply, together with temperature and `num_predict`. The default is **32768** (32K), the window on `qwen2.5-coder:7b` and `:14b`. Choices are 2K, 4K, 8K, 16K, 32K, and 64K. 256K is not offered. OpenAI-compatible calls do not send this value. A profile saved before this field loads as 32K. The model caption includes the size. The AskForth header line is `Context window: N`.
 
 ---
 

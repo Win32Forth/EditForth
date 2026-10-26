@@ -553,7 +553,7 @@ private struct AskForthModelsSettingsSheet: View {
         }
         .padding(20)
         // Tall enough for OpenAI fields (Base URL + API key + Temperature) with room to grow.
-        .frame(width: 720, height: 560)
+        .frame(width: 720, height: 600)
         .onAppear {
             profiles = AskForthLLMSettings.loadProfiles()
             selectedID = model.activeProfileID
@@ -621,6 +621,19 @@ private struct AskForthModelsSettingsSheet: View {
                         .frame(minWidth: 44, alignment: .trailing)
                 }
                 .help("Lower (e.g. 0.2–0.4) for steadier Forth; higher for more variety. EditForth default is 0.3. Sent on every Ask / Enhance request so the server default is not used.")
+            }
+            labeledField("Context window") {
+                Picker("", selection: Binding(
+                    get: { binding.wrappedValue.contextTokens },
+                    set: { binding.wrappedValue.contextTokens = AskForthLLMSettings.clampContextTokens($0) }
+                )) {
+                    ForEach(AskForthLLMSettings.contextChoices, id: \.self) { tokens in
+                        Text(AskForthLLMSettings.contextLabel(tokens)).tag(tokens)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .help("Ollama options.num_ctx. This is the token budget for the prompt and the reply together. 32K matches qwen2.5-coder:7b and :14b. Use 8K for a model whose card says 256K, or Ollama reserves that whole window. OpenAI-compatible calls do not send this value.")
             }
             if profile.provider == .openAICompatible {
                 labeledField("Base URL") {

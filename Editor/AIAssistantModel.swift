@@ -1054,6 +1054,9 @@ final class AIAssistantModel: ObservableObject {
 
     private func sessionSettingLines() -> [String] {
         var lines: [String] = []
+        let profile = profiles.first(where: { $0.id == activeProfileID })
+            ?? AskForthLLMSettings.activeProfile
+        lines.append("Context window: \(profile.contextTokens)")
         if includeLibraryContext {
             let settings = ForthLibraryRAGSettings.load()
             lines.append("Include Library context: on")
