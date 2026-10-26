@@ -1,8 +1,24 @@
 # 64Forth development status
 
-**Current:** **2.5.5** (build **25**) — Ask Forth context window. Disk image still 2.5.4.
+**Current:** **2.5.6** (build **26**) — Ask Forth help dialogs. Disk image still 2.5.4.
 
 **Last updated:** 2026-10-26
+
+---
+
+## v2.5.6 — Ask Forth help dialogs
+
+**Version strings:** marketing **2.5.6**, build **26**. Prepared for release. No disk image in this commit. Shipped image remains **v2.5.4** (`Releases/EditForth-2.5.4-macOS.dmg`). Console stamp `Oct 26, 2026 3:26 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.5.6 === Oct 26, 2026 3:26 PM ===
+```
+
+### Highlights since 2.5.5
+
+- **Ask Forth help is a dialog.** The circled i beside **Ask Forth**, **Reference**, and **64Forth Agent** is a button. A click opens a sheet with the section title, the help text, and OK. Hover tips on those marks are gone. The Reference dialog says to open a source file, select it in the dropdown to the right, and that the file stays the session reference until deselected. **New session** starts a new question/Answer session.
 
 ---
 

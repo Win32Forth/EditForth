@@ -126,6 +126,7 @@ struct AIAssistantPanel: View {
                 Text("Ask Forth")
                     .font(.headline)
                 askForthInfoHint(
+                    "Ask Forth",
                     """
                     Type a prompt and click Ask. The reply is written to Documents/EditForth/AskForth/AskForth-N.fth and opened in the editor. Later Asks keep that same file: earlier drafts stay as line comments, and only the newest section is live Forth. New session keeps the old file and starts a new one on the next Ask. Renaming, moving, or Save As of that file also starts a new session; the next Ask creates a new file in the AskForth folder.
 
@@ -266,6 +267,10 @@ struct AIAssistantPanel: View {
                 Text("Reference")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                askForthInfoHint(
+                    "Reference",
+                    "Open a source file in the editor then select the file in the dropdown to the right to make it the reference file for this Ask Forth chat session. The Reference file remains active until deselected. Click \"New session\" to make Ask Forth start a new question/Answer session."
+                )
                 Picker("Reference", selection: referenceSelection) {
                     Text("(none)").tag("")
                     ForEach(referenceChoices) { choice in
@@ -384,14 +389,26 @@ struct AIAssistantPanel: View {
         )
     }
 
-    /// Compact help affordance beside a section title (hover for the full tip).
-    private func askForthInfoHint(_ text: String) -> some View {
-        Image(systemName: "info.circle")
-            .imageScale(.medium)
-            .foregroundStyle(.secondary)
-            .help(text)
-            .accessibilityLabel("Help")
-            .accessibilityHint(text)
+    /// Circled-i button. Opens a dialog with the full help text.
+    private func askForthInfoHint(_ title: String, _ text: String) -> some View {
+        Button {
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = text
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
+        } label: {
+            Image(systemName: "info.circle")
+                .imageScale(.medium)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Help")
     }
 
     private var askButtonTitle: String {
@@ -418,6 +435,7 @@ struct AIAssistantPanel: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                 askForthInfoHint(
+                    "64Forth Agent",
                     "Agent Enhance Reply evaluates the latest live Forth in a headless 64Forth --agent (Autoload on), then asks the model for an improved answer. The previous live section stays in the file as line comments. Only the new section is loaded by INCLUDE. The transcript stays in this panel. Ask Forth does not modify the Reference file."
                 )
             }
