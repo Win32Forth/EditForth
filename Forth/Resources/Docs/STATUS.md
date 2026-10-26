@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.5.6** (build **26**) — Ask Forth help dialogs. Disk image still 2.5.4.
+**Current:** **2.5.6** (build **26**) — Ask Forth help dialogs. Disk image `Releases/EditForth-2.5.6-macOS.dmg`.
 
 **Last updated:** 2026-10-26
 
@@ -8,7 +8,7 @@
 
 ## v2.5.6 — Ask Forth help dialogs
 
-**Version strings:** marketing **2.5.6**, build **26**. Prepared for release. No disk image in this commit. Shipped image remains **v2.5.4** (`Releases/EditForth-2.5.4-macOS.dmg`). Console stamp `Oct 26, 2026 3:26 PM`.
+**Version strings:** marketing **2.5.6**, build **26**. One-app disk image `Releases/EditForth-2.5.6-macOS.dmg`. Previous image remains `Releases/EditForth-2.5.4-macOS.dmg`. Console stamp `Oct 26, 2026 3:26 PM`. `scripts/release.sh` on this build: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release not created.
 
 **Console header stamp:**
 

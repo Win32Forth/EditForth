@@ -4,7 +4,7 @@
 
 **EditForth** is a  macOS Forth editor + Forth runtime workspace. It is a **separate project** from [64Forth](https://github.com/Win32Forth/64Forth) and [64Edit](https://github.com/Win32Forth/64Edit), so those apps can keep evolving on their own (including 64Forth remaining a console-first Forth).
 
-**Version:** **2.5.6** (build **26**). Prepared for release; the shipped disk image is still `Releases/EditForth-2.5.4-macOS.dmg` (tag **v2.5.4**, one app). **2.5.6:** the circled help marks in Ask Forth open a dialog. **2.5.5:** each Ask Forth model profile has a context window (Ollama `num_ctx`, default **32K**). **2.5.4:** Ask Forth keeps one `AskForth-N.fth` session (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/) adds or removes a leading `\ `. **2.5.3:** the Forth menu **Open EditForth Folder** opens `~/Documents/EditForth`. **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. First public release was **v2.0.0**.
+**Version:** **2.5.6** (build **26**). Shipped disk image: `Releases/EditForth-2.5.6-macOS.dmg` (one app). Previous image: `Releases/EditForth-2.5.4-macOS.dmg` (tag **v2.5.4**). **2.5.6:** the circled help marks in Ask Forth open a dialog. **2.5.5:** each Ask Forth model profile has a context window (Ollama `num_ctx`, default **32K**). **2.5.4:** Ask Forth keeps one `AskForth-N.fth` session (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/) adds or removes a leading `\ `. **2.5.3:** the Forth menu **Open EditForth Folder** opens `~/Documents/EditForth`. **EditForth.app** is one app. It runs a second process of the same executable as the Forth companion. First public release was **v2.0.0**.
 
 Product umbrella: **EditForth**. Internal source trees keep **64Edit** / **64Forth** filenames and symbols so changes can be backported with fewer rename conflicts.
 
@@ -86,7 +86,7 @@ xcodebuild -project EditForth.xcodeproj -scheme EditForth \
 
 ## Install (DMG)
 
-1. Open `Releases/EditForth-2.5.4-macOS.dmg` (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
+1. Open `Releases/EditForth-2.5.6-macOS.dmg` (or the matching GitHub release asset). From **2.5.0** on, the disk image contains **EditForth.app** only.
 2. Drag **EditForth.app** into Applications.
 3. Approve it once with Control-click **Open**, then Settings → Privacy & Security → **Open Anyway** (see `Releases/Getting EditForth to run.jpg` and `Releases/README.pdf`).
 
