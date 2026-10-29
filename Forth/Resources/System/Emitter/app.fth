@@ -101,13 +101,28 @@ CREATE EMIT-TITLE      64 ALLOT         \ counted title for SLITERAL into wrappe
   FROMLIB-OFF
   ;
 
-\ Resolve app-build.sh via LIBRARY-PATH (does not consume user FROMLIB).
+\ Resolve app-build.sh (does not consume user FROMLIB).
+\ Emitter lives in System, beside Library:
+\   <parent of LIBRARY-PATH>/System/Emitter/app-build.sh
+\ Fall back to <LIBRARY-PATH>/Emitter/app-build.sh.
 : (EMIT-RESOLVE-SH)  ( -- )
   EMIT-APP-BUILD C@ IF EXIT THEN
   LIBRARY-PATH DUP 0= IF
     2DROP ." EMIT-APP: LIBRARY-PATH empty (set EMIT-APP-BUILD)" CR ABORT
   THEN
-  EMIT-APP-BUILD PLACE
+  {: la lu | i cut -- :}
+  lu TO cut
+  lu 0 ?DO
+    la i + C@ [CHAR] / = IF  i TO cut  THEN
+  LOOP
+  cut IF
+    EMIT-APP-BUILD (EMIT-S0)
+    la cut EMIT-APP-BUILD (EMIT-S+)
+    S" /System/Emitter/app-build.sh" EMIT-APP-BUILD (EMIT-S+)
+    EMIT-APP-BUILD COUNT FILE-STATUS NIP 0= IF EXIT THEN
+  THEN
+  EMIT-APP-BUILD (EMIT-S0)
+  la lu EMIT-APP-BUILD (EMIT-S+)
   S" /Emitter/app-build.sh" EMIT-APP-BUILD (EMIT-S+)
   EMIT-APP-BUILD COUNT FILE-STATUS NIP IF
     ." EMIT-APP: app-build.sh missing: " EMIT-APP-BUILD COUNT TYPE CR ABORT

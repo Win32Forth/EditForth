@@ -1,5 +1,5 @@
 \ emit-app-smoke.fth — EMIT-APP-TO packages a tiny GRAPHICS entry as .app
-\ Also checks FROMLIB? / LIBRARY-PATH and Library-based app-build.sh resolve.
+\ Also checks FROMLIB? / LIBRARY-PATH and System/Emitter app-build.sh resolve.
 \ Lives under System/Emitter/EmitterSmoke.
 \
 \ Canonical: Xcode Resources/System/Emitter (Documents/64Forth/Library is a symlink).
