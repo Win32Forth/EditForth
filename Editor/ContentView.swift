@@ -717,7 +717,7 @@ struct ContentView: View {
                     )
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
-                .help("RUN (F5) — highlighted word, else LAST. Return to run. ⌘F5 = DEBUG; ⌘⇧F5 = BPGO")
+                .help("RUN (F5) — highlighted word, else the last definition in the file just included. Return to run. ⌘F5 = DEBUG; ⌘⇧F5 = BPGO")
                 .controlSize(.small)
                 Button("EMIT") {
                     ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)

@@ -337,7 +337,8 @@ final class DockedConsoleTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
-        // F5 family while idle — fill from LAST; block NSTextView Complete (F5).
+        // F5 family while idle — highlighted word is not in this view, so the
+        // fill uses the included file's last definition, else LAST.
         if let forth = coordinator?.forth, !forth.isDebugSessionArmed,
            let kind = ForthConnectionManager.runLineKind(from: event) {
             forth.prepareRunLine(kind)

@@ -1,12 +1,12 @@
 # 64Forth development status
 
-**Current:** **2.6.0** (build **27**) — file list, editor chrome, Restart. No disk image yet. Shipped image remains `Releases/EditForth-2.5.6-macOS.dmg`.
+**Current:** **2.6.0** (build **27**) — file list, System folder, Getting Started, RUN. No disk image yet. Shipped image remains `Releases/EditForth-2.5.6-macOS.dmg`.
 
 **Last updated:** 2026-10-29
 
 ---
 
-## v2.6.0 — File list and editor chrome
+## v2.6.0 — File list, System folder, and RUN
 
 **Version strings:** marketing **2.6.0**, build **27**. Prepared for release. No disk image in this version yet. Shipped image remains **v2.5.6** (`Releases/EditForth-2.5.6-macOS.dmg`). Console stamp `Oct 29, 2026 1:04 PM`.
 
@@ -18,9 +18,10 @@
 
 ### Highlights since 2.5.6
 
-- **File list.** The left column lists folders and files under the current directory. It starts at `~/Documents/EditForth`. New and Save match the File menu. Share is Save As.
+- **File list.** The left column lists folders and files under the current directory. It starts at `~/Documents/EditForth` with Docs open. New and Save match the File menu. Share is Save As. Cold launch opens `Docs/GettingStarted.txt`.
+- **System folder.** Assembler, AutoLoad, Debugger, Emitter, Hyper, Reference, Sources, and Testing live under `System`, beside Library and Docs. `~/Documents/EditForth` has no Config folder. FROMLIB still accepts `FLOAD Emitter/…` and `FLOAD Testing/…`.
 - **Editor chrome.** Tabs sit over the editor. The strip above the file list and the editor shows **Edit Forth**, the open file path, and the Ask Forth show/hide button. The window title stays **EditForth**.
-- **RUN / F5.** A highlighted Forth word is filled into the console. With no highlight, the line is LAST. Return still runs it.
+- **RUN / F5.** A highlighted Forth word is filled into the console. With nothing selected, the line is the last `: NAME` in the file just included. Return still runs it. Restart clears that remembered name.
 - **Restart.** The button beside Pause relaunches the Forth companion, clears the console to the banner and `Restarting Forth…`, and leaves the editor, tabs, and file list in place.
 - **Boot messages.** AutoLoad `:Loading module` / `:Reloading module` lines and the boot `HYPER-REINDEX:` note go to Help → Show Boot Messages.
 
@@ -106,7 +107,7 @@
 
 ### Highlights since 2.5.1
 
-- **VIEW quoted words.** `VIEW '`, `VIEW ."`, `VIEW S"`, `VIEW C"`, `VIEW S\"`, and `VIEW \` open the matching `BOOT_WORD` in `Library/Sources/forth.s`. The indexer turns `\"` and `\\` in the assembler source back into the real name, and it no longer drops a name that is only `\`. Restart Forth once so the new index is stamped onto those primitives.
+- **VIEW quoted words.** `VIEW '`, `VIEW ."`, `VIEW S"`, `VIEW C"`, `VIEW S\"`, and `VIEW \` open the matching `BOOT_WORD` in `System/Sources/forth.s`. The indexer turns `\"` and `\\` in the assembler source back into the real name, and it no longer drops a name that is only `\`. Restart Forth once so the new index is stamped onto those primitives.
 - **DISKVALUES.fth removed from Sample.** That file was included in **2.5.1** before permission to ship it. It is not in this tree or this disk image.
 
 ---
@@ -124,14 +125,14 @@
 ### Highlights since 2.5.0
 
 - **BYE quits EditForth.** Typing `BYE` follows the same path as Cmd-Q. Dirty tabs get Save / Don’t Save / Cancel. Cancel leaves the editor and Forth running. A confirmed quit stops only the companion process this editor launched. Standalone 64Forth (no editor client) still exits on `BYE`.
-- **Emit folder.** `EMIT-APP` and `EMIT-WINDOW-APP` (and the XT forms) write the app, image, and log in `<source-dir>/<STEM>/` beside the last included file. The folder name is the uppercase file stem. The app name is still the word (`EMIT-WINDOW-APP GO` after `side.fth` → `SIDE/GO.app`). The status **EMIT** button already used that folder and names the app after the file (`HELLO.fth` → `HELLO/HELLO.app`). `EMIT-APP-TO` / `EMIT-WINDOW-APP-TO` still take an explicit directory. With no included file, the default is still the companion folder (`~/Documents/EditForth`). Restart Forth after updating `Library/Emitter/app.fth` so Autoload picks it up.
+- **Emit folder.** `EMIT-APP` and `EMIT-WINDOW-APP` (and the XT forms) write the app, image, and log in `<source-dir>/<STEM>/` beside the last included file. The folder name is the uppercase file stem. The app name is still the word (`EMIT-WINDOW-APP GO` after `side.fth` → `SIDE/GO.app`). The status **EMIT** button already used that folder and names the app after the file (`HELLO.fth` → `HELLO/HELLO.app`). `EMIT-APP-TO` / `EMIT-WINDOW-APP-TO` still take an explicit directory. With no included file, the default is still the companion folder (`~/Documents/EditForth`). Restart Forth after updating `System/Emitter/app.fth` so Autoload picks it up.
 - **INCLUDE on a clean Untitled.** INCLUDE and F4 open the load panel, open the picked file, close that empty Untitled tab, then `ANEW <stem>_MODULE` and INCLUDE. A dirty Untitled still asks to save first. A file that already has a path is unchanged (save in place if dirty, then INCLUDE). Forth → FLOAD… still includes without opening the editor and without `ANEW`.
 - **Terminal emit.** `EMIT-APP` / `EMIT-NO-WINDOW` no longer abort on `KEY`'s plain branch to `next_debug`. A copyable stand-alone target is a tail branch; a host-only target is `NOP`. `(PUTCHAR)` / `(WRITE-STDOUT)` / `(GETCHAR)` run with a null hook, so `." hi"` prints and the app exits.
 - **Failed emit log.** The source path after `S"` is trimmed, so a failed emit writes `<source-dir>/<STEM>/<STEM>.emit.log` instead of `Documents/EditForth/emit-failed.emit.log`.
 - **Shipped library refresh.** Launch and **Update User Data** copy newer `Library`, `AutoLoad`, and `Docs` files into `~/Documents/EditForth`. A user file newer than the app is left alone.
 - **BYE after a load fault.** A console `BYE` still quits the editor when the companion exits on its own after `memory access error`. A companion crash does not quit the editor.
 - **FORGET and a vocabulary.** `FORGET` drops a `VOCABULARY` or `WORDLIST` whose body lived in the dictionary it reclaimed, including the search order and `CURRENT`. Reloading a file that creates a vocabulary no longer faults on the third INCLUDE.
-- **VIEW '.** The Hyper indexer keeps `\"` inside a `BOOT_WORD` help string, so `'` is indexed at `Library/Sources/forth.s:4128`. Restart Forth after the new index is in place.
+- **VIEW '.** The Hyper indexer keeps `\"` inside a `BOOT_WORD` help string, so `'` is indexed at `System/Sources/forth.s:4128`. Restart Forth after the new index is in place.
 
 ---
 
@@ -289,7 +290,7 @@
 
 ### Highlights
 
-- **Library/Reference** — Forth 2012 standard chapters (`.txt`) for Ask Forth RAG; always searched alongside the chosen Library folder (default Sample).
+- **System/Reference** — Forth 2012 standard chapters (`.txt`) for Ask Forth RAG; always searched alongside the chosen Library folder (default Sample).
 - **Fetch URLs in Prompt** — optional (default on): fetch `http`/`https` links from the Prompt, strip HTML to text, inject capped excerpts into Ask / Agent Enhance Reply.
 - **forth-standard.org auto-boost** — word-lookup prompts also fetch matching live standard pages via `Forth-2012-word-urls.json`.
 - **Web browser tabs** — **View → Open Web Page** (⇧⌘L): WKWebView with Back / Forward / Search-or-URL omnibox / Reload / **Send to Ask Forth** (no URL dialog).
@@ -370,7 +371,7 @@
 - **F9 / ⌘\\ while paused.** `kernel_break_toggle_name` updates the break table without `EVALUATE`.
 - **Gutter dots** for breakpoint lines (red enabled, gray disabled).
 - **Idle Arm** runs `BPGO` on the caret word, or the first enabled breakpoint.
-- **RUN / F5** fills from a highlighted word when the selection is one Forth word, otherwise `LAST`. A bare caret is not used.
+- **RUN / F5** fills from a highlighted word when the selection is one Forth word. With nothing selected, it fills from the last `: NAME` in the file just included, otherwise `LAST`. A bare caret is not used. Return still runs the line.
 - **Idle F6** emits the current tab. While debugging, F6 stays Step Over.
 - **Break Now** sets the floor to the caller frame so returning past that word disarms. A blocked console `KEY` or graphics `(APP-KEY)` wakes so the next threaded step can pause. Tight `CODE` that never hits `NEXT` still runs until it returns.
 - **Run to Here** miss text says to click a call site, not a `: header`. While Run-to is executing, Space, Return, and Esc go to the program (GCLOCK) instead of Step Over. The pause on `DUP` after `KEY` is before the `IF` that redraws the clock.
@@ -444,10 +445,10 @@
 
 ### Highlights
 
-- EditForth **Forth** menu: **Update User Data in EditForth Folder** and **Restore Shipped Files to EditForth Folder** (confirm in EditForth; companion FileHost copies shipped Library/AutoLoad/Docs via sock `updateUserTree` / `restoreUserTree`).
+- EditForth **Forth** menu: **Update User Data in EditForth Folder** and **Restore Shipped Files to EditForth Folder** (confirm in EditForth; companion FileHost copies shipped Library/System/Docs via sock `updateUserTree` / `restoreUserTree`). AutoLoad is inside System.
 - Companion File menu titles say EditForth Folder (same Documents/EditForth tree).
 - **Finder `.fth` open:** fixed UTI export (`com.win32forth.forth-source`), `WindowGroup` cold-launch, AppDelegate brings windows forward. Stale **64Editor** DerivedData was the default handler with zero windows.
-- **Library/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`.
+- **System/Testing/** holds `ANSValidate`, `HayesTest`, and `DbgSpanSmoke`. Release `validate` uses `FROMLIB FLOAD Testing/…`.
 - **View → Wrap at Column** (Off / Window / 60 / 80 / 100 / Other…). **EMIT-AUTO** writes `<source-dir>/<STEM>/{.app,.img,.emit.log}`.
 - **Edit → Search in Folders…** (⌘⇧F): multi-root literal search → Search results tab; click opens file at line. Match Case / Whole Word beside Find:. Nested folder history. Editor tabs keep text in memory; panes stay mounted so tab switches do not rebuild `NSTextView`.
 - **View → Split Editor**: side-by-side file panes in the main window; tab bar drives the left pane, right pane has a tab picker; Close Split / divider resize. Search tabs still use the full editor width. ⌘-click find hits the focused pane.
@@ -581,7 +582,7 @@
 - **EDIT / VIEW launch:** writes `pending-goto.json` (`path`, `line`, `mode`) and posts `com.Win32Forth.64Edit.goto`, then `/usr/bin/open -a` on the companion. **Release** prefers `64Edit.app` beside `64Forth.app`, then `/Applications/64Edit.app`. **Debug** prefers DerivedData first. `mode: "view"` for VIEW/EDIT-AT; `mode: "edit"` for EDIT.
 - **64Edit workspace:** single window with tabs, shared Forth console, Open/Save/Save As, pending-goto and debug find-or-open (path/inode). Per-tab caret, top line, and **view mode** (browse stays on every debug-opened file until Edit).
 - **DEBUG / DBG → 64Edit:** on pause, `host_debug_paint` resolves the VIEW stamp and opens/scrolls 64Edit (`revealForDebug` + sock `debugLocation`). Nested step into/out switches files and restores the prior tab. Toolbar in 64Edit: Step Over / Into / Out / Continue / Stop (sock → same keys as console F6 / F7 / F8 / `g` / `q`). Console DEBUG cursor erase uses BS in the sock replay path.
-- **SEE / VIEW / DBG** print full `path:line` (or `(no source)`). Nested `REQUIRE` / `INCLUDED` push/pop the view source stack so Autoload Hyper stamps stay on `Library/Hyper/hyper.fth:…`.
+- **SEE / VIEW / DBG** print full `path:line` (or `(no source)`). Nested `REQUIRE` / `INCLUDED` push/pop the view source stack so Autoload Hyper stamps stay on `System/Hyper/hyper.fth:…`.
 - `HYPER-STAMP-COLD` uses `ALSO FORTH` and restamps after `VIEW` / `LOCATE` / `DBG` exist.
 
 ## v1.5.1 — OOP windows
@@ -655,7 +656,7 @@ Append new design sections as we go; mark items done when implemented.
   - **Wordlists:** FORTH + every named `VOCABULARY` (FORTH traverse) + extra `GET-ORDER` wids — **not** the raw `WORDLISTS` registry (garbage wids crash SEARCH/TRAVERSE). Guards: `XREF-XT-OK?` / `XREF-WID-OK?` / `XREF-WID-SANE?`. Zeroable loops use `?DO` (plain `0 0 DO` runs once and hit stale buffers).
   - **Titles:** `-------- references to: NAME leaf:line --------` from `VIEW-FILE#` / `VIEW-LINE` / `VIEW-PATH` (`XREF-.LOC` / `XREF-LEAF`); unstamped → `(no source)`. Multi-def `FINDANY` summaries list each def with `(leaf:line)`.
   - **ANYWORDS** `[filter]`: WORDS-like multi-vocab name listing (headers only; one TRAVERSE per wid; VOCABULARY nts cached at collect; optional case-insensitive substring; Space pause every 32 names; Esc/Q stop). Contrast: `WORDS` is **CONTEXT / first search-order only**.
-  - **Build:** `project.pbxproj` touch-forth.s + Kernel→Sources sync lists include `xref.fth`; Sources mirror at `Library/Sources/xref.fth`.
+  - **Build:** `project.pbxproj` touch-forth.s + Kernel→Sources sync lists include `xref.fth`; Sources mirror at `System/Sources/xref.fth`.
   - **Host:** `KernelBridge.deliverConsoleEvalKeyDown` feeds Esc/Space into the KEY queue while console `kernel_eval` runs (otherwise pause/abort never see keys).
   - **IMMEDIATE targets:** `REF` does not scan a definition whose FLAGS bit 63 (`FLAG_IMM`) is set. Those words compile other words into a definition, so the body is not a call list. Message: `-------- NAME is immediate (not cross-referenced) --------`. A name with both an immediate and an ordinary definition still scans the ordinary one.
 - **Sample VED64:** `Library/Sample/VED64.fth` → `VED64`. Minimal app-window port of TCOM `Library/TCOM/VED.FTH` (that file stays the DOS/TCOM reference). Flat 256KB buffer (not the 40MB swap-file cache). COLOR8 grid; OPEN/SAVE/FIND/HELP via the same `(APP-FILE-*)` panels as EDIT64; dirty quit **S**/**D**/**Esc**. Status numbers go through graphics `TYPE` (`U.R` is console-only and was leaking digits). `S" file" VED-LOAD` optional. Not emitted yet.
@@ -702,7 +703,7 @@ Append new design sections as we go; mark items done when implemented.
 - **Enclosing colon:** `_ip_find_colon` scans every registered wordlist (`WORDLISTS`), not search order + FORTH only — SYSVOC helpers such as `(SHOW-VOCAB)` win over a FORTH neighbor (e.g. `.THREADS`).
 - **Cold VIEW stamps:** `HYPER-STAMP-COLD` temporarily `ALSO SYSVOC EDITOR GRAPHICS` so `FORTH>SYSVOC` (etc.) words get `VIEW-FILE#` / `VIEW-LINE`; DBG sync/map-HL no longer stick on `TRAVERSE-WORDLIST` while stepping the visitor.
 - **R-stack DEBUG display:** nearest **4** cells + `...`; CFA/small-int labeling hardened (no NFA probe on aligned `0`).
-- **Debugger library:** `dbg-map.fth` / `dbg-ed.fth` under `Library/Debugger` (moved off Hyper); deferred Editor/Hyper links via `DBG-ED-INSTALL` after Autoload.
+- **Debugger library:** `dbg-map.fth` / `dbg-ed.fth` under `System/Debugger` (moved off Hyper); deferred Editor/Hyper links via `DBG-ED-INSTALL` after Autoload.
 - **Cold-bootstrap messages:** `KernelBridge` retains emit from `kernel_init` (`.incbin` blobs) in `bootTranscript`; **Help → Show Boot Messages** shows it (survives `CLS`). Available on **EditForth** Help (via `EditorRequest.showBootMessages` over edit.sock) and on companion / standalone **64Forth** Help. Not auto-inserted at startup. Cold blobs print `.( Loading: … )` / `.( Finished Loading: … )` progress. Agent dumps the same transcript.
 - **Undefined `file:line`:** during INCLUDE/FLOAD/Autoload, `_report_undefined` appends `  (path:line)` from `include_name_pending` + `_source_line_at_token` (FILE-ECHO file-load predicate). Console undefined stays bare.
 
@@ -828,7 +829,7 @@ Append new design sections as we go; mark items done when implemented.
 - Related cold-load / vocabulary cleanup: AutoLoad `vocsys.fth`, quieter EMITTER native-helper rechain, Assembler touch-ups, HYPER.NDX refresh
 
 *Debugger*
-- **8 breakpoints** via **`BREAK`** / **`BPGO`** (topword) — `Library/Debugger/debug-bp.fth` (AutoLoad) + kernel `BREAK-TABLE` / `(BP-GO)`
+- **8 breakpoints** via **`BREAK`** / **`BPGO`** (topword) — `System/Debugger/debug-bp.fth` (AutoLoad) + kernel `BREAK-TABLE` / `(BP-GO)`
 
 **Release:** `64Forth/releases/64Forth-1.3.7-macOS.dmg` + GitHub `v1.3.7`
 
@@ -873,7 +874,7 @@ Append new design sections as we go; mark items done when implemented.
 *Emitter **0.6***
 - Phase 2b persist + `emit-run` + `app-build.sh` → `.app` (shipped; was in-tree only at 1.3.4)
 - Host slot 9: `MS@` → `gettimeofday` (fixes tetra gravity / `10TH-ELAPSED` in stand-alone)
-- SA-PRINT / SA-BLOCK / SA-FILES / SA-FLOAT paths verified; smokes under `Library/Emitter/EmitterSmoke/`
+- SA-PRINT / SA-BLOCK / SA-FILES / SA-FLOAT paths verified; smokes under `System/Emitter/EmitterSmoke/`
 - `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED`; `EMIT-APP` / `EMIT-APP-TO` honor armed `FROMLIB` (Library outdir + `app-build.sh` via `LIBRARY-PATH`)
 - **`EMIT-WINDOW-APP`** / **`EMIT-WINDOW-APP-TO`**: `:NONAME` wrapper with `APP-NAME`/`WINDOW`/`WINDOW-OFF`; `.app` basename = uppercase stem of `LAST-INCLUDED` (load app `.fth` after Emitter)
 - User-verified: `TETRA.app` playable (SPACE/ESC; gravity OK after MS@ fix)
@@ -897,8 +898,8 @@ Append new design sections as we go; mark items done when implemented.
 *Emitter*
 - GRAPHICS mini + tetra subset smokes; interactive `EMIT-TETRA` (`MAIN`/`GAME`) user-verified
 - `/EMIT-STANDALONE` copies reachable DATA into RW `TGT-DATA-*` segment; `/EMIT-HOSTDATA` keeps identity map
-- TCOM-style `Library/Emitter/app-build.sh` packages `emit-run` + `Resources/app.img` as a `.app`
-- `\EMITTER` policy clarified for shared sources (`tetra.fth`); packaging stays under Library/Emitter (incl. EmitterSmoke)
+- TCOM-style `System/Emitter/app-build.sh` packages `emit-run` + `Resources/app.img` as a `.app`
+- `\EMITTER` policy clarified for shared sources (`tetra.fth`); packaging stays under System/Emitter (incl. EmitterSmoke)
 
 *System cleanup*
 - **`WARNING`** shares the redefinition gate with **`REDEF-WARNING`**; redefine messages go through host `TYPE`/`EMIT` (no trailing NUL)
@@ -920,7 +921,7 @@ Append new design sections as we go; mark items done when implemented.
 **Frozen now:**
 - Stand-alone UI surface = existing **GRAPHICS** (**80×25** chars → **640×400** pixels); vocab stays **GRAPHICS**
 - Develop/run on interactive 64Forth, then emit; **first emit target:** `tetra/tetra.fth` (64TCOM tree)
-- **Triple-load** line directives: `\ANS` (64Forth), `\TCOM` (64TCOM), `\EMITTER` (optional; usually unused — Emitter slices compiled ITC under `\ANS`) — defined in `Kernel/app-output.fth` (mirrored under `Library/Sources/`)
+- **Triple-load** line directives: `\ANS` (64Forth), `\TCOM` (64TCOM), `\EMITTER` (optional; usually unused — Emitter slices compiled ITC under `\ANS`) — defined in `Kernel/app-output.fth` (mirrored under `System/Sources/`)
 
 **Deferred:**
 - **MENUS** vocabulary (limited menu construction/handling)
@@ -930,19 +931,19 @@ Append new design sections as we go; mark items done when implemented.
 
 **Emitter growth (toward tetra in-process):**
 - [x] Host-import **DATA** words (`DATA-WORD?`): CREATE / VALUE / DOVAR / DOCON / DODOES identity-mapped; do not slice as CODE; abort if `CODE-BOUNDS` unknown
-- [x] Smoke: VALUE/`TO`, CREATE cell, `DO`/`LOOP` (`Library/Emitter/test.fth`, `Library/Emitter/EmitterSmoke/agent-smoke.fth`)
+- [x] Smoke: VALUE/`TO`, CREATE cell, `DO`/`LOOP` (`System/Emitter/test.fth`, `System/Emitter/EmitterSmoke/agent-smoke.fth`)
 - [x] Branch-aware colon scan/span/write (`IF EXIT THEN`); reloc skips data imports
-- [x] GRAPHICS mini `TGT-BUILD`+`TGT-RUN` (`Library/Emitter/EmitterSmoke/gfx-smoke.fth` — `(APP-OPEN)` reached + veneered)
-- [x] Tetra subset `TGT-BUILD`+`TGT-RUN` + `MAIN` build-only (`Library/Emitter/EmitterSmoke/tetra-smoke.fth` — FIELD/SETUP/BORDER/one piece; MAIN reach ~169 < `REACH-MAX` 512)
-- [x] Interactive `MAIN`/`GAME` emit howto (`Library/Emitter/EmitterSmoke/tetra-gui-smoke.fth` — agent: `TGT-BUILD` only; GUI console: `EMIT-TETRA` → real window + KEY; ESC → `\ANS` `WINDOW-OFF`; user-verified play)
-- [x] `\EMITTER` policy — required on **shared** source lines that are Emitter-only; normal ITC slice stays under `\ANS`. Packaging lives in `Library/Emitter/` (incl. `EmitterSmoke/`)
-- [x] Phase 1 stand-alone data segment: `/EMIT-STANDALONE` copies DATA into RW `ALLOCATE` (`TGT-DATA-*`); default `/EMIT-HOSTDATA` identity map unchanged. Smoke: `Library/Emitter/EmitterSmoke/data-standalone-smoke.fth`; in-process `TGT-RUN` OK with copied data
-- [x] Phase 2a: relocatable `host_app_*` slots (`MAGIC|slot` veneers + `HOST-BIND` in-process; `Library/Emitter/EmitterSmoke/gfx-smoke.fth`)
+- [x] GRAPHICS mini `TGT-BUILD`+`TGT-RUN` (`System/Emitter/EmitterSmoke/gfx-smoke.fth` — `(APP-OPEN)` reached + veneered)
+- [x] Tetra subset `TGT-BUILD`+`TGT-RUN` + `MAIN` build-only (`System/Emitter/EmitterSmoke/tetra-smoke.fth` — FIELD/SETUP/BORDER/one piece; MAIN reach ~169 < `REACH-MAX` 512)
+- [x] Interactive `MAIN`/`GAME` emit howto (`System/Emitter/EmitterSmoke/tetra-gui-smoke.fth` — agent: `TGT-BUILD` only; GUI console: `EMIT-TETRA` → real window + KEY; ESC → `\ANS` `WINDOW-OFF`; user-verified play)
+- [x] `\EMITTER` policy — required on **shared** source lines that are Emitter-only; normal ITC slice stays under `\ANS`. Packaging lives in `System/Emitter/` (incl. `EmitterSmoke/`)
+- [x] Phase 1 stand-alone data segment: `/EMIT-STANDALONE` copies DATA into RW `ALLOCATE` (`TGT-DATA-*`); default `/EMIT-HOSTDATA` identity map unchanged. Smoke: `System/Emitter/EmitterSmoke/data-standalone-smoke.fth`; in-process `TGT-RUN` OK with copied data
+- [x] Phase 2a: relocatable `host_app_*` slots (`MAGIC|slot` veneers + `HOST-BIND` in-process; `System/Emitter/EmitterSmoke/gfx-smoke.fth`)
 - [x] Phase 2a slot 9: `MS@` → `gettimeofday` (SA used to NOP that BL; tetra gravity / `10TH-ELAPSED` froze). Smoke: `EmitterSmoke/timer-sa-smoke.fth`
-- [x] Phase 2b.2: thin GRAPHICS runner `Library/Emitter/runner/emit-run` loads `64EMIT02`, binds host slots, runs ITC (headless `EMIT_HEADLESS=1`; ADR return gadget so C epilogue runs)
-- [x] Phase 2b.1: persist `64EMIT02` (`/EMIT-UNBOUND`, `SAVE-IMAGE`/`LOAD-IMAGE`, ITC rebase; `Library/Emitter/EmitterSmoke/persist-smoke.fth`)
-- [x] Phase 2b.3: `app-build.sh` + `Library/Emitter/EmitterSmoke/gfx-app-smoke.sh` → `Gfx.app` (headless MacOS binary OK)
-- [x] `EMIT-APP` / `EMIT-APP-TO` — one-shot `.app` from a compiled xt (`Library/Emitter/app.fth`; smoke `EmitterSmoke/emit-app-smoke.fth`)
+- [x] Phase 2b.2: thin GRAPHICS runner `System/Emitter/runner/emit-run` loads `64EMIT02`, binds host slots, runs ITC (headless `EMIT_HEADLESS=1`; ADR return gadget so C epilogue runs)
+- [x] Phase 2b.1: persist `64EMIT02` (`/EMIT-UNBOUND`, `SAVE-IMAGE`/`LOAD-IMAGE`, ITC rebase; `System/Emitter/EmitterSmoke/persist-smoke.fth`)
+- [x] Phase 2b.3: `app-build.sh` + `System/Emitter/EmitterSmoke/gfx-app-smoke.sh` → `Gfx.app` (headless MacOS binary OK)
+- [x] `EMIT-APP` / `EMIT-APP-TO` — one-shot `.app` from a compiled xt (`System/Emitter/app.fth`; smoke `EmitterSmoke/emit-app-smoke.fth`)
 - [x] `EMIT-WINDOW-APP` / `EMIT-WINDOW-APP-TO` — `APP-NAME`/`WINDOW` wrapper; basename from `LAST-INCLUDED` (`EmitterSmoke/emit-window-app-smoke.fth`)
 - [x] FROMLIB arm visible + honored by `EMIT-APP*` (`FROMLIB?` / `LIBRARY-PATH`)
 - [x] `CATCH`/`THROW` `CODE-BOUNDS`; SA-EXCEPT data cells; `EMIT-APP*` auto-`CATCH` + overridable `EMIT-ON-THROW` (message + `KEY DROP`)
@@ -984,7 +985,7 @@ Append new design sections as we go; mark items done when implemented.
 **Highlights (vs 1.3.1):**
 - **User data tree:** on first run, copy shipped `Library` / `AutoLoad` / `Docs` into `Documents/64Forth/…`; FROMLIB prefers that tree. File → **Update User Data in 64Forth Folder** and **Restore Shipped Files to 64Forth Folder**
 - **CODE `_END` labels:** assembly end markers on slicable primitives so a space-optimizing emitter can measure and copy CODE bodies into a target image (path toward stand-alone apps)
-- **Emitter (in progress):** `Library/Emitter/` — `reach.fth` (reachable xts), `target.fth` (target image / colon layout), `reloc.fth` (PC-rel retarget / veneers), `run.fth` (trampoline + `CALL-NATIVE`), load via `FROMLIB FLOAD Emitter/emitter.fth`. Not a finished compiler; experimental Step 1–3 work
+- **Emitter (in progress):** `System/Emitter/` — `reach.fth` (reachable xts), `target.fth` (target image / colon layout), `reloc.fth` (PC-rel retarget / veneers), `run.fth` (trampoline + `CALL-NATIVE`), load via `FROMLIB FLOAD Emitter/emitter.fth`. Not a finished compiler; experimental Step 1–3 work
 - Kernel: boot `(.)` / `(U.)`; `U.` emits a trailing blank; high-level `ARSHIFT`
 - `HYPER.NDX` refreshed for Emitter / kernel source sync
 - Release: `64Forth/releases/64Forth-1.3.2-macOS.dmg` + GitHub `v1.3.2` (replaces 1.3.1 DMG in tree)
@@ -1002,7 +1003,7 @@ Append new design sections as we go; mark items done when implemented.
 ```
 
 **Highlights (vs 1.3.0):**
-- New `Library/Assembler/ASSEMBLER.fth`: interactive ITC `CODE` / `END-CODE` / `C;` / `NEXT,` on top of the existing ASMARM64 toolkit
+- New `System/Assembler/ASSEMBLER.fth`: interactive ITC `CODE` / `END-CODE` / `C;` / `NEXT,` on top of the existing ASMARM64 toolkit
 - Load: `FROMLIB FLOAD Assembler/ASSEMBLER.fth` (auto-loads `asmarm64.fth` if needed)
 - Puts `CODE` in FORTH; switches search order to ASMARM64 while assembling; `END-CODE` emits ITC `NEXT,`, `ASM-MAKE-EXEC`, patches CFA, restores FORTH
 - Does **not** load under 64TCOM and does **not** redefine the `ASSEMBLER` synonym for `ASMARM64`
@@ -1022,7 +1023,7 @@ Append new design sections as we go; mark items done when implemented.
 ```
 
 **Highlights (vs 1.2.0; absorbs unreleased 1.2.1 tree):**
-- GRAPHICS: point primitives (`app-points.fth`); `app-output.fth` moved into Kernel; both cold-loaded via `forth.s` blobs; mirrored under `Library/Sources/`
+- GRAPHICS: point primitives (`app-points.fth`); `app-output.fth` moved into Kernel; both cold-loaded via `forth.s` blobs; mirrored under `System/Sources/`
 - Dictionary: default logical size **8 MiB** (was 1 MiB); `USER_DICT_MAX` / `GROWMEMORYMB` hard cap **256 MiB** (was 64 MiB; 1 GiB BSS fails to link)
 - DEBUG UX (from 1.2.1 work): help column; resize while paused; LIT/branch ±CELLS inline; `S(n):`/`R(n):`; DO/LOOP highlight; no blank pause lines; `ok(n)>` focus after DEBUG / ⌘W
 - Release: `64Forth/releases/64Forth-1.3.0-macOS.dmg` + GitHub `v1.3.0` (replaces 1.2.0 DMG in tree)
@@ -1793,7 +1794,7 @@ _Further design suggestions and decisions go below as work proceeds._
 - Click a side-panel row → `SZ-FL-GOTO` reloads that file (same as Hyper switch).
 - Dirty buffer on switch: centered dialog Save / Discard / Cancel (`S`/`D`/`Esc` or click).
 - Hyper Cmd-click / Cmd-PgUp/PgDn: `HYPER-NOTE-HIT` + `SZ-HYPER-GOTO` register
-  the destination path (e.g. `Library/Sources/forth.s`) before redraw so the
+  the destination path (e.g. `System/Sources/forth.s`) before redraw so the
   side list and highlight stay in sync; leaf-name match merges path variants.
 - **Bugfix:** `SZ-FL-LEAF` left the full path under the leaf `a u` (stack leak).
   Every side-panel paint and leaf find polluted the stack, so a second file

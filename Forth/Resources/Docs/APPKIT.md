@@ -1,6 +1,6 @@
 # Emitter stand-alone app kit (GRAPHICS)
 
-**Copies:** `Resources/Docs/APPKIT.md` and `Library/Emitter/APPKIT.md` (keep in sync).
+**Copies:** `Resources/Docs/APPKIT.md` and `System/Emitter/APPKIT.md` (keep in sync).
 
 **Emitter version:** **0.7** (stand-alone GRAPHICS emit; tetra + PIMAIN verified as `.app`).  
 **Status:** design freeze for the window/IO surface (2026-09-05); packaging path live as of 2026-09-06; SA locals/BI + window I/O remap in **0.7** (2026-09-07).  
@@ -85,13 +85,13 @@ Samples: `Library/Sample/DOODLE64.fth` → `DOODLE` (1-bit); `Library/Sample/DOO
 
 Emitter `HOST-APP` slot table is append-only; `(APP-MOUSE)` **15**, `(APP-CBLIT)` **16**, `(APP-IMG-*)` **17–20**, `(APP-FILE-*)` **21–25**, `(APP-SIZE?)` **26** in `reloc.fth` / `emit-host.inc`. Stand-alone `TGT-BUILD` opens a **2 MiB** data arena (and **256 KiB** code) so TRUECOLOR `G-PIX` (~1 MiB) can import.
 
-**`emit-run` binary:** the stand-alone runner at `Library/Emitter/runner/emit-run` is **gitignored** (build product). Sources are `emit-run.m` + `emit-host.inc` (tracked). After changing host slots or `emit-host.inc`, rebuild before `EMIT-WINDOW-APP` / `app-build.sh`:
+**`emit-run` binary:** the stand-alone runner at `System/Emitter/runner/emit-run` is **gitignored** (build product). Sources are `emit-run.m` + `emit-host.inc` (tracked). After changing host slots or `emit-host.inc`, rebuild before `EMIT-WINDOW-APP` / `app-build.sh`:
 
 ```text
 cd <Library>/Emitter/runner && ./build-run.sh
 ```
 
-If emit packs an old runner, new slots (e.g. `(APP-FILE-*)`) are missing at launch. See also `Library/Emitter/runner/README.txt`.
+If emit packs an old runner, new slots (e.g. `(APP-FILE-*)`) are missing at launch. See also `System/Emitter/runner/README.txt`.
 
 Swift: `Host/AppOutputHost.swift`. Hooks live in the **GRAPHICS** vocabulary after cold `vocsys.fth` rechain.
 
@@ -119,11 +119,11 @@ Apps that also build under 64TCOM (and later Emitter) use line prefixes:
 | `\TCOM` | **64TCOM** / `TARGETARM64` | Mach-O exit status, TCOM BYE paths |
 | `\EMITTER` | Emitter-armed source load | Emitter-only lines in **shared** sources |
 
-`DIRECTIVE` / `\ANS` / `\TCOM` / `\EMITTER` are defined in cold `Kernel/app-output.fth` (and mirrored under `Library/Sources/`). On interactive 64Forth: `\ANS` **true**, `\TCOM` and `\EMITTER` **false**.
+`DIRECTIVE` / `\ANS` / `\TCOM` / `\EMITTER` are defined in cold `Kernel/app-output.fth` (and mirrored under `System/Sources/`). On interactive 64Forth: `\ANS` **true**, `\TCOM` and `\EMITTER` **false**.
 
 **Shared app sources** (e.g. `tetra/tetra.fth`) are used by 64Forth, 64TCOM, **and** Emitter. Any line that is specific to one host must be prefixed with that directive so the others skip it. If Emitter-specific code is added to those shared files, it **must** start with `\EMITTER` (and the Emitter load path must arm `\EMITTER` true, typically with `\ANS`/`\TCOM` false for that include).
 
-**Normal in-process slice** still develops under `\ANS` and copies already-compiled ITC (`TGT-BUILD` / `TGT-RUN`) without re-INCLUDING the app — so many emit sessions never need `\EMITTER` lines. Packaging / runner work belongs in `Library/Emitter/` and `Library/Emitter/EmitterSmoke/`, not in shared tetra sources, unless a true triple-load difference appears.
+**Normal in-process slice** still develops under `\ANS` and copies already-compiled ITC (`TGT-BUILD` / `TGT-RUN`) without re-INCLUDING the app — so many emit sessions never need `\EMITTER` lines. Packaging / runner work belongs in `System/Emitter/` and `System/Emitter/EmitterSmoke/`, not in shared tetra sources, unless a true triple-load difference appears.
 
 Example (from tetra): Esc quits differently for TCOM vs interactive ANS:
 
@@ -163,7 +163,7 @@ Emitter milestone: emit **tetra** as a stand-alone macOS app that still uses the
 | Points | `Kernel/app-points.fth` |
 | Hook rechain | `Kernel/vocsys.fth` |
 | Host window | `Host/AppOutputHost.swift` |
-| Emitter (WIP) | `Library/Emitter/` |
+| Emitter (WIP) | `System/Emitter/` |
 | This doc | `Docs/APPKIT.md` (Resources + user Docs mirrors) |
 
 ---
@@ -172,18 +172,18 @@ Emitter milestone: emit **tetra** as a stand-alone macOS app that still uses the
 
 1. Keep developing apps against GRAPHICS on 64Forth (tetra is the reference).
 2. Grow Emitter reach/target so tetra’s colon graph + CODE imports build/run in-process.
-   - **Done (in-process):** `DATA-WORD?` — CREATE / VALUE / DOVAR / DOCON / DODOES stay **host imports** (identity map); `CODE-BOUNDS` unknown aborts; smoke covers VALUE/`TO`, CREATE cell, `DO`/`LOOP` (`Emitter/test.fth`, `Library/Emitter/EmitterSmoke/agent-smoke.fth`).
-   - **Done (in-process):** branch-aware colon walk (so `IF EXIT THEN` in `WINDOW` still reaches `(APP-OPEN)`); reloc skips imports; GRAPHICS mini smoke `Library/Emitter/EmitterSmoke/gfx-smoke.fth` (`APP-NAME`/`WINDOW`/`CLS`/`AT`/`."`/`WINDOW-OFF` via `TGT-BUILD`+`TGT-RUN`; under `--agent` the window does not open but `(APP-*)` still veneer).
-   - **Done (in-process):** tetra subset + MAIN build — `Library/Emitter/EmitterSmoke/tetra-smoke.fth` loads `64TCOMARM64/tetra/tetra.fth`, runs `T-TETRA-SUB` (FIELD/SETUP/BORDER/`FILL.CURR`/`DRAW.CURR`, no KEY loop), and `TGT-BUILD` of `MAIN` (~169 reachable). Does not run `GAME`’s KEY loop under agent.
-   - **Done (howto):** interactive emit of `MAIN`/`GAME` — `Library/Emitter/EmitterSmoke/tetra-gui-smoke.fth` builds `MAIN` under agent; from the GUI console run `EMIT-TETRA` (`TGT-BUILD`+`TGT-RUN`) for a real GRAPHICS window + KEY loop. ESC uses the existing `\ANS` `WINDOW-OFF EXIT` arms (play + game-over). Do not `TGT-RUN` under `--agent` (KEY blocks). User-verified: focus Graphics window, Space drops, ESC quits.
-   - **Note:** `\EMITTER` line prefixes are required **when** Emitter-only code is added to shared sources (`tetra.fth`, etc.); normal ITC slice of `\ANS`-compiled words does not re-INCLUDE those files. Packaging code lives under `Library/Emitter/` / `Library/Emitter/EmitterSmoke/`.
+   - **Done (in-process):** `DATA-WORD?` — CREATE / VALUE / DOVAR / DOCON / DODOES stay **host imports** (identity map); `CODE-BOUNDS` unknown aborts; smoke covers VALUE/`TO`, CREATE cell, `DO`/`LOOP` (`Emitter/test.fth`, `System/Emitter/EmitterSmoke/agent-smoke.fth`).
+   - **Done (in-process):** branch-aware colon walk (so `IF EXIT THEN` in `WINDOW` still reaches `(APP-OPEN)`); reloc skips imports; GRAPHICS mini smoke `System/Emitter/EmitterSmoke/gfx-smoke.fth` (`APP-NAME`/`WINDOW`/`CLS`/`AT`/`."`/`WINDOW-OFF` via `TGT-BUILD`+`TGT-RUN`; under `--agent` the window does not open but `(APP-*)` still veneer).
+   - **Done (in-process):** tetra subset + MAIN build — `System/Emitter/EmitterSmoke/tetra-smoke.fth` loads `64TCOMARM64/tetra/tetra.fth`, runs `T-TETRA-SUB` (FIELD/SETUP/BORDER/`FILL.CURR`/`DRAW.CURR`, no KEY loop), and `TGT-BUILD` of `MAIN` (~169 reachable). Does not run `GAME`’s KEY loop under agent.
+   - **Done (howto):** interactive emit of `MAIN`/`GAME` — `System/Emitter/EmitterSmoke/tetra-gui-smoke.fth` builds `MAIN` under agent; from the GUI console run `EMIT-TETRA` (`TGT-BUILD`+`TGT-RUN`) for a real GRAPHICS window + KEY loop. ESC uses the existing `\ANS` `WINDOW-OFF EXIT` arms (play + game-over). Do not `TGT-RUN` under `--agent` (KEY blocks). User-verified: focus Graphics window, Space drops, ESC quits.
+   - **Note:** `\EMITTER` line prefixes are required **when** Emitter-only code is added to shared sources (`tetra.fth`, etc.); normal ITC slice of `\ANS`-compiled words does not re-INCLUDE those files. Packaging code lives under `System/Emitter/` / `System/Emitter/EmitterSmoke/`.
 3. **Stand-alone packaging (in progress):**
-   - **Done (Phase 1):** `/EMIT-STANDALONE` — copy reachable CREATE/VALUE/… into a RW data segment (`TGT-DATA-*`); `/EMIT-HOSTDATA` keeps identity map for interactive emit. Bundle recipe scaffold: `Library/Emitter/app-build.sh.template` (from TCOM `*-build.sh`). Smoke: `Library/Emitter/EmitterSmoke/data-standalone-smoke.fth`.
-   - **Done (Phase 2a, in-process):** relocatable `host_app_*` slots — `(APP-*)` out-of-span `BL`s get `LDR X16,.quad` / `BLR` veneers with `.quad = $C0DE…|slot`; `HOST-BIND` fills live VAs before `TGT-PROTECT`. Slots 0–8 = open/close/blit/pblit/keyq/key/name/tone/pump; **slot 9 = `MS@` → `gettimeofday`** (SA used to NOP that BL, freezing `10TH-ELAPSED` / tetra gravity). Smoke: `Library/Emitter/EmitterSmoke/gfx-smoke.fth` asserts `HOST-RELOC-N` and bound quads; `timer-sa-smoke.fth` for stand-alone timer.
-   - **Done (Phase 2b.1):** `64EMIT02` image persist — `/EMIT-UNBOUND` keeps `MAGIC|slot`; `SAVE-IMAGE` / `LOAD-IMAGE` (`Library/Emitter/save.fth`) write code+data+host reloc offsets+emit bases; load rebases ITC pointers and restores relocs; `TGT-RUN-LOADED` binds and runs. Smoke: `Library/Emitter/EmitterSmoke/persist-smoke.fth`.
-   - **Done (Phase 2b.2):** thin runner `Library/Emitter/runner/emit-run` (+ `emit-host.inc`) loads `64EMIT02`, binds host slots, runs ITC. Headless: `EMIT_HEADLESS=1`. Return gadget uses `adr` so `run_itc`’s C epilogue runs (saving caller LR alone skips it and breaks the stack). **`emit-run` is gitignored** — rebuild with `runner/build-run.sh` after slot/`emit-host` changes (see `runner/README.txt`).
-   - **Done (Phase 2b.3):** `Library/Emitter/app-build.sh NAME image.img [out-dir]` bundles `emit-run` as `MacOS/NAME` + `Resources/app.img`. No-arg launch resolves the bundle image. Smoke: `Library/Emitter/EmitterSmoke/gfx-app-smoke.sh` → `Gfx.app`.
-   - **Done (Forth entry):** `EMIT-APP ( xt -- )` / `EMIT-APP-TO ( xt c-addr u -- )` in **FORTH** (`Library/Emitter/app.fth`) — `/EMIT-STANDALONE` + `/EMIT-UNBOUND` + `TGT-BUILD` + `SAVE-IMAGE` + `SYSTEM` `app-build.sh` (found via `LIBRARY-PATH`). App basename = word name. `' MAIN EMIT-APP` → `./MAIN.app`; **`FROMLIB ' MAIN EMIT-APP`** → `<LIBRARY-PATH>/MAIN.app`. Relative `EMIT-APP-TO` outdirs honor armed `FROMLIB`. Smoke: `Library/Emitter/EmitterSmoke/emit-app-smoke.fth`.
+   - **Done (Phase 1):** `/EMIT-STANDALONE` — copy reachable CREATE/VALUE/… into a RW data segment (`TGT-DATA-*`); `/EMIT-HOSTDATA` keeps identity map for interactive emit. Bundle recipe scaffold: `System/Emitter/app-build.sh.template` (from TCOM `*-build.sh`). Smoke: `System/Emitter/EmitterSmoke/data-standalone-smoke.fth`.
+   - **Done (Phase 2a, in-process):** relocatable `host_app_*` slots — `(APP-*)` out-of-span `BL`s get `LDR X16,.quad` / `BLR` veneers with `.quad = $C0DE…|slot`; `HOST-BIND` fills live VAs before `TGT-PROTECT`. Slots 0–8 = open/close/blit/pblit/keyq/key/name/tone/pump; **slot 9 = `MS@` → `gettimeofday`** (SA used to NOP that BL, freezing `10TH-ELAPSED` / tetra gravity). Smoke: `System/Emitter/EmitterSmoke/gfx-smoke.fth` asserts `HOST-RELOC-N` and bound quads; `timer-sa-smoke.fth` for stand-alone timer.
+   - **Done (Phase 2b.1):** `64EMIT02` image persist — `/EMIT-UNBOUND` keeps `MAGIC|slot`; `SAVE-IMAGE` / `LOAD-IMAGE` (`System/Emitter/save.fth`) write code+data+host reloc offsets+emit bases; load rebases ITC pointers and restores relocs; `TGT-RUN-LOADED` binds and runs. Smoke: `System/Emitter/EmitterSmoke/persist-smoke.fth`.
+   - **Done (Phase 2b.2):** thin runner `System/Emitter/runner/emit-run` (+ `emit-host.inc`) loads `64EMIT02`, binds host slots, runs ITC. Headless: `EMIT_HEADLESS=1`. Return gadget uses `adr` so `run_itc`’s C epilogue runs (saving caller LR alone skips it and breaks the stack). **`emit-run` is gitignored** — rebuild with `runner/build-run.sh` after slot/`emit-host` changes (see `runner/README.txt`).
+   - **Done (Phase 2b.3):** `System/Emitter/app-build.sh NAME image.img [out-dir]` bundles `emit-run` as `MacOS/NAME` + `Resources/app.img`. No-arg launch resolves the bundle image. Smoke: `System/Emitter/EmitterSmoke/gfx-app-smoke.sh` → `Gfx.app`.
+   - **Done (Forth entry):** `EMIT-APP ( xt -- )` / `EMIT-APP-TO ( xt c-addr u -- )` in **FORTH** (`System/Emitter/app.fth`) — `/EMIT-STANDALONE` + `/EMIT-UNBOUND` + `TGT-BUILD` + `SAVE-IMAGE` + `SYSTEM` `app-build.sh` (found via `LIBRARY-PATH`). App basename = word name. `' MAIN EMIT-APP` → `./MAIN.app`; **`FROMLIB ' MAIN EMIT-APP`** → `<LIBRARY-PATH>/MAIN.app`. Relative `EMIT-APP-TO` outdirs honor armed `FROMLIB`. Smoke: `System/Emitter/EmitterSmoke/emit-app-smoke.fth`.
    - **Done:** `EMIT-WINDOW-APP` / `EMIT-WINDOW-APP-TO` — build a `:NONAME` headless main `S" STEM" APP-NAME WINDOW <xt> WINDOW-OFF ;` then pack. **STEM** = uppercase basename of `LAST-INCLUDED` (load the app `.fth` *after* Emitter). Example: include `tetra.fth`, then `' GAME EMIT-WINDOW-APP` → `TETRA.app`. Smoke: `EmitterSmoke/emit-window-app-smoke.fth`.
    - **Done:** `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED` — Forth-visible FROMLIB arm, Library root, and last INCLUDE/FLOAD path.
    - **Done:** `CATCH` / `(CATCH-OK)` / `THROW` have `CODE-BOUNDS`. **SA-EXCEPT** retargets their BSS ADRPs into RW `TGT-DATA` cells. **`EMIT-APP` / `EMIT-WINDOW-APP` auto-wrap with `CATCH`**; default `EMIT-ON-THROW` prints the code then **`KEY DROP`** so the user can read it before shutdown (override with `' MY-HANDLER IS EMIT-ON-THROW`). Raw `TGT-BUILD` still refuses `ABORT` without `CATCH`. Uncaught `THROW` never enters `QUIT`.

@@ -259,7 +259,7 @@ struct SixtyFourEditApp: App {
                     forth.prepareRunLine(.execute, name: workspace.forthHighlightedWord())
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
-                .help("Type the highlighted word, or LAST, on the console. Return runs it.")
+                .help("Type the highlighted word, or the last definition in the file just included, on the console. Return runs it.")
 
                 Button("DEBUG (⌘F5)") {
                     forth.prepareRunLine(.debug, name: workspace.forthHighlightedWord())

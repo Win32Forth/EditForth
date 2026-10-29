@@ -2,10 +2,14 @@
 
 Build (TZForth-style Run Script "Copy Library") wipes and re-copies this
 folder into the app bundle as Contents/Resources/Library/ on every build
-so FROMLIB never sees a stale tree. Same for AutoLoad and Docs.
+so FROMLIB never sees a stale tree. Docs is copied the same way.
+AutoLoad ships inside System (Copy System).
 
-FROMLIB resolves relative paths under the bundle Library - no machine-specific
-absolute paths.
+FROMLIB resolves relative paths under the bundle Library. Assembler,
+Debugger, Emitter, Hyper, Reference, Sources, and Testing live in the
+sibling System folder. FROMLIB still finds those names there
+(FROMLIB FLOAD Emitter/emitter.fth, FROMLIB FLOAD Testing/…). A path
+written as System/Debugger/… is relative to Documents/EditForth.
 
 Examples
 --------
@@ -34,10 +38,10 @@ Examples
 
 Assembler (ASMARM64)
 --------------------
-  Full source: Library/Assembler/asmarm64.fth
-  Interactive: Library/Assembler/ASSEMBLER.fth  →  CODE / END-CODE / C; / NEXT,
+  Full source: System/Assembler/asmarm64.fth
+  Interactive: System/Assembler/ASSEMBLER.fth  →  CODE / END-CODE / C; / NEXT,
                (64Forth ITC only; not loaded by 64TCOM; does not redefine ASSEMBLER)
-  Tests:       Library/Assembler/ASMARMTESTS.fth  →  ASM-TESTS
+  Tests:       System/Assembler/ASMARMTESTS.fth  →  ASM-TESTS
   Twin copies: Documents/64TCOM/64TCOMARM64/ASMARM64.fth + ASMARMTESTS.fth
   Last synced: Aug 23, 2026 3:16 PM (see header stamp in both .fth files)
   TCOM loads only the pack assembler via TARGETARM64.

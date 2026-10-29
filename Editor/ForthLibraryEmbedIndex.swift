@@ -3,7 +3,7 @@
 //  EditForth
 //
 //  Chunk + embed Library Sample (or configured folder) and always
-//  Library/Reference (ANS Forth-2012 txt) via nomic-embed-text. On-disk index
+//  System/Reference (ANS Forth-2012 txt) via nomic-embed-text. On-disk index
 //  under Application Support; incremental by file mtime/size.
 //  Auto-rebuild when Library folder or file set drifts (ensureFresh).
 //
@@ -147,7 +147,7 @@ enum ForthLibraryEmbedIndex {
             }
         } else {
             // Fall back to user Documents Reference so ANS txt still indexes.
-            add(ForthMenuSupport.userTreeURL.appendingPathComponent("Library/Reference", isDirectory: true))
+            add(ForthMenuSupport.userTreeURL.appendingPathComponent("System/Reference", isDirectory: true))
         }
         return roots
     }

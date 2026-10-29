@@ -1,6 +1,6 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.6.0** / build **27** (no disk image yet; shipped image remains **2.5.6**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.5.4** / build **24**. Before that **2.5.2** / build **22**, **2.5.1** / build **21**, **2.5.0** / build **19**, and **2.3.9** / build **18** (two apps on the DMG). **2.6.0:** file list, editor-only tabs, status bar, fixed window title, Restart, boot module lines on Show Boot Messages. **2.5.6:** Ask Forth circled help opens a dialog. **2.5.5:** Ask Forth context window (Ollama `num_ctx`, default 32K). **2.5.4:** Ask Forth keeps one session file (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
+**Baseline:** **2.6.0** / build **27** (no disk image yet; shipped image remains **2.5.6**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.5.4** / build **24**. Before that **2.5.2** / build **22**, **2.5.1** / build **21**, **2.5.0** / build **19**, and **2.3.9** / build **18** (two apps on the DMG). **2.6.0:** file list (Docs open, GettingStarted.txt), editor-only tabs, status bar, fixed window title, System folder (AutoLoad included), RUN from the included file's last definition, Restart, boot module lines on Show Boot Messages. **2.5.6:** Ask Forth circled help opens a dialog. **2.5.5:** Ask Forth context window (Ollama `num_ctx`, default 32K). **2.5.4:** Ask Forth keeps one session file (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
 **Updated:** 2026-10-29.
 
 **Scope:** EditForth is one app as of 2.5.0 (editor process + companion process). The 64Forth scheme still builds a standalone app. Standalone 64Forth **1.5.4** / 64Edit repos are historical; no backport (see 3.3).
@@ -24,7 +24,7 @@
 
 **Why:** Break ASAP sets `debug_floor = 0` so the first pause can land in the current frame. `next_debug` used `cbz floor, 2f`, which jumped past the step-over and step-out checks. `DBG-STEP-OVER` still stored `debug_over`, but nothing read it.
 
-**Solution:** In `Forth/Kernel/forth.s`, a zero floor branches to the over/out checks (`cbz floor, 20f`), not to the pause peek. Over and out still run when floor is 0. Kernel rebuild required. `Resources/Library/Sources/forth.s` is kept in sync with `Forth/Kernel/forth.s`.
+**Solution:** In `Forth/Kernel/forth.s`, a zero floor branches to the over/out checks (`cbz floor, 20f`), not to the pause peek. Over and out still run when floor is 0. Kernel rebuild required. `Resources/System/Sources/forth.s` is kept in sync with `Forth/Kernel/forth.s`.
 
 ### 1.2 Literal and branch highlight — **Fixed**
 
@@ -32,7 +32,7 @@
 
 **Why:** dbg-map has one slot per body cell. The payload slot is empty. Pause IP often lands there. `DBG-MAP-CELL#` is `DBG-BODY#` then `1-` (kernel counts from CFA+8; the map indexes from `>BODY`, CFA+16). That index math was already correct; the empty slot was the miss.
 
-**Solution:** `DBG-MAP-SPAN-RESOLVE` in `Library/Debugger/dbg-map.fth` uses the current slot when `len <> 0`. If the slot is empty and the previous kind is LIT, SLIT, or BR, it uses the previous slot’s span. `DBG-PUBLISH-SPAN` and `DBG-MAP-HL` call it. Smoke: `Testing/DbgSpan/span-check.fth` (`DBG-SPAN: PASS`).
+**Solution:** `DBG-MAP-SPAN-RESOLVE` in `System/Debugger/dbg-map.fth` uses the current slot when `len <> 0`. If the slot is empty and the previous kind is LIT, SLIT, or BR, it uses the previous slot’s span. `DBG-PUBLISH-SPAN` and `DBG-MAP-HL` call it. Smoke: `Testing/DbgSpan/span-check.fth` (`DBG-SPAN: PASS`).
 
 **DO-CLOCK follow-up (fixed):** Step Over in `DO-CLOCK` jumped because branch alignment tried `IF` before `WHILE` and `ELSE` before `REPEAT`. The first hit was a later `IF`/`ELSE`, so `WHILE`, `REPEAT`, and the words between them never got spans. Name fallback then highlighted the wrong occurrence. `DBG-ALIGN-BRANCH` keeps the **closest** forward alias (`IF`/`WHILE`/`UNTIL`, or `ELSE`/`REPEAT`/`AGAIN`). After the fix, every `DO-CLOCK` call slot has a span in source order (`WHILE` at the inner `0BRANCH`, `REPEAT` at the following `BRANCH`, `UNTIL` at the outer `0BRANCH`). Restart the companion so Autoload reloads `dbg-map.fth`.
 
@@ -94,7 +94,7 @@
 
 **Problem:** Autoload reads `~/Documents/EditForth/Library`. The ship copy is `Forth/Resources/Library`. They are not the same files. Update User Data only copies missing files, so a newer Debugger library in the app never replaced a stale Documents copy.
 
-**Solution:** `FileHost.syncNewerShippedFiles` copies shipped `Library`, `AutoLoad`, and `Docs` files into Documents when the shipped file is missing or newer. A Documents file that is newer than the app is left alone. Called at the end of `installUserTree` (launch and **Update User Data**). **Restore Shipped Files** still replaces the whole tree.
+**Solution:** `FileHost.syncNewerShippedFiles` copies shipped `Library`, `System` (including AutoLoad), and `Docs` files into Documents when the shipped file is missing or newer. A Documents file that is newer than the app is left alone. Called at the end of `installUserTree` (launch and **Update User Data**). **Restore Shipped Files** still replaces the whole tree.
 
 ### 2.1 Compare with Disk did not watch the file — **Fixed**
 
@@ -106,7 +106,7 @@
 
 **Problem:** F5 / RUN always filled the console from `LAST`.
 
-**Solution:** `prepareRunLine(_:name:)` types a highlighted word when the selection is one Forth word (`forthHighlightedWord`). A bare caret is ignored, so the `\` on the first line of a file is not the run word. Otherwise it queries `LAST`. Return still runs the line. ⌘F5 is `DEBUG`, ⌘⇧F5 is `BPGO`. The editor, the global F5 monitor, the Forth menu, and the RUN button all use that rule.
+**Solution:** `prepareRunLine(_:name:)` types a highlighted word when the selection is one Forth word (`forthHighlightedWord`). A bare caret is ignored, so the `\` on the first line of a file is not the run word. With nothing selected, it types the last `: NAME` in the file just passed to INCLUDE or FLOAD (`ForthColonScan`). If that file has no colon definition, it queries `LAST`. Return still runs the line. ⌘F5 is `DEBUG`, ⌘⇧F5 is `BPGO`. The editor, the global F5 monitor, the Forth menu, and the RUN button all use that rule. Restart clears the remembered name.
 
 ### 2.3 EMIT had no function key — **Fixed**
 
@@ -142,7 +142,7 @@ The 2.2.0 DMG includes this working tree: kernel rebuild, `DBG-MAP-SPAN-RESOLVE`
 
 ### 1.10 Two copies of the kernel sources — **Not worth a change**
 
-`Forth/Kernel/` is what you edit. The 64Forth **Copy Library** build phase copies `forth.s`, `kernel_api.h`, the boot `.inc` files, and the kernel `.fth` files into `Forth/Resources/Library/Sources/` and then into the app. A debug or release build of the companion does that. `release.sh` does not copy them itself. `Library/Sources/README.txt` lives only in Sources.
+`Forth/Kernel/` is what you edit. The **Copy System** build phase copies `forth.s`, `kernel_api.h`, the boot `.inc` files, and the kernel `.fth` files into `Forth/Resources/System/Sources/` and then into the app. A debug or release build of the companion does that. `release.sh` does not copy them itself. `System/Sources/README.txt` lives only in Sources.
 
 ### 3.1 GRAPHICS window is not the console — **Limit**
 
@@ -194,7 +194,7 @@ A load that prints `memory access error` returns to the console. `BYE` after tha
 
 ### 3.3 Standalone 64Forth is still 1.5.4 — **Won't do**
 
-Standalone Win32Forth/64Forth (**1.5.4**) and 64Edit do not get these debugger/editor fixes. A cherry-pick of `forth.s`, `kernel_api.h`, and `Library/Debugger` into the old tree is wasted dual maintenance.
+Standalone Win32Forth/64Forth (**1.5.4**) and 64Edit do not get these debugger/editor fixes. A cherry-pick of `forth.s`, `kernel_api.h`, and `System/Debugger` into the old tree is wasted dual maintenance.
 
 **Decision:** Keep EditForth (and its in-tree companion) as the living line. Archive the standalone **64Forth** / **64Edit** GitHub repos when ready and leave **v1.5.4** as history. If a future “64Forth + some other editor” is needed, start from EditForth and extract the companion rather than revive the old 64Forth project.
 

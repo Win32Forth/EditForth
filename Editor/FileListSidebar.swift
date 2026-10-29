@@ -3,7 +3,8 @@
 //  EditForth
 //
 //  Left-hand list of the folders and files under one directory.
-//  The directory starts at ~/Documents/EditForth. New, Save, and Share
+//  The directory starts at ~/Documents/EditForth with Docs open.
+//  New, Save, and Share
 //  use the same document actions as the File menu. Share runs Save As.
 //
 
@@ -38,6 +39,10 @@ final class FileListModel: ObservableObject {
 
     init() {
         root = ForthMenuSupport.userTreeURL.standardizedFileURL
+        let docs = root.appendingPathComponent("Docs", isDirectory: true)
+        if FileManager.default.fileExists(atPath: docs.path) {
+            expanded = [docs.standardizedFileURL.path]
+        }
         startWatching()
         reload()
     }

@@ -10,7 +10,7 @@ Canonical code: `64TCOMARM64/ASMARM64.fth`.
 **Phase target:** 3.2 Assembler toolkit  
 **Pack release:** 64TCOM ARM64 **Version 0.9** (with 64Forth **1.4.1**; last dual ship was **1.1.9** / pack with **1.2.0**)  
 **Assembler sync stamp:** `Synced Aug 23, 2026 3:16 PM` in both `ASMARM64.fth` headers  
-**64Forth-only:** `Library/Assembler/ASSEMBLER.fth` — interactive ITC `CODE` / `END-CODE` (not used by 64TCOM; does not redefine `ASSEMBLER` → `ASMARM64`)
+**64Forth-only:** `System/Assembler/ASSEMBLER.fth` — interactive ITC `CODE` / `END-CODE` (not used by 64TCOM; does not redefine `ASSEMBLER` → `ASMARM64`)
 
 ---
 
@@ -34,7 +34,7 @@ Make **`64TCOMARM64/ASMARM64.fth`** a **practical AArch64 assembler toolkit** th
 - [x] Emit backend abstraction (`HERE-T` / `C,-T` / `C!-T` / `C@-T` / `,-T` on both hosts)
 - [x] `\ANS` bootstrap (no full `TARGETARM64`): DIRECTIVE, DEFERs, host buffer, `U>=`
 - [x] **Overlay:** `MARKER ASMARM64-OVERLAY`; `ASMARM64-DISCARD` (before marker) frees buffers + runs marker
-- [x] 64Forth `Library/Assembler/asmarm64.fth` load helper
+- [x] 64Forth `System/Assembler/asmarm64.fth` load helper
 - [x] Smoke: host load → `ASM-HOST-SMOKE` → discard (agent verified 2026-08-23)
 - [x] Regression: `FLOAD TARGETARM64.fth` full pack load OK (agent verified)
 
@@ -118,8 +118,8 @@ ASMARM64-DISCARD                       \ forget words + free buffers
 | Item | Today |
 |------|--------|
 | Pack home | `64TCOM/64TCOMARM64/ASMARM64.fth` — loaded by `TARGETARM64` only |
-| Library home | `64Forth/.../Library/Assembler/asmarm64.fth` — `FROMLIB` only; **not** loaded by TCOM |
-| Interactive CODE | `Library/Assembler/ASSEMBLER.fth` — 64Forth ITC `CODE`/`END-CODE`/`NEXT,`; **not** loaded by TCOM |
+| Library home | `64Forth/.../System/Assembler/asmarm64.fth` — `FROMLIB` only; **not** loaded by TCOM |
+| Interactive CODE | `System/Assembler/ASSEMBLER.fth` — 64Forth ITC `CODE`/`END-CODE`/`NEXT,`; **not** loaded by TCOM |
 | Sync | Edit both (or copy pack → Library) when changing the assembler |
 | Load path (TCOM) | `FLOAD TARGETARM64.fth` → `64HOST` → pack `ASMARM64` → OPT/LIB/SIM/… |
 | Emit backend | `W,` → `C,-T` / `HERE-T` / `PATCH-W` / `W@-T` (target CODE image) |
@@ -227,7 +227,7 @@ ASMARM64-DISCARD                       \ forget words + free buffers
 | `64TCOM/64TCOMARM64/README.txt` | Dual-load / 64Forth / discard |
 | `64TCOM/STATUS.md` | Point at STATUSASM64 + Phase 3.2 |
 | `64TCOM/64DESIGN/STATUS.txt` | Phase checkbox |
-| `64Forth/.../Library/Assembler/asmarm64.fth` | Load helper |
+| `64Forth/.../System/Assembler/asmarm64.fth` | Load helper |
 | `64Forth/.../Library/README.txt` | Assembler entry |
 
 ---

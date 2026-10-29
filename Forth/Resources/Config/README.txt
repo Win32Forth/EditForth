@@ -43,7 +43,7 @@ HYPER.NDX format (v1 text)
   - Lines starting with @ set the current source file for following entries.
   - Paths are relative, forward-slash style:
         Kernel/forth.s
-        Library/Hyper/hyper.fth
+        System/Hyper/hyper.fth
     (Library/* is rewritten from Resources/Library/* at build time.
      In-app Library/Editor was removed in v1.5.2; use 64Edit.)
   - Lookup is case-insensitive (matches 64Forth FIND).
@@ -56,7 +56,7 @@ Resolution roots (runtime — Phase 2 VIEW)
 -----------------------------------------
   1. Load index from:  Contents/Resources/Config/HYPER.NDX
   2. Open source path by resolving against:
-       - Bundle Resources/Library/* (includes Library/Sources/ kernel files)
+       - Bundle Resources/Library/* and Resources/System/* (System/Sources/ is the kernel)
        - Developer checkout (64Forth/…) when present / HYPER_ROOT
        - Application Support overlay for writable Config/
 

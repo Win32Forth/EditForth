@@ -19056,7 +19056,7 @@ eval_arg_len:   .quad 0
 forth_init_str:
     .incbin "kernel1.fth"
     .incbin "kernel2.fth"
-    // BREAK/BPGO Forth UI: Library/Debugger/debug-bp.fth (AutoLoad, before Editor)
+    // BREAK/BPGO Forth UI: System/Debugger/debug-bp.fth (AutoLoad, before Editor)
     .incbin "vocemit.fth"
     .incbin "app-output.fth"
     .incbin "app-points.fth"

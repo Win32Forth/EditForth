@@ -3307,6 +3307,19 @@ final class KernelBridge {
         return evaluate("S\" \(escaped)\" INCLUDED")
     }
 
+    /// Directory that contains System/ and Library/ for a shipped autoload path.
+    /// `…/Resources/System/AutoLoad/autoload.fth` → `…/Resources`.
+    private static func bootRoot(forAutoLoad autoURL: URL) -> URL {
+        var dir = autoURL.deletingLastPathComponent()
+        if dir.lastPathComponent.caseInsensitiveCompare("AutoLoad") == .orderedSame {
+            dir = dir.deletingLastPathComponent()
+        }
+        if dir.lastPathComponent.caseInsensitiveCompare("System") == .orderedSame {
+            dir = dir.deletingLastPathComponent()
+        }
+        return dir
+    }
+
     /// Phase 4 AutoLoad boot.
     @discardableResult
     func runAutoLoadIfPresent() -> Bool {
@@ -3315,9 +3328,8 @@ final class KernelBridge {
 
         let host = FileHost.shared
         // EditForth: boot with cwd at Documents/EditForth so Autoload can
-        // REQUIRE Library/… without FROMLIB (AutoLoad is a subfolder of the tree).
-        let bootRoot = host.userTreeURL
-            ?? autoURL.deletingLastPathComponent().deletingLastPathComponent()
+        // REQUIRE System/… without FROMLIB. AutoLoad lives in System/AutoLoad.
+        let bootRoot = host.userTreeURL ?? Self.bootRoot(forAutoLoad: autoURL)
         let savedProcess = FileManager.default.currentDirectoryPath
 
         host.logicalCurrentDirectory = bootRoot.path

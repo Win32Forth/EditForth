@@ -52,9 +52,10 @@ nonisolated enum EditorRequest: Codable, Equatable {
     case undock
     /// Push one KEY code while the companion kernel waits (ASCII or tagged).
     case pushKey(code: Int32)
-    /// Copy missing shipped Library/AutoLoad/Docs into Documents/EditForth.
+    /// Copy missing shipped Library/System/Docs into Documents/EditForth.
+    /// AutoLoad is inside System.
     case updateUserTree
-    /// Wipe/replace Documents/EditForth Library/AutoLoad/Docs from the companion
+    /// Wipe/replace Documents/EditForth Library/System/Docs from the companion
     /// bundle. When `renameFirst` is true, rename EditForth → EditForth.User* first.
     case restoreUserTree(renameFirst: Bool)
     /// Append retained cold-bootstrap emit (`Loading:` / `Finished Loading:`) to the

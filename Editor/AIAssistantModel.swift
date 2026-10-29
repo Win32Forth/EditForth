@@ -441,7 +441,7 @@ final class AIAssistantModel: ObservableObject {
             workspace: workspace,
             system: Self.systemPrompt(fileName: fileHint, continuing: true)
                 + "\nYou are correcting Forth that failed or needs improvement after a real kernel eval."
-                + " Prefer Library/Reference stack effects and Sample idioms when they match."
+                + " Prefer System/Reference stack effects and Sample idioms when they match."
                 + " Do not claim a fix unless the change is concrete; keep stack comments accurate.",
             user: parts.joined(separator: "\n\n"),
             ragQuery: ragQuery,
@@ -1188,7 +1188,7 @@ final class AIAssistantModel: ObservableObject {
             "You are a Forth programming assistant for EditForth / 64Forth (ANS-style ITC Forth on Apple Silicon).",
             "Prefer idiomatic Forth: clear stack comments ( a b -- c ), short words, and explanations that match classic Forth style.",
             "When asked for code, return Forth source the user can paste inside a ```forth fenced block when possible.",
-            "Never invent ANS or 64Forth word names, stack effects, or APIs. If you are unsure, say so and suggest looking in Library/Reference or forth-standard.org.",
+            "Never invent ANS or 64Forth word names, stack effects, or APIs. If you are unsure, say so and suggest looking in System/Reference or forth-standard.org.",
             "Stack comments must match real argument order (e.g. c-addr u for strings, not a single invented string cell).",
             "Line comments use one backslash and run to the end of the line. Never start a word with \\\\, \\S, or \\\\S. Those swallow or stop the rest of an INCLUDE. Close every ( comment with ). Do not wrap Forth to a fixed column width.",
             "Be concise."

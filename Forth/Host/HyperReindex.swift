@@ -160,7 +160,7 @@ final class HyperReindexHost {
         let load =
             "ONLY FORTH DEFINITIONS VOCABULARY HYPER-VOC "
             + "ONLY FORTH ALSO HYPER-VOC DEFINITIONS "
-            + "S\" Library/Hyper/hyper-index.fth\" INCLUDED"
+            + "S\" System/Hyper/hyper-index.fth\" INCLUDED"
         let build = "S\" \(pathFile.path)\" HX-SET-OUT-FILE MIN-HYPER-NOISE ON HX-BUILD-INDEX"
         let capture = PipeCapture()
         let process = Process()

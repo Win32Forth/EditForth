@@ -17,7 +17,7 @@ enum ForthMenuSupport {
             .appendingPathComponent("EditForth", isDirectory: true)
     }
 
-    /// Finder window on Documents/EditForth (Library, AutoLoad, Docs, Config).
+    /// Finder window on Documents/EditForth (Library, System, Docs).
     static func openUserTree() {
         let url = userTreeURL
         if FileManager.default.fileExists(atPath: url.path) {
@@ -178,6 +178,9 @@ enum ForthMenuSupport {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         let included = "S\" \(escaped)\" INCLUDED"
+        let source = (try? String(contentsOf: url, encoding: .utf8))
+            ?? (try? String(contentsOf: url, encoding: .isoLatin1))
+        forth.noteIncludedDefinition(source.flatMap { ForthColonScan.lastName(in: $0) })
         if autoAnew {
             let marker = moduleMarkerName(for: url)
             // Clear EMIT-NO-* so a prior file's directives do not stick.
@@ -211,7 +214,7 @@ enum ForthMenuSupport {
         workspace.openPanel(startDirectory: forth.panelStartURL)
     }
 
-    /// Forth → Update User Data: fill missing Library/AutoLoad/Docs from companion ship.
+    /// Forth → Update User Data: fill missing Library/System/Docs from companion ship.
     static func updateUserData(forth: ForthConnectionManager) {
         guard forth.isConnected else {
             forth.noteUserError("Start Forth before updating Documents/EditForth")
@@ -230,7 +233,7 @@ enum ForthMenuSupport {
         alert.alertStyle = .critical
         alert.messageText = "Restore shipped EditForth files?"
         alert.informativeText =
-            "This replaces Library, AutoLoad, and Docs in Documents/EditForth. " +
+            "This replaces Library, System, and Docs in Documents/EditForth. " +
             "Any changes you made in that folder will be lost unless you rename it first."
         alert.addButton(withTitle: "Rename EditForth")
         alert.addButton(withTitle: "Replace EditForth")

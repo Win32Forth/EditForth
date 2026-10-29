@@ -84,6 +84,14 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     private var pendingRunKind: RunLineKind?
+    /// Last `: NAME` in the file most recently passed to INCLUDE / FLOAD.
+    /// RUN uses this when nothing is highlighted. Cleared on Restart.
+    private var includedRunWord: String?
+
+    func noteIncludedDefinition(_ name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        includedRunWord = trimmed.isEmpty ? nil : trimmed
+    }
 
     /// F5 keyCode 96 → run-line kind from chords. Nil if not F5 or Option/Control held.
     /// Unions `NSEvent.modifierFlags` because some F-key deliveries omit ⌘/⇧ on the event.
@@ -304,7 +312,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     /// Put `NAME` / `DEBUG NAME` / `BPGO NAME` on the console input line.
-    /// `name` is a highlighted word. Empty uses LAST. Does not submit — Return runs the line.
+    /// `name` is a highlighted word. With no highlight, use the last colon
+    /// definition in the file just included. Otherwise use LAST.
+    /// Does not submit — Return runs the line.
     func prepareRunLine(_ kind: RunLineKind, name overrideName: String? = nil) {
         guard isConnected else {
             noteUserError("Forth is not connected")
@@ -318,6 +328,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
            !raw.isEmpty,
            raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
             applyRunLine(kind, name: raw)
+            return
+        }
+        if let included = includedRunWord {
+            applyRunLine(kind, name: included)
             return
         }
         pendingRunKind = kind
@@ -472,6 +486,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleByeOutstanding = false
         launchConnectGeneration &+= 1
         pendingRunKind = nil
+        includedRunWord = nil
         lastError = nil
         isDebugSessionArmed = false
         isDebugPaused = false

@@ -1,0 +1,54 @@
+Getting started
+---------------
+
+Welcome to EditForth.
+
+This is the Mac app for the Forth computer language. It includes
+example programs you can try and change. The tab at the top of this
+window is GettingStarted. Click other files, then click that tab to
+come back here.
+
+Wait until the console shows ok(0)> before you type a command.
+
+The first demo is HELLO.fth, in Library/Sample. The list on the left
+starts in your Documents/EditForth folder, with Docs open. Click a
+folder name to open or close it. There is no separate read-only list.
+
+Click Library, then Sample, until both are open. Click HELLO.fth once.
+It opens in this window. Click the GettingStarted tab to come back.
+
+1. Press INCLUDE. That is the button under the editor.
+   F4 does the same thing. The Forth menu has INCLUDE Current (F4).
+   INCLUDE compiles the file. If you changed it, INCLUDE saves first.
+   The console prints:
+
+       Type HELLO <return> to run this Hello World program
+
+2. Press RUN, or F5. Nothing is selected after INCLUDE, so RUN types
+   the last definition in the file you just included. In HELLO.fth
+   that word is HELLO. It shows up on the console line. Press Return
+   to run it. RUN does not run the word by itself.
+   To run a different word, select that one word first. Double-click
+   it, or drag across it, then press RUN. RUN types the selected word
+   instead.
+   You can also type HELLO after the prompt and press Return.
+
+The console prints:
+
+    Hello World!
+
+These files are on your disk, under Documents/EditForth. Save writes
+the file that is open. Share is Save As. New starts a blank file.
+The folder button above the list can show a different folder.
+File → Open opens a file from anywhere on the disk.
+
+Restart, to the right of Pause, boots a fresh Forth and clears the
+console. It shows Restarting Forth…. It does not include the open
+file again. INCLUDE the file again after Restart.
+
+Library holds the samples. System holds the Forth system sources,
+including AutoLoad. You can read and edit those files here. The
+application itself is built from the EditForth Xcode project.
+
+EditForth is public domain. You can do what you want with it, and
+you are responsible for what you do with it.

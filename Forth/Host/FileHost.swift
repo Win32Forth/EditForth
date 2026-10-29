@@ -151,68 +151,92 @@ final class FileHost {
         }
         return bundleLibraryURL
     }
-    
-    var autoLoadURL: URL? {
+
+    var userSystemURL: URL? {
+        userTreeURL?.appendingPathComponent("System", isDirectory: true)
+    }
+
+    var bundleSystemURL: URL? {
+        if let root = resourcesURL {
+            let dir = root.appendingPathComponent("System", isDirectory: true)
+            if FileManager.default.fileExists(atPath: dir.path) { return dir }
+        }
+        return Bundle.main.url(forResource: "System", withExtension: nil)
+    }
+
+    /// System root — Documents/EditForth/System (Assembler, Debugger, Emitter,
+    /// Hyper, Reference, Sources, Testing). Same preference as Library: user
+    /// tree, then the app bundle.
+    var systemURL: URL? {
         let fm = FileManager.default
-        if let user = userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true),
+        if let user = userSystemURL,
            fm.fileExists(atPath: user.path) {
             return user
         }
-        if let root = resourcesURL {
-            let dir = root.appendingPathComponent("AutoLoad", isDirectory: true)
-            if fm.fileExists(atPath: dir.path) { return dir }
+        return bundleSystemURL
+    }
+
+    /// Top-level names that moved from Library into System. FROMLIB and old
+    /// `Library/<name>/…` index paths still resolve here.
+    private static let systemFolderNames: Set<String> = [
+        "assembler", "autoload", "debugger", "emitter", "hyper", "reference", "sources", "testing"
+    ]
+
+    private static let shippedUserTreeNames = ["Library", "System", "Docs"]
+
+    private func isMovedSystemFolder(_ relative: String) -> Bool {
+        let trimmed = relative.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let folder: String
+        if let slash = trimmed.firstIndex(of: "/") {
+            folder = String(trimmed[..<slash])
+        } else {
+            folder = trimmed
         }
-        return Bundle.main.url(forResource: "AutoLoad", withExtension: nil)
+        return Self.systemFolderNames.contains(folder.lowercased())
     }
     
-    /// `Resources/AutoLoad/autoload.fth` if present (TZForth boot file name rules).
+    /// AutoLoad directory. Current tree is `System/AutoLoad`. A leftover
+    /// top-level `AutoLoad` is still accepted.
+    var autoLoadURL: URL? {
+        let fm = FileManager.default
+        for url in autoLoadDirectoryCandidates() {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                return url
+            }
+        }
+        return nil
+    }
+
+    private func autoLoadDirectoryCandidates() -> [URL] {
+        var list: [URL] = []
+        func add(_ url: URL?) {
+            guard let url else { return }
+            if !list.contains(where: { $0.path == url.path }) {
+                list.append(url)
+            }
+        }
+        add(userTreeURL?.appendingPathComponent("System/AutoLoad", isDirectory: true))
+        add(systemURL?.appendingPathComponent("AutoLoad", isDirectory: true))
+        add(resourcesURL?.appendingPathComponent("System/AutoLoad", isDirectory: true))
+        add(Bundle.main.url(forResource: "AutoLoad", withExtension: nil, subdirectory: "System"))
+        add(userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true))
+        add(resourcesURL?.appendingPathComponent("AutoLoad", isDirectory: true))
+        add(Bundle.main.url(forResource: "AutoLoad", withExtension: nil))
+        return list
+    }
+    
+    /// `System/AutoLoad/autoload.fth` if present (TZForth boot file name rules).
     var autoLoadFileURL: URL? {
         let fm = FileManager.default
         var candidates: [URL] = []
-
-        // User tree (Documents/EditForth/AutoLoad) — same names as the bundle
-        if let dir = userTreeURL?.appendingPathComponent("AutoLoad", isDirectory: true) {
+        for dir in autoLoadDirectoryCandidates() {
             candidates.append(dir.appendingPathComponent("autoload.fth"))
             candidates.append(dir.appendingPathComponent("AutoLoad.fth"))
-            if let files = try? fm.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: nil
-            ) {
-                for f in files where f.pathExtension.lowercased() == "fth" {
-                    if f.deletingPathExtension().lastPathComponent.lowercased() == "autoload" {
-                        candidates.append(f)
-                    }
-                }
-            }
-        }
-
-        // Shipped bundle (unchanged)
-        if let u = Bundle.main.url(
-            forResource: "autoload", withExtension: "fth", subdirectory: "AutoLoad"
-        ) {
-            candidates.append(u)
-        }
-        if let u = Bundle.main.url(
-            forResource: "AutoLoad", withExtension: "fth", subdirectory: "AutoLoad"
-        ) {
-            candidates.append(u)
         }
         if let root = resourcesURL {
-            candidates.append(root.appendingPathComponent("AutoLoad/autoload.fth"))
-            candidates.append(root.appendingPathComponent("AutoLoad/AutoLoad.fth"))
             candidates.append(root.appendingPathComponent("autoload.fth"))
         }
-        if let dir = autoLoadURL,
-           let files = try? fm.contentsOfDirectory(
-               at: dir, includingPropertiesForKeys: nil
-           ) {
-            for f in files where f.pathExtension.lowercased() == "fth" {
-                if f.deletingPathExtension().lastPathComponent.lowercased() == "autoload" {
-                    candidates.append(f)
-                }
-            }
-        }
-
         for url in candidates {
             if fm.fileExists(atPath: url.path) { return url }
         }
@@ -274,7 +298,7 @@ final class FileHost {
     }
 
     /// Developer tree root (`…/64Forth` with `Kernel/` + `Resources/`). Optional:
-    /// release builds ship assembly under `Library/Sources/` for VIEW without a tree.
+    /// release builds ship assembly under `System/Sources/` for VIEW without a tree.
     private var sourceTreeURLCache: URL?
     private var sourceTreeURLResolved = false
 
@@ -316,9 +340,9 @@ final class FileHost {
         return fm.fileExists(atPath: kernel.path) && fm.fileExists(atPath: resLib.path)
     }
 
-    /// Shipped kernel sources in the app bundle (`Library/Sources/forth.s`, …).
+    /// Shipped kernel sources (`System/Sources/forth.s`, …).
     var librarySourcesURL: URL? {
-        libraryURL?.appendingPathComponent("Sources", isDirectory: true)
+        systemURL?.appendingPathComponent("Sources", isDirectory: true)
     }
 
     /// Resolve a HYPER.NDX-style relative path (`Kernel/…`, `Library/…`, `Config/…`).
@@ -358,7 +382,7 @@ final class FileHost {
             return overlayBase.standardizedFileURL
         }
 
-        // Kernel/… in older NDX → Library/Sources/… in the bundle (release VIEW).
+        // Kernel/… in older NDX → System/Sources/… in the bundle (release VIEW).
         // Prefer shipped Sources; fall back to developer tree Kernel/.
         if n.hasPrefix("Kernel/") {
             let leaf = String(n.dropFirst("Kernel/".count))
@@ -374,25 +398,32 @@ final class FileHost {
             return nil
         }
 
-        if n.hasPrefix("Library/") {
-            let rest = String(n.dropFirst("Library/".count))
-            // Prefer bundle Library (same files the app ships)
-            if let lib = libraryURL {
-                let u = lib.appendingPathComponent(rest).standardizedFileURL
-                if fm.fileExists(atPath: u.path) { return u }
-            }
-            // Fall back to developer tree Resources/Library
-            if let tree = sourceTreeURL {
-                let u = tree
-                    .appendingPathComponent("Resources/Library", isDirectory: true)
-                    .appendingPathComponent(rest)
-                    .standardizedFileURL
-                return u
-            }
-            return libraryURL?.appendingPathComponent(rest).standardizedFileURL
+        // Old index keys (Library/Debugger, Library/Sources, …) follow the move.
+        if n.hasPrefix("Library/"), isMovedSystemFolder(String(n.dropFirst("Library/".count))) {
+            return resolveShippedFolder(
+                rest: String(n.dropFirst("Library/".count)),
+                folderURL: systemURL,
+                resourcesName: "System"
+            )
         }
 
-        // AutoLoad/… — product boot scripts (VIEW of MAIN after autoload)
+        if n.hasPrefix("Library/") {
+            return resolveShippedFolder(
+                rest: String(n.dropFirst("Library/".count)),
+                folderURL: libraryURL,
+                resourcesName: "Library"
+            )
+        }
+
+        if n.hasPrefix("System/") {
+            return resolveShippedFolder(
+                rest: String(n.dropFirst("System/".count)),
+                folderURL: systemURL,
+                resourcesName: "System"
+            )
+        }
+
+        // AutoLoad/… — legacy VIEW stamps. The folder now lives at System/AutoLoad.
         if n == "AutoLoad" || n.hasPrefix("AutoLoad/") {
             let rest = n == "AutoLoad" ? "" : String(n.dropFirst("AutoLoad/".count))
             if let auto = autoLoadURL {
@@ -400,14 +431,18 @@ final class FileHost {
                 if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
             }
             if let tree = sourceTreeURL {
-                let base = tree.appendingPathComponent("Resources/AutoLoad", isDirectory: true)
-                let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
-                if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
+                for folder in ["Resources/System/AutoLoad", "Resources/AutoLoad"] {
+                    let base = tree.appendingPathComponent(folder, isDirectory: true)
+                    let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
+                    if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
+                }
             }
             if let res = resourcesURL {
-                let base = res.appendingPathComponent("AutoLoad", isDirectory: true)
-                let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
-                return u.standardizedFileURL
+                for folder in ["System/AutoLoad", "AutoLoad"] {
+                    let base = res.appendingPathComponent(folder, isDirectory: true)
+                    let u = rest.isEmpty ? base : base.appendingPathComponent(rest)
+                    if fm.fileExists(atPath: u.path) { return u.standardizedFileURL }
+                }
             }
             return nil
         }
@@ -448,11 +483,13 @@ final class FileHost {
         }
         if specs.isEmpty {
             specs = [
-                "Resources/Library/Sources/forth.s",
-                "Resources/Library/Sources/boot_words.inc",
-                "Resources/Library/Sources/boot_words_end.inc",
-                "Resources/Library/Sources/colon_words.inc",
-                "Resources/Library/Sources/kernel_api.h",
+                "Resources/System/Sources/forth.s",
+                "Resources/System/Sources/boot_words.inc",
+                "Resources/System/Sources/boot_words_end.inc",
+                "Resources/System/Sources/colon_words.inc",
+                "Resources/System/Sources/kernel_api.h",
+                "Resources/System/**/*.fth",
+                "Resources/System/**/*.FTH",
                 "Resources/Library/**/*.fth",
                 "Resources/Library/**/*.FTH",
             ]
@@ -509,6 +546,60 @@ final class FileHost {
         return nil
     }
 
+    /// `Library/…` or `System/…` against the user tree, then the developer checkout.
+    private func resolveShippedFolder(rest: String, folderURL: URL?, resourcesName: String) -> URL? {
+        let fm = FileManager.default
+        if let base = folderURL {
+            let u = base.appendingPathComponent(rest).standardizedFileURL
+            if fm.fileExists(atPath: u.path) { return u }
+        }
+        if let tree = sourceTreeURL {
+            return tree
+                .appendingPathComponent("Resources/\(resourcesName)", isDirectory: true)
+                .appendingPathComponent(rest)
+                .standardizedFileURL
+        }
+        return folderURL?.appendingPathComponent(rest).standardizedFileURL
+    }
+
+    /// Bundle resourcesURL is already …/Contents/Resources, so a SPECS path
+    /// that starts with Resources/Library or Resources/System will not exist
+    /// under that root. Map those prefixes onto the shipped folder.
+    private func bundledSpecFile(_ spec: String) -> URL? {
+        let pairs: [(String, URL?)] = [
+            ("Resources/Library/", libraryURL),
+            ("Library/", libraryURL),
+            ("Resources/System/", systemURL),
+            ("System/", systemURL),
+        ]
+        let fm = FileManager.default
+        for (prefix, base) in pairs {
+            guard spec.hasPrefix(prefix), let base else { continue }
+            let rest = String(spec.dropFirst(prefix.count))
+            let u = base.appendingPathComponent(rest).standardizedFileURL
+            if fm.fileExists(atPath: u.path) { return u }
+        }
+        return nil
+    }
+
+    /// Glob root for a Library or System SPECS line. Other globs stay under `root`.
+    private func globBase(forSpec spec: String, root: URL) -> URL? {
+        let folders: [(String, String, URL?)] = [
+            ("Resources/Library/", "Library", libraryURL),
+            ("Library/", "Library", libraryURL),
+            ("Resources/System/", "System", systemURL),
+            ("System/", "System", systemURL),
+        ]
+        for (prefix, name, preferred) in folders {
+            guard spec.hasPrefix(prefix) else { continue }
+            if let tree = sourceTreeURL, root.path == tree.path {
+                return tree.appendingPathComponent("Resources/\(name)", isDirectory: true)
+            }
+            return preferred
+        }
+        return root
+    }
+
     /// Expand one SPECS pattern relative to source tree or bundle roots.
     private func expandHyperSpec(_ spec: String) -> [URL] {
         let fm = FileManager.default
@@ -525,36 +616,15 @@ final class FileHost {
                 let u = root.appendingPathComponent(s).standardizedFileURL
                 if fm.fileExists(atPath: u.path) { return [u] }
                 // Bundle resourcesURL is already …/Contents/Resources
-                if s.hasPrefix("Resources/Library/"), let lib = libraryURL {
-                    let rest = String(s.dropFirst("Resources/Library/".count))
-                    let u2 = lib.appendingPathComponent(rest).standardizedFileURL
-                    if fm.fileExists(atPath: u2.path) { return [u2] }
-                }
-                if s.hasPrefix("Library/"), let lib = libraryURL {
-                    let rest = String(s.dropFirst("Library/".count))
-                    let u2 = lib.appendingPathComponent(rest).standardizedFileURL
-                    if fm.fileExists(atPath: u2.path) { return [u2] }
-                }
+                if let bundled = bundledSpecFile(s) { return [bundled] }
             }
             return []
         }
 
-        // Resources/Library/**/*.fth  or  Library/**/*.fth
+        // Resources/Library/**/*.fth, Resources/System/**/*.fth, or a bare prefix.
         var results: [URL] = []
         for root in roots {
-            let libBase: URL
-            if s.hasPrefix("Resources/Library/") || s.hasPrefix("Library/") {
-                if let tree = sourceTreeURL, root.path == tree.path {
-                    libBase = tree.appendingPathComponent("Resources/Library", isDirectory: true)
-                } else if let lib = libraryURL {
-                    libBase = lib
-                } else {
-                    continue
-                }
-            } else {
-                // Other globs: under root
-                libBase = root
-            }
+            guard let libBase = globBase(forSpec: s, root: root) else { continue }
             let ext: String?
             if s.lowercased().hasSuffix(".fth") { ext = "fth" }
             else if s.lowercased().hasSuffix(".fs") { ext = "fs" }
@@ -615,6 +685,9 @@ final class FileHost {
             }
             return rel
         }
+        if let rel = relativePath(of: url, under: systemURL) {
+            return rel.isEmpty ? "System" : "System/" + rel
+        }
         if let rel = relativePath(of: url, under: libraryURL) {
             return "Library/" + rel
         }
@@ -622,7 +695,8 @@ final class FileHost {
             return rel.isEmpty ? "AutoLoad/" + url.lastPathComponent : "AutoLoad/" + rel
         }
         if let rel = relativePath(of: url, under: resourcesURL) {
-            if rel.hasPrefix("Library/") || rel.hasPrefix("AutoLoad/") || rel.hasPrefix("Config/") {
+            if rel.hasPrefix("Library/") || rel.hasPrefix("System/")
+                || rel.hasPrefix("AutoLoad/") || rel.hasPrefix("Config/") {
                 return rel
             }
             if !rel.isEmpty { return rel }
@@ -635,6 +709,7 @@ final class FileHost {
         var lines: [String] = []
         lines.append("Resources: \(resourcesURL?.path ?? "(not bundled — run the .app from Xcode)")")
         lines.append("Library:   \(libraryURL?.path ?? "— (missing from bundle)")")
+        lines.append("System:    \(systemURL?.path ?? "— (missing from bundle)")")
         lines.append("AutoLoad:  \(autoLoadURL?.path ?? "—")")
         if let boot = autoLoadFileURL {
             lines.append("autoload:  \(boot.lastPathComponent)")
@@ -651,12 +726,12 @@ final class FileHost {
         if let src = sourceTreeURL {
             lines.append("SrcTree:   \(src.path)")
         } else {
-            lines.append("SrcTree:   — (optional; Kernel VIEW uses Library/Sources)")
+            lines.append("SrcTree:   — (optional; Kernel VIEW uses System/Sources)")
         }
         if let ks = librarySourcesURL, FileManager.default.fileExists(atPath: ks.appendingPathComponent("forth.s").path) {
             lines.append("Sources:   \(ks.path)")
         } else {
-            lines.append("Sources:   — (Library/Sources not in bundle)")
+            lines.append("Sources:   — (System/Sources not in bundle)")
         }
         lines.append("Working folder: \(logicalCurrentDirectory)")
         return lines.joined(separator: "\n") + "\n"
@@ -690,9 +765,9 @@ final class FileHost {
 
     /// Resolve a load name for FLOAD/INCLUDE/REQUIRE/EDIT/OPEN-FILE.
     /// - Absolute / ~ → as-is
-    /// - `Kernel/` `Library/` `Config/` → hyper-style roots (VIEW / NDX)
-    /// - Relative + FROMLIB armed → under Resources/Library (flag cleared; path base only —
-    ///   nested relatives use the loaded file's directory via loadCwdStack in pinFileContents)
+    /// - `Kernel/` `Library/` `System/` `Config/` → hyper-style roots (VIEW / NDX)
+    /// - Relative + FROMLIB armed → under Library, or under System when the first
+    ///   folder is Assembler, Debugger, Emitter, Hyper, Reference, Sources, or Testing
     /// - Relative → logicalCurrentDirectory
     func resolveLoadPath(_ name: String, switchCwdForFromLib: Bool = true) -> URL? {
         var n = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -715,21 +790,23 @@ final class FileHost {
 
         let armed = fromLibraryArmed
         let base: URL
-        if armed, let lib = libraryURL {
+        if armed {
             clearFromLibrary()
-            base = lib
+            let fromSystem = isMovedSystemFolder(n)
+            let rooted = fromSystem ? systemURL : libraryURL
+            guard let rooted else {
+                lastLoadError = fromSystem
+                    ? "FROMLIB: Resources/System not found in app bundle"
+                    : "FROMLIB: Resources/Library not found in app bundle"
+                return nil
+            }
+            base = rooted
             // Remember session cwd so evaluate() can restore after a FROMLIB-named load.
-            // Nested relative FLOAD uses the *file's* folder (see beginLoadCwd), not Library root.
+            // Nested relative FLOAD uses the *file's* folder (see beginLoadCwd), not the root.
             if switchCwdForFromLib {
                 pushFromLibrarySessionFrame()
             }
         } else {
-            if armed {
-                clearFromLibrary()
-                // Armed but Library missing from bundle
-                lastLoadError = "FROMLIB: Resources/Library not found in app bundle"
-                return nil
-            }
             base = URL(fileURLWithPath: logicalCurrentDirectory, isDirectory: true)
         }
 
@@ -1180,8 +1257,9 @@ final class FileHost {
         UserDefaults.standard.set(scopedBookmarkData, forKey: bookmarksDefaultsKey)
     }
 
-    /// Copy shipped Library / AutoLoad / Docs into Documents/EditForth.
-    /// replaceExisting: true = wipe those three folders first (first-run or explicit restore).
+    /// Copy shipped Library / System / Docs into Documents/EditForth.
+    /// AutoLoad is inside System.
+    /// replaceExisting: true = wipe those folders first (first-run or explicit restore).
     private func userTreeDisplayPath() -> String {
         "Documents/EditForth"
     }
@@ -1195,7 +1273,7 @@ final class FileHost {
         do {
             try fm.createDirectory(at: dest, withIntermediateDirectories: true)
             if let res = Bundle.main.resourceURL {
-                for name in ["Library", "AutoLoad", "Docs"] {
+                for name in Self.shippedUserTreeNames {
                     let from = res.appendingPathComponent(name, isDirectory: true)
                     let to = dest.appendingPathComponent(name, isDirectory: true)
                     guard fm.fileExists(atPath: from.path) else { continue }
@@ -1207,16 +1285,12 @@ final class FileHost {
                     }
                 }
             }
-            // Config lives under the user tree for EditForth (not only App Support).
-            let configDest = dest.appendingPathComponent("Config", isDirectory: true)
-            if !fm.fileExists(atPath: configDest.path) {
-                try fm.createDirectory(at: configDest, withIntermediateDirectories: true)
-            }
             UserDefaults.standard.set(dest.path, forKey: firstRunDefaultDirKey)
             logicalCurrentDirectory = dest.path
             _ = fm.changeCurrentDirectoryPath(dest.path)
-            // Autoload reads Documents. Copy newer shipped Library / AutoLoad /
-            // Docs over stale copies; leave a newer user edit alone.
+            // Autoload reads Documents/EditForth/System/AutoLoad. Copy newer
+            // shipped Library / System / Docs over stale copies; leave a newer
+            // user edit alone.
             syncNewerShippedFiles()
             if replaceExisting {
                 msg("\nEditForth files restored\n")
@@ -1230,7 +1304,7 @@ final class FileHost {
         }
     }
 
-    /// Copy shipped Library / AutoLoad / Docs files into Documents when the
+    /// Copy shipped Library / System / Docs files into Documents when the
     /// shipped file is missing or newer. A Documents file that is newer than
     /// the app is left alone. Called from `installUserTree` (launch and
     /// Update User Data). Restore Shipped Files still replaces the whole tree.
@@ -1239,7 +1313,7 @@ final class FileHost {
         guard let res = Bundle.main.resourceURL else { return }
         guard let destRoot = userTreeURL else { return }
         var copied = 0
-        for name in ["Library", "AutoLoad", "Docs"] {
+        for name in Self.shippedUserTreeNames {
             copied += syncNewerTree(
                 from: res.appendingPathComponent(name, isDirectory: true),
                 to: destRoot.appendingPathComponent(name, isDirectory: true)
@@ -1908,7 +1982,7 @@ final class FileHost {
 
     /// Open a folder (or select a file) in Finder (macOS). On iOS, print the path.
     /// `activateFileViewerSelecting` is flaky for directories inside the .app
-    /// package (Library/AutoLoad/Docs under Contents/Resources); `open` is reliable.
+    /// package (Library/System/Docs under Contents/Resources); `open` is reliable.
     func revealInFinder(_ url: URL?) {
         guard let url else {
             msg("? folder not available in this build (missing from app bundle)\n")
@@ -1974,7 +2048,7 @@ extension FileHost {
         alert.alertStyle = .critical          // caution icon
         alert.messageText = "Restore shipped EditForth files?"
         alert.informativeText =
-            "This replaces Library, AutoLoad, and Docs in Documents/EditForth. " +
+            "This replaces Library, System, and Docs in Documents/EditForth. " +
             "Any changes you made in that folder will be lost unless you rename it first."
         alert.addButton(withTitle: "Rename EditForth")    // .alertFirstButtonReturn
         alert.addButton(withTitle: "Replace EditForth")   // .alertSecondButtonReturn

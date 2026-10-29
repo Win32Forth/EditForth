@@ -87,10 +87,10 @@ enum ForthLibraryRAG {
         return nil
     }
 
-    /// `Library/Reference` (Forth-2012 text, etc.) is always searched in addition to the
-    /// configured folder, unless that folder is already the whole Library (enumerator covers it).
+    /// `System/Reference` (Forth-2012 text, etc.) is always searched in addition to the
+    /// configured folder, unless that folder is already the whole System tree.
     static func referenceSearchRoots(primaryRoot: URL) -> [URL] {
-        if primaryRoot.lastPathComponent == "Library" {
+        if primaryRoot.lastPathComponent == "System" {
             return []
         }
         var roots: [URL] = []
@@ -104,9 +104,9 @@ enum ForthLibraryRAG {
             roots.append(std)
         }
         add(primaryRoot.deletingLastPathComponent().appendingPathComponent("Reference", isDirectory: true))
-        add(ForthMenuSupport.userTreeURL.appendingPathComponent("Library/Reference", isDirectory: true))
+        add(ForthMenuSupport.userTreeURL.appendingPathComponent("System/Reference", isDirectory: true))
         if let app = SixtyFourForthLocator.locateApp() {
-            add(app.appendingPathComponent("Contents/Resources/Library/Reference", isDirectory: true))
+            add(app.appendingPathComponent("Contents/Resources/System/Reference", isDirectory: true))
         }
         return roots
     }

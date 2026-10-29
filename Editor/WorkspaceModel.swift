@@ -112,7 +112,8 @@ final class WorkspaceModel: ObservableObject {
     }
 
     /// Highlighted Forth word in the selected file, else the split pane.
-    /// Nil when nothing is selected, so RUN / F5 can use LAST.
+    /// Nil when nothing is selected, so RUN / F5 can use the last
+    /// definition in the file just included.
     func forthHighlightedWord() -> String? {
         if let word = selectedTab?.forthHighlightedWord() { return word }
         return splitSecondaryTab?.forthHighlightedWord()
@@ -778,11 +779,41 @@ final class WorkspaceModel: ObservableObject {
         refreshDocumentEdited()
     }
 
-    /// Cold-launch only: one Untitled when nothing was opened via `open -a` / pending-goto.
-    /// Closing the last tab leaves the empty placeholder (New File / Open…).
-    func newUntitledIfEmpty() {
+    /// Cold-launch only: open Docs/GettingStarted.txt when nothing was opened
+    /// via `open -a` / pending-goto. Closing the last tab leaves the empty
+    /// placeholder (New File / Open…).
+    func openStartupDocument() {
         guard tabs.isEmpty, searchTabs.isEmpty, diffTabs.isEmpty else { return }
+        let note = ForthMenuSupport.userTreeURL
+            .appendingPathComponent("Docs/GettingStarted.txt", isDirectory: false)
+        if !FileManager.default.fileExists(atPath: note.path) {
+            seedStartupDocument(at: note)
+        }
+        if FileManager.default.fileExists(atPath: note.path) {
+            _ = openURL(note, viewMode: false)
+            return
+        }
         _ = newFile()
+    }
+
+    /// Put the shipped note in Documents/EditForth/Docs when the user tree
+    /// does not have it yet. The companion sync can still be in flight.
+    private func seedStartupDocument(at note: URL) {
+        let fm = FileManager.default
+        guard let shipped = Bundle.main.url(
+            forResource: "GettingStarted",
+            withExtension: "txt",
+            subdirectory: "Docs"
+        ), fm.fileExists(atPath: shipped.path) else { return }
+        let dir = note.deletingLastPathComponent()
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if !fm.fileExists(atPath: note.path) {
+                try fm.copyItem(at: shipped, to: note)
+            }
+        } catch {
+            return
+        }
     }
 
     // MARK: - Pending goto / debug

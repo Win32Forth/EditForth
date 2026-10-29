@@ -9,8 +9,8 @@
 import Foundation
 
 enum SixtyFourForthLocator {
-    /// This process's app bundle (EditForth.app). Library, AutoLoad, Docs, and
-    /// Config are copied into that bundle at build time.
+    /// This process's app bundle (EditForth.app). Library, System (including
+    /// AutoLoad), Docs, and Config are copied into that bundle at build time.
     nonisolated static func locateApp() -> URL? {
         let url = Bundle.main.bundleURL
         var isDir: ObjCBool = false

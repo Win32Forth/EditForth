@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspace.handlePendingGoto()
         }
         if workspace.tabs.isEmpty {
-            workspace.newUntitledIfEmpty()
+            workspace.openStartupDocument()
         }
         workspace.refreshDocumentEdited()
         DispatchQueue.main.async { [weak self] in

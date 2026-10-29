@@ -103,7 +103,7 @@ Status notes look like `· Library 8 hybrid: …`. If the embed index is missing
 
 For EditForth app / UI / debugger questions, choose the EditForth project root (or `Editor/`) so Ask can see Swift sources and Docs. Heavy folders (`.git`, `DerivedData`, `finetune`, `Build`, `.build`, `xcuserdata`, `Pods`, `node_modules`, model weights) are skipped.
 
-In addition, when your folder is under **Library**, Ask Forth also searches **`Library/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
+In addition, when your folder is under **Library**, Ask Forth also searches **`System/Reference/`**, which holds plain-text chapters of the **Forth 2012 Standard** (from forth-standard.org / Forth 200x HTML). That way stack effects and standard word meanings can appear in Library context even when the main folder is Sample. Interactive standard: https://forth-standard.org/
 
 When Library excerpts are present, Ask Forth tells the model to treat them as authoritative for word names and stack effects, cite `path:line` when helpful, and say **Not found in the provided Library context** instead of inventing APIs. If Library search returns no hits, the model is instructed to avoid fabricating stack effects.
 
@@ -141,7 +141,7 @@ Typical Sample + Reference size is on the order of hundreds of chunks and a few�
 
 **Stack-effects cheat sheet**
 
-`Library/Reference/Stack-effects-cheatsheet.txt` lists stack comments and 64Forth idioms models often invent wrong (`COMPARE` vs `=`, `TYPE`, `CMOVE`/`MOVE`, file `ior`, `DO` limits, record buffers). It is indexed with the other Reference text — do not `INCLUDE` it.
+`System/Reference/Stack-effects-cheatsheet.txt` lists stack comments and 64Forth idioms models often invent wrong (`COMPARE` vs `=`, `TYPE`, `CMOVE`/`MOVE`, file `ior`, `DO` limits, record buffers). It is indexed with the other Reference text — do not `INCLUDE` it.
 
 **What this improves**
 
@@ -154,7 +154,7 @@ Typical Sample + Reference size is on the order of hundreds of chunks and a few�
 When enabled (default), Ask and Agent Enhance Reply:
 
 1. Scan the **Prompt** for up to four `http`/`https` URLs, download each page, strip HTML to text, and include capped excerpts.  
-2. **Auto-boost from forth-standard.org** when the Prompt looks like a word lookup — e.g. `` `OPEN-FILE` ``, “what does DUP do”, or a short prompt that names a standard word. EditForth resolves words via `Library/Reference/Forth-2012-word-urls.json` and fetches the live standard page (up to three words).
+2. **Auto-boost from forth-standard.org** when the Prompt looks like a word lookup — e.g. `` `OPEN-FILE` ``, “what does DUP do”, or a short prompt that names a standard word. EditForth resolves words via `System/Reference/Forth-2012-word-urls.json` and fetches the live standard page (up to three words).
 
 Status notes look like `· Web 1 page(s) · Standard DUP`. Turn the toggle off to stay fully offline aside from Ollama itself.
 

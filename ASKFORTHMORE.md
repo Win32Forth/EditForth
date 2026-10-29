@@ -2,14 +2,14 @@
 
 **Public domain.** Planning notes for EditForth **Ask Forth** beyond the shipped local Ollama + Library RAG + `AskForth-N.fth` workflow. Items marked **done** are in the working tree (may be unreleased).
 
-Related: `Forth/Resources/Docs/Ask-Forth.md`, `ROADMAP.md` §5, `Library/Reference/` (Forth 2012 text).
+Related: `Forth/Resources/Docs/Ask-Forth.md`, `ROADMAP.md` §5, `System/Reference/` (Forth 2012 text).
 
 ---
 
 ## Current baseline (working tree / shipped)
 
 - **Ollama** and **OpenAI-compatible** profiles (SpaceXAI, local mlx, …); models do not browse the network by themselves unless EditForth fetches for them.
-- **Library context** defaults to **Sample** and always also searches **`Library/Reference`** (Forth 2012 chapters). Retrieve modes: **Keyword** / **Semantic** / **Hybrid** (default). Hybrid/Semantic use Ollama **`nomic-embed-text`** + Application Support index (**Rebuild Index…**). Indexes `.fth` / `.txt` / `.md` / `.swift`.
+- **Library context** defaults to **Sample** and always also searches **`System/Reference`** (Forth 2012 chapters). Retrieve modes: **Keyword** / **Semantic** / **Hybrid** (default). Hybrid/Semantic use Ollama **`nomic-embed-text`** + Application Support index (**Rebuild Index…**). Indexes `.fth` / `.txt` / `.md` / `.swift`.
 - Ask streams into **`~/Documents/EditForth/AskForth/AskForth-N.fth`**; **Agent Enhance Reply** appends after a headless `--agent` eval.
 - Live load of edited code stays on status **INCLUDE**.
 
@@ -23,7 +23,7 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 **Follow-ups**
 
-- ~~Short `Stack-effects-cheatsheet.txt`~~ — **done** (`Library/Reference/Stack-effects-cheatsheet.txt`).  
+- ~~Short `Stack-effects-cheatsheet.txt`~~ — **done** (`System/Reference/Stack-effects-cheatsheet.txt`).  
 - ~~Auto-rebuild index when Library folder mtimes drift~~ — **done** (`needsRefresh` / `ensureFresh` on Ask + Library Save).  
 - ~~Setup banner + auto-pull nomic + Prepare…~~ — **done** (`AskForthOllamaBootstrap.swift`, `AskForthLibraryPrepare`; tree **2.3.6**).  
 - ~~AskForth-N.fth `\\` … `{` header with model / Library settings~~ — **done** (tree **2.3.6**).  
@@ -61,7 +61,7 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 **Why useful**
 
-- Helps when offline `Library/Reference` and Sample are not enough (newer Forth-200x notes, error messages, obscure examples).
+- Helps when offline `System/Reference` and Sample are not enough (newer Forth-200x notes, error messages, obscure examples).
 - Complements URL fetch when the user does not already know which page to open.
 
 **Design notes**
@@ -75,7 +75,7 @@ Any “web access” would mean **EditForth fetches** pages or search hits on th
 
 **Idea:** When the Prompt looks like a word lookup (“What does `OPEN-FILE` do?”, “stack effect of `INCLUDE-FILE`”), also fetch the matching live page on [forth-standard.org](https://forth-standard.org/) and include a capped excerpt.
 
-**Implemented:** `AskForthStandardBoost.swift` + `Library/Reference/Forth-2012-word-urls.json` (~430 words). Tied to **Fetch URLs in Prompt**. Status `· Standard WORD`.
+**Implemented:** `AskForthStandardBoost.swift` + `System/Reference/Forth-2012-word-urls.json` (~430 words). Tied to **Fetch URLs in Prompt**. Status `· Standard WORD`.
 
 **Why useful**
 

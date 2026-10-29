@@ -203,7 +203,7 @@ struct AIAssistantPanel: View {
             HStack(spacing: 8) {
                 Toggle("Include Library context", isOn: $model.includeLibraryContext)
                     .font(.caption)
-                    .help("Leave on for everyday Ask. Pulls matching .fth/.txt/.md/.swift from Library… (default Sample) plus always Library/Reference (Forth 2012). Point Library… at the EditForth project for app/UI questions. Best when you want answers that match local samples, docs, and source.")
+                    .help("Leave on for everyday Ask. Pulls matching .fth/.txt/.md/.swift from Library… (default Sample) plus always System/Reference (Forth 2012). Point Library… at the EditForth project for app/UI questions. Best when you want answers that match local samples, docs, and source.")
                     .onChange(of: model.includeLibraryContext) { _, _ in
                         model.persistLibraryRAG()
                     }
@@ -821,7 +821,7 @@ private struct LibraryRAGSettingsSheet: View {
             Text("Library context")
                 .font(.title2.weight(.semibold))
 
-            Text("Ask Forth searches this folder for .fth / .txt / .md / .swift excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. You can point at the EditForth project (Editor/, Docs/) for app questions — heavy folders like .git, DerivedData, and finetune are skipped. Library/Reference (Forth 2012 + stack-effects cheat sheet) is always searched too when your folder is under Library. Hybrid/Semantic use nomic-embed-text via local Ollama; the index auto-updates when the folder or files change (or use Rebuild Index…).")
+            Text("Ask Forth searches this folder for .fth / .txt / .md / .swift excerpts matching your prompt. Default is Documents/EditForth/Library/Sample. You can point at the EditForth project (Editor/, Docs/) for app questions — heavy folders like .git, DerivedData, and finetune are skipped. System/Reference (Forth 2012 + stack-effects cheat sheet) is always searched too. Hybrid/Semantic use nomic-embed-text via local Ollama; the index auto-updates when the folder or files change (or use Rebuild Index…).")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

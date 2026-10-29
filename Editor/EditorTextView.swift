@@ -941,7 +941,8 @@ struct EditorTextView: NSViewRepresentable {
             return false
         }
 
-        /// F5 / ⌘F5 / ⌘⇧F5 while idle → highlighted word, else LAST.
+        /// F5 / ⌘F5 / ⌘⇧F5 while idle → highlighted word, else the last
+        /// definition in the file just included.
         private func tryHandleRunKey(_ event: NSEvent) -> Bool {
             guard let kind = ForthConnectionManager.runLineKind(from: event) else { return false }
             let token: String?

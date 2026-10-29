@@ -34,12 +34,12 @@ playground.xcworkspace
 .vscode/
 
 # Forth / 64Forth local build & emit products
-Forth/Resources/Library/Emitter/runner/emit-run
-Forth/Resources/Library/Emitter/runner/emit-run-O*
-Forth/Resources/Library/Emitter/runner/*.bak
-Forth/Resources/Library/Emitter/EmitterSmoke/*.img
-Forth/Resources/Library/Emitter/EmitterSmoke/*.app/
-Forth/Resources/Library/Emitter/EmitterSmoke/Gfx.app/
+Forth/Resources/System/Emitter/runner/emit-run
+Forth/Resources/System/Emitter/runner/emit-run-O*
+Forth/Resources/System/Emitter/runner/*.bak
+Forth/Resources/System/Emitter/EmitterSmoke/*.img
+Forth/Resources/System/Emitter/EmitterSmoke/*.app/
+Forth/Resources/System/Emitter/EmitterSmoke/Gfx.app/
 Forth/Resources/Library/PI/*.app/
 Forth/Resources/Library/PI/*.img
 

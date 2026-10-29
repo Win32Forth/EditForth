@@ -25,7 +25,7 @@
 //    -f <path>            INCLUDE / FLOAD a file (absolute or relative)
 //    -c | --cwd <path>    chdir before work (also sets logical FileHost cwd)
 //    -o | --out <path>    write full transcript to file (also always stdout)
-//    --no-autoload        skip Resources/AutoLoad/autoload.fth
+//    --no-autoload        skip Resources/System/AutoLoad/autoload.fth
 //    --autoload           force AutoLoad (default: off in agent mode)
 //    --repl               after scripts, read lines from stdin until EOF
 //    -h | --help          print this help and exit 0

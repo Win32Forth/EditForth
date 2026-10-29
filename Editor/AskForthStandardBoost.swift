@@ -116,12 +116,12 @@ enum AskForthStandardBoost {
     private static func candidateMapFileURLs() -> [URL] {
         var list: [URL] = []
         let user = ForthMenuSupport.userTreeURL
-            .appendingPathComponent("Library/Reference/\(mapFileName)", isDirectory: false)
+            .appendingPathComponent("System/Reference/\(mapFileName)", isDirectory: false)
         list.append(user)
         if let app = SixtyFourForthLocator.locateApp() {
             list.append(
                 app.appendingPathComponent(
-                    "Contents/Resources/Library/Reference/\(mapFileName)",
+                    "Contents/Resources/System/Reference/\(mapFileName)",
                     isDirectory: false
                 )
             )
@@ -130,7 +130,7 @@ enum AskForthStandardBoost {
         let src = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Forth/Resources/Library/Reference/\(mapFileName)")
+            .appendingPathComponent("Forth/Resources/System/Reference/\(mapFileName)")
         list.append(src)
         return list
     }

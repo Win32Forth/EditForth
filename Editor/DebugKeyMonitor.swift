@@ -90,7 +90,8 @@ final class DebugKeyMonitor {
             return nil
         }
 
-        // F5 family while idle — highlighted word, else LAST. Return runs it.
+        // F5 family while idle — highlighted word, else the last definition
+        // in the file just included. Return runs it.
         // When DEBUG is armed, F5 remains Continue (handled below).
         // Always consume bare/⌘ F5 so NSTextView's default Complete (F5) does not fire.
         if let forth, !forth.isDebugSessionArmed,

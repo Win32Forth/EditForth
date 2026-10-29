@@ -68,7 +68,6 @@
 		B1000105 /* FileHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileHost.swift; sourceTree = "<group>"; };
 		B1000106 /* forth.s */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.asm; path = forth.s; sourceTree = "<group>"; };
 		B1000107 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		B1000108 /* AutoLoad */ = {isa = PBXFileReference; lastKnownFileType = folder; path = AutoLoad; sourceTree = "<group>"; };
 		B1000109 /* Library */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Library; sourceTree = "<group>"; };
 		B100010A /* Docs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Docs; sourceTree = "<group>"; };
 		B100010B /* boot_words.inc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.asm; path = boot_words.inc; sourceTree = "<group>"; };
@@ -217,7 +216,6 @@
 		B1000306 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				B1000108 /* AutoLoad */,
 				B1000109 /* Library */,
 				B100010A /* Docs */,
 				B1000115 /* Config */,
@@ -259,8 +257,8 @@
 				B1000401 /* Sources */,
 				B1000200 /* Frameworks */,
 				B1000402 /* Resources */,
-				B1000701 /* Copy AutoLoad */,
 				B1000702 /* Copy Library */,
+				B1000705 /* Copy System */,
 				B1000703 /* Copy Docs */,
 				B1000704 /* Copy Config */,
 			);
@@ -279,8 +277,8 @@
 				EFED17010000000100000011 /* Sources */,
 				EFED17010000000100000004 /* Frameworks */,
 				EFED17010000000100000012 /* Resources */,
-				EFENG0000000000000000A1 /* Copy AutoLoad */,
 				EFENG0000000000000000A2 /* Copy Library */,
+				EFENG0000000000000000A5 /* Copy System */,
 				EFENG0000000000000000A3 /* Copy Docs */,
 				EFENG0000000000000000A4 /* Copy Config */,
 			);
@@ -387,42 +385,6 @@
 				"",
 			);
 		};
-		B1000701 /* Copy AutoLoad */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			inputPaths = (
-				"$(SRCROOT)/Forth/Resources/AutoLoad",
-			);
-			name = "Copy AutoLoad";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AutoLoad",
-			);
-			shellPath = /bin/sh;
-			shellScript = (
-				"set -e",
-				"SRC=\"${SRCROOT}/Forth/Resources/AutoLoad\"",
-				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AutoLoad\"",
-				"# Copy everything in Resources/AutoLoad → Contents/Resources/AutoLoad/",
-				"# (ENABLE_USER_SCRIPT_SANDBOXING is OFF so the whole folder is readable.)",
-				"rm -rf \"${DEST}\"",
-				"mkdir -p \"${DEST}\"",
-				"if [ -d \"${SRC}\" ]; then",
-				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
-				"    [ -e \"$f\" ] || continue",
-				"    base=$(basename \"$f\")",
-				"    case \"$base\" in",
-				"      .DS_Store|*.swp|*~) continue ;;",
-				"    esac",
-				"    if [ -f \"$f\" ]; then",
-				"      cp -f \"$f\" \"${DEST}/\"",
-				"    elif [ -d \"$f\" ]; then",
-				"      cp -R \"$f\" \"${DEST}/\"",
-				"    fi",
-				"  done",
-				"fi",
-				"",
-			);
-		};
 		B1000702 /* Copy Library */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -438,22 +400,8 @@
 				"set -e",
 				"SRC=\"${SRCROOT}/Forth/Resources/Library\"",
 				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Library\"",
-				"KERN=\"${SRCROOT}/Forth/Kernel\"",
-				"LIBSRC=\"${SRC}/Sources\"",
-				"",
-				"# 1) Sync Kernel → Resources/Library/Sources (source tree) so repo VIEW/index",
-				"#    and the bundle all match the assembly that is being linked.",
-				"mkdir -p \"${LIBSRC}\"",
-				"if [ -d \"${KERN}\" ]; then",
-				"  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do",
-				"    if [ -f \"${KERN}/$f\" ]; then",
-				"      cp -f \"${KERN}/$f\" \"${LIBSRC}/\"",
-				"    fi",
-				"  done",
-				"fi",
-				"",
-				"# 2) Fresh copy Library → app bundle (includes updated Sources/).",
-				"#    Avoids stale FROMLIB sources from folder-ref caching.",
+				"# Fresh copy Library → app bundle.",
+				"# Avoids stale FROMLIB sources from folder-ref caching.",
 				"rm -rf \"${DEST}\"",
 				"mkdir -p \"${DEST}\"",
 				"if [ -d \"${SRC}\" ]; then",
@@ -541,6 +489,56 @@
 				"",
 			);
 		};
+		B1000705 /* Copy System */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+				"$(SRCROOT)/Forth/Resources/System",
+				"$(SRCROOT)/Forth/Kernel",
+			);
+			name = "Copy System";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/System",
+			);
+			shellPath = /bin/sh;
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/System\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/System\"",
+				"KERN=\"${SRCROOT}/Forth/Kernel\"",
+				"SYSSRC=\"${SRC}/Sources\"",
+				"",
+				"# 1) Sync Kernel → Resources/System/Sources (source tree) so repo VIEW/index",
+				"#    and the bundle all match the assembly that is being linked.",
+				"mkdir -p \"${SYSSRC}\"",
+				"if [ -d \"${KERN}\" ]; then",
+				"  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do",
+				"    if [ -f \"${KERN}/$f\" ]; then",
+				"      cp -f \"${KERN}/$f\" \"${SYSSRC}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+				"# 2) Fresh copy System → app bundle (includes updated Sources/).",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
+		};
 		EFENG0000000000000000A0 /* Touch forth.s if .incbin sources newer */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -573,42 +571,6 @@
 				"",
 			);
 		};
-		EFENG0000000000000000A1 /* Copy AutoLoad */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			inputPaths = (
-				"$(SRCROOT)/Forth/Resources/AutoLoad",
-			);
-			name = "Copy AutoLoad";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AutoLoad",
-			);
-			shellPath = /bin/sh;
-			shellScript = (
-				"set -e",
-				"SRC=\"${SRCROOT}/Forth/Resources/AutoLoad\"",
-				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AutoLoad\"",
-				"# Copy everything in Resources/AutoLoad → Contents/Resources/AutoLoad/",
-				"# (ENABLE_USER_SCRIPT_SANDBOXING is OFF so the whole folder is readable.)",
-				"rm -rf \"${DEST}\"",
-				"mkdir -p \"${DEST}\"",
-				"if [ -d \"${SRC}\" ]; then",
-				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
-				"    [ -e \"$f\" ] || continue",
-				"    base=$(basename \"$f\")",
-				"    case \"$base\" in",
-				"      .DS_Store|*.swp|*~) continue ;;",
-				"    esac",
-				"    if [ -f \"$f\" ]; then",
-				"      cp -f \"$f\" \"${DEST}/\"",
-				"    elif [ -d \"$f\" ]; then",
-				"      cp -R \"$f\" \"${DEST}/\"",
-				"    fi",
-				"  done",
-				"fi",
-				"",
-			);
-		};
 		EFENG0000000000000000A2 /* Copy Library */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -624,22 +586,8 @@
 				"set -e",
 				"SRC=\"${SRCROOT}/Forth/Resources/Library\"",
 				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Library\"",
-				"KERN=\"${SRCROOT}/Forth/Kernel\"",
-				"LIBSRC=\"${SRC}/Sources\"",
-				"",
-				"# 1) Sync Kernel → Resources/Library/Sources (source tree) so repo VIEW/index",
-				"#    and the bundle all match the assembly that is being linked.",
-				"mkdir -p \"${LIBSRC}\"",
-				"if [ -d \"${KERN}\" ]; then",
-				"  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do",
-				"    if [ -f \"${KERN}/$f\" ]; then",
-				"      cp -f \"${KERN}/$f\" \"${LIBSRC}/\"",
-				"    fi",
-				"  done",
-				"fi",
-				"",
-				"# 2) Fresh copy Library → app bundle (includes updated Sources/).",
-				"#    Avoids stale FROMLIB sources from folder-ref caching.",
+				"# Fresh copy Library → app bundle.",
+				"# Avoids stale FROMLIB sources from folder-ref caching.",
 				"rm -rf \"${DEST}\"",
 				"mkdir -p \"${DEST}\"",
 				"if [ -d \"${SRC}\" ]; then",
@@ -708,6 +656,56 @@
 				"set -e",
 				"SRC=\"${SRCROOT}/Forth/Resources/Config\"",
 				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Config\"",
+				"rm -rf \"${DEST}\"",
+				"mkdir -p \"${DEST}\"",
+				"if [ -d \"${SRC}\" ]; then",
+				"  for f in \"${SRC}\"/* \"${SRC}\"/.[!.]* \"${SRC}\"/..?*; do",
+				"    [ -e \"$f\" ] || continue",
+				"    base=$(basename \"$f\")",
+				"    case \"$base\" in",
+				"      .DS_Store|*.swp|*~) continue ;;",
+				"    esac",
+				"    if [ -f \"$f\" ]; then",
+				"      cp -f \"$f\" \"${DEST}/\"",
+				"    elif [ -d \"$f\" ]; then",
+				"      cp -R \"$f\" \"${DEST}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+			);
+		};
+		EFENG0000000000000000A5 /* Copy System */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+				"$(SRCROOT)/Forth/Resources/System",
+				"$(SRCROOT)/Forth/Kernel",
+			);
+			name = "Copy System";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/System",
+			);
+			shellPath = /bin/sh;
+			shellScript = (
+				"set -e",
+				"SRC=\"${SRCROOT}/Forth/Resources/System\"",
+				"DEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/System\"",
+				"KERN=\"${SRCROOT}/Forth/Kernel\"",
+				"SYSSRC=\"${SRC}/Sources\"",
+				"",
+				"# 1) Sync Kernel → Resources/System/Sources (source tree) so repo VIEW/index",
+				"#    and the bundle all match the assembly that is being linked.",
+				"mkdir -p \"${SYSSRC}\"",
+				"if [ -d \"${KERN}\" ]; then",
+				"  for f in forth.s boot_words.inc boot_words_end.inc colon_words.inc kernel_api.h kernel1.fth kernel2.fth vocemit.fth app-output.fth app-points.fth vocsys.fth xref.fth; do",
+				"    if [ -f \"${KERN}/$f\" ]; then",
+				"      cp -f \"${KERN}/$f\" \"${SYSSRC}/\"",
+				"    fi",
+				"  done",
+				"fi",
+				"",
+				"# 2) Fresh copy System → app bundle (includes updated Sources/).",
 				"rm -rf \"${DEST}\"",
 				"mkdir -p \"${DEST}\"",
 				"if [ -d \"${SRC}\" ]; then",
