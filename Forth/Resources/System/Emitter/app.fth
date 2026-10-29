@@ -110,10 +110,11 @@ CREATE EMIT-TITLE      64 ALLOT         \ counted title for SLITERAL into wrappe
   LIBRARY-PATH DUP 0= IF
     2DROP ." EMIT-APP: LIBRARY-PATH empty (set EMIT-APP-BUILD)" CR ABORT
   THEN
-  {: la lu | i cut -- :}
-  lu TO cut
+  {: la lu | cut -- :}
+  \ Do not name a local I. That hides the loop index.
+  0 TO cut
   lu 0 ?DO
-    la i + C@ [CHAR] / = IF  i TO cut  THEN
+    la I + C@ [CHAR] / = IF  I TO cut  THEN
   LOOP
   cut IF
     EMIT-APP-BUILD (EMIT-S0)
