@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.6.0** (build **27**) — file list, System folder, Getting Started, RUN. No disk image yet. Shipped image remains `Releases/EditForth-2.5.6-macOS.dmg`.
+**Current:** **2.6.0** (build **27**) — file list, System folder, Getting Started, RUN. Disk image `Releases/EditForth-2.6.0-macOS.dmg`. Previous image remains `Releases/EditForth-2.5.6-macOS.dmg`.
 
 **Last updated:** 2026-10-29
 
@@ -8,7 +8,7 @@
 
 ## v2.6.0 — File list, System folder, and RUN
 
-**Version strings:** marketing **2.6.0**, build **27**. Prepared for release. No disk image in this version yet. Shipped image remains **v2.5.6** (`Releases/EditForth-2.5.6-macOS.dmg`). Console stamp `Oct 29, 2026 1:04 PM`.
+**Version strings:** marketing **2.6.0**, build **27**. One-app disk image `Releases/EditForth-2.6.0-macOS.dmg`. Previous image remains `Releases/EditForth-2.5.6-macOS.dmg`. Console stamp `Oct 29, 2026 1:04 PM`. `scripts/release.sh` on this build: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.6.0**.
 
 **Console header stamp:**
 
@@ -24,6 +24,7 @@
 - **RUN / F5.** A highlighted Forth word is filled into the console. With nothing selected, the line is the last `: NAME` in the file just included. Return still runs it. Restart clears that remembered name.
 - **Restart.** The button beside Pause relaunches the Forth companion, clears the console to the banner and `Restarting Forth…`, and leaves the editor, tabs, and file list in place.
 - **Boot messages.** AutoLoad `:Loading module` / `:Reloading module` lines and the boot `HYPER-REINDEX:` note go to Help → Show Boot Messages.
+- **EMIT-APP.** `app-build.sh` is resolved under `System/Emitter`, beside Library.
 
 ---
 
