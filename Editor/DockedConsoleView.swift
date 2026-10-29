@@ -53,6 +53,7 @@ struct DockedConsoleView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.forth = forth
+        context.coordinator.applyResetIfNeeded()
         context.coordinator.drainEmit()
         context.coordinator.setConnected(forth.isConnected, debugArmed: forth.isDebugSessionArmed)
         context.coordinator.applyConsoleFillIfNeeded()
@@ -67,11 +68,29 @@ struct DockedConsoleView: NSViewRepresentable {
         private var historyIndex = -1
         private var lastEmitSeq: UInt = 0
         private var lastFillSeq: UInt = 0
+        private var lastResetSeq: UInt = 0
         private var didBootstrap = false
         private var isProgrammatic = false
+        private var resetObserver: NSObjectProtocol?
 
         init(forth: ForthConnectionManager) {
             self.forth = forth
+            super.init()
+            // Delivered on the poster thread. Restart posts on the main queue,
+            // so the text view is wiped before the new image's output arrives.
+            resetObserver = NotificationCenter.default.addObserver(
+                forName: .editForthConsoleReset,
+                object: forth,
+                queue: nil
+            ) { [weak self] _ in
+                self?.applyReset()
+            }
+        }
+
+        deinit {
+            if let resetObserver {
+                NotificationCenter.default.removeObserver(resetObserver)
+            }
         }
 
         /// UTF-16 length of engine-owned (non-editable) prefix.
@@ -104,6 +123,28 @@ struct DockedConsoleView: NSViewRepresentable {
 
         func setConnected(_ connected: Bool, debugArmed: Bool) {
             textView?.isEditable = connected && !debugArmed
+        }
+
+        /// SwiftUI path for a reset that was posted before this text view existed.
+        func applyResetIfNeeded() {
+            guard forth.consoleResetSeq != lastResetSeq else { return }
+            applyReset()
+        }
+
+        /// Copy `consoleTranscript` over the whole text view and drop emit
+        /// already included in that string so it is not appended again.
+        private func applyReset() {
+            guard let tv = textView else { return }
+            lastResetSeq = forth.consoleResetSeq
+            isProgrammatic = true
+            tv.string = forth.consoleTranscript
+            protectedUTF16 = (tv.string as NSString).length
+            tv.setSelectedRange(NSRange(location: protectedUTF16, length: 0))
+            if protectedUTF16 > 0 {
+                tv.scrollRangeToVisible(NSRange(location: protectedUTF16 - 1, length: 1))
+            }
+            isProgrammatic = false
+            forth.discardPendingConsoleEmit(syncing: &lastEmitSeq)
         }
 
         func drainEmit() {

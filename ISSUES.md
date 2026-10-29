@@ -1,7 +1,7 @@
 # EditForth — issues and solutions
 
-**Baseline:** **2.5.6** / build **26** (shipped disk image **2.5.6**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.5.4** / build **24**. Before that **2.5.2** / build **22**, **2.5.1** / build **21**, **2.5.0** / build **19**, and **2.3.9** / build **18** (two apps on the DMG). **2.5.6:** Ask Forth circled help opens a dialog. **2.5.5:** Ask Forth context window (Ollama `num_ctx`, default 32K). **2.5.4:** Ask Forth keeps one session file (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
-**Updated:** 2026-10-26.
+**Baseline:** **2.6.0** / build **27** (no disk image yet; shipped image remains **2.5.6**). One `EditForth.app`: the editor and a companion process of the same executable (`--companion`). Previous ship **2.5.4** / build **24**. Before that **2.5.2** / build **22**, **2.5.1** / build **21**, **2.5.0** / build **19**, and **2.3.9** / build **18** (two apps on the DMG). **2.6.0:** file list, editor-only tabs, status bar, fixed window title, Restart, boot module lines on Show Boot Messages. **2.5.6:** Ask Forth circled help opens a dialog. **2.5.5:** Ask Forth context window (Ollama `num_ctx`, default 32K). **2.5.4:** Ask Forth keeps one session file (earlier drafts are `\` line comments); **Edit → Toggle Line Comment** (⌘/). Background HYPER-REINDEX, status-strip result, Search in Folders rows, and **Modify Search** in **2.3.9**. Ask Forth undock + compact help + quit visibility fix in **2.3.8**; Mac ANS **FALIGNED** (3.5) + EditForth **Help → Show Boot Messages** (3.4) in **2.3.7**; AskForth header + setup banner + nomic Prepare… in **2.3.6**; model profiles + Temperature + 8192 tokens + Stop + Library hybrid/semantic RAG in **2.3.5**; web search / Tool agent / OpenAI-compatible in **2.3.3**; Ask Forth first ship in **2.3.0**. Post-ship: ⌘-click VIEW no longer opens Xcode (3.6).  
+**Updated:** 2026-10-29.
 
 **Scope:** EditForth is one app as of 2.5.0 (editor process + companion process). The 64Forth scheme still builds a standalone app. Standalone 64Forth **1.5.4** / 64Edit repos are historical; no backport (see 3.3).
 
@@ -106,7 +106,7 @@
 
 **Problem:** F5 / RUN always filled the console from `LAST`.
 
-**Solution:** `prepareRunLine(_:name:)` uses the caret token when it is one whitespace-delimited Forth word (`WorkspaceModel.forthTokenAtCaret` / the text view). Otherwise it still queries `LAST`. Return still runs the line. ⌘F5 is `DEBUG`, ⌘⇧F5 is `BPGO`. The editor, the global F5 monitor, and the RUN button all pass the caret name.
+**Solution:** `prepareRunLine(_:name:)` types a highlighted word when the selection is one Forth word (`forthHighlightedWord`). A bare caret is ignored, so the `\` on the first line of a file is not the run word. Otherwise it queries `LAST`. Return still runs the line. ⌘F5 is `DEBUG`, ⌘⇧F5 is `BPGO`. The editor, the global F5 monitor, the Forth menu, and the RUN button all use that rule.
 
 ### 2.3 EMIT had no function key — **Fixed**
 

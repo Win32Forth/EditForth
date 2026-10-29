@@ -57,7 +57,7 @@ extension Notification.Name {
 // Update the date/time stamp only when finishing a change set for a version —
 // just before DMG + commit/push (not on every intermediate build).
 // Format: === 64Forth M.N.P === Mon D, YYYY H:MM AM/PM ===
-private let banner = "=== 64Forth 2.5.6 === Oct 26, 2026 3:26 PM ===\n"
+private let banner = "=== 64Forth 2.6.0 === Oct 29, 2026 1:04 PM ===\n"
 
 struct ConsoleView: View {
     @State private var consoleText = banner
@@ -249,8 +249,8 @@ struct ConsoleView: View {
             self.clearConsole()
         }
         // Startup: banner → cwd → AutoLoad → prompt.
-        // Cold-blob Loading/Finished chatter is retained in bootTranscript but not
-        // auto-inserted (Help → Show Boot Messages). Autoload TYPE goes through onEmit.
+        // Cold-blob Loading/Finished chatter, AutoLoad `:Loading module` lines,
+        // and boot `HYPER-REINDEX:` notes stay in bootTranscript (Help → Show Boot Messages).
         isProgrammaticConsoleAppend = true
         appendEngineOutput("Working folder: \(host.logicalCurrentDirectory)\n\n")
         markProtectedThroughEndOfText()

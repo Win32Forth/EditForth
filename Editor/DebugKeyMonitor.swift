@@ -90,12 +90,12 @@ final class DebugKeyMonitor {
             return nil
         }
 
-        // F5 family while idle — fill console from LAST; user presses Return.
+        // F5 family while idle — highlighted word, else LAST. Return runs it.
         // When DEBUG is armed, F5 remains Continue (handled below).
         // Always consume bare/⌘ F5 so NSTextView's default Complete (F5) does not fire.
         if let forth, !forth.isDebugSessionArmed,
            let kind = ForthConnectionManager.runLineKind(from: event) {
-            forth.prepareRunLine(kind, name: workspace?.forthTokenAtCaret())
+            forth.prepareRunLine(kind, name: workspace?.forthHighlightedWord())
             return nil
         }
 

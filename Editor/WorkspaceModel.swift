@@ -66,6 +66,11 @@ final class EditorTab: Identifiable, ObservableObject {
         return EditorNSTextView.forthToken(at: idx, in: ns)
     }
 
+    /// Selected text when it is one Forth word. A bare caret is not a highlight.
+    func forthHighlightedWord() -> String? {
+        EditorNSTextView.forthHighlightedWord(in: text as NSString, selection: selection)
+    }
+
     /// Append streamed Ask Forth text and park the caret at the end.
     func appendStreamingText(_ chunk: String) {
         guard !chunk.isEmpty else { return }
@@ -101,9 +106,16 @@ final class WorkspaceModel: ObservableObject {
         tabs.first { $0.id == selectedTabID }
     }
 
-    /// Token under the selected file tab's caret (RUN / idle Arm). Nil on search/diff tabs.
+    /// Token under the selected file tab's caret (idle Arm). Nil on search/diff tabs.
     func forthTokenAtCaret() -> String? {
         selectedTab?.forthTokenAtCaret()
+    }
+
+    /// Highlighted Forth word in the selected file, else the split pane.
+    /// Nil when nothing is selected, so RUN / F5 can use LAST.
+    func forthHighlightedWord() -> String? {
+        if let word = selectedTab?.forthHighlightedWord() { return word }
+        return splitSecondaryTab?.forthHighlightedWord()
     }
 
     var selectedSearchTab: SearchSession? {
@@ -334,10 +346,11 @@ final class WorkspaceModel: ObservableObject {
         return saveTab(tab)
     }
 
+    /// `directory` is where an untitled Save As panel opens.
     @discardableResult
-    func saveSelectedAs() -> Bool {
+    func saveSelectedAs(directory: URL? = nil) -> Bool {
         guard let tab = selectedTab else { return false }
-        return saveTabAs(tab)
+        return saveTabAs(tab, directory: directory)
     }
 
     /// Write `tab` to its path, or run Save As when Untitled.
@@ -349,8 +362,9 @@ final class WorkspaceModel: ObservableObject {
         return saveTabAs(tab)
     }
 
+    /// `directory` is where the panel opens when `tab` has no file yet.
     @discardableResult
-    func saveTabAs(_ tab: EditorTab) -> Bool {
+    func saveTabAs(_ tab: EditorTab, directory: URL? = nil) -> Bool {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText, .utf8PlainText, .forthSource]
         panel.canCreateDirectories = true
@@ -359,6 +373,9 @@ final class WorkspaceModel: ObservableObject {
             panel.directoryURL = url.deletingLastPathComponent()
             panel.nameFieldStringValue = url.lastPathComponent
         } else {
+            if let directory {
+                panel.directoryURL = directory
+            }
             panel.nameFieldStringValue = "Untitled.fth"
         }
         guard panel.runModal() == .OK, let url = panel.url else { return false }

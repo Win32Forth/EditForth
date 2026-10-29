@@ -44,7 +44,7 @@ struct EditorTextView: NSViewRepresentable {
     var onDebugContinue: (() -> Void)?
     var onDebugStop: (() -> Void)?
     var onForwardProgramKey: ((Int32) -> Void)?
-    /// Idle F5 / ⌘F5 / ⌘⇧F5 — fill console from LAST (not NSTextView Complete).
+    /// Idle F5 / ⌘F5 / ⌘⇧F5 — highlighted word, else LAST (not NSTextView Complete).
     var onPrepareRunLine: ((ForthConnectionManager.RunLineKind, String?) -> Void)?
     /// ⌘-click on a Forth token → Hyper VIEW via IPC (`VIEW <word>`).
     var onCommandClickWord: ((String) -> Void)?
@@ -941,14 +941,14 @@ struct EditorTextView: NSViewRepresentable {
             return false
         }
 
-        /// F5 / ⌘F5 / ⌘⇧F5 while idle → console fill from LAST.
+        /// F5 / ⌘F5 / ⌘⇧F5 while idle → highlighted word, else LAST.
         private func tryHandleRunKey(_ event: NSEvent) -> Bool {
             guard let kind = ForthConnectionManager.runLineKind(from: event) else { return false }
             let token: String?
             if let tv = textView {
-                token = EditorNSTextView.forthToken(
-                    at: tv.selectedRange().location,
-                    in: tv.string as NSString
+                token = EditorNSTextView.forthHighlightedWord(
+                    in: tv.string as NSString,
+                    selection: tv.selectedRange()
                 )
             } else {
                 token = nil
@@ -1163,6 +1163,20 @@ final class EditorNSTextView: NSTextView {
     static func forthToken(at idx: Int, in ns: NSString) -> String? {
         guard let range = forthTokenRange(at: idx, in: ns) else { return nil }
         return ns.substring(with: range)
+    }
+
+    /// Selected text when it is one Forth word. A bare caret is not a highlight.
+    static func forthHighlightedWord(in ns: NSString, selection: NSRange) -> String? {
+        guard selection.length > 0 else { return nil }
+        let loc = min(max(0, selection.location), ns.length)
+        let len = min(selection.length, ns.length - loc)
+        guard len > 0 else { return nil }
+        let raw = ns.substring(with: NSRange(location: loc, length: len))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty,
+              raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+        else { return nil }
+        return raw
     }
 }
 

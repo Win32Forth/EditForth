@@ -1,8 +1,28 @@
 # 64Forth development status
 
-**Current:** **2.5.6** (build **26**) — Ask Forth help dialogs. Disk image `Releases/EditForth-2.5.6-macOS.dmg`.
+**Current:** **2.6.0** (build **27**) — file list, editor chrome, Restart. No disk image yet. Shipped image remains `Releases/EditForth-2.5.6-macOS.dmg`.
 
-**Last updated:** 2026-10-26
+**Last updated:** 2026-10-29
+
+---
+
+## v2.6.0 — File list and editor chrome
+
+**Version strings:** marketing **2.6.0**, build **27**. Prepared for release. No disk image in this version yet. Shipped image remains **v2.5.6** (`Releases/EditForth-2.5.6-macOS.dmg`). Console stamp `Oct 29, 2026 1:04 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.6.0 === Oct 29, 2026 1:04 PM ===
+```
+
+### Highlights since 2.5.6
+
+- **File list.** The left column lists folders and files under the current directory. It starts at `~/Documents/EditForth`. New and Save match the File menu. Share is Save As.
+- **Editor chrome.** Tabs sit over the editor. The strip above the file list and the editor shows **Edit Forth**, the open file path, and the Ask Forth show/hide button. The window title stays **EditForth**.
+- **RUN / F5.** A highlighted Forth word is filled into the console. With no highlight, the line is LAST. Return still runs it.
+- **Restart.** The button beside Pause relaunches the Forth companion, clears the console to the banner and `Restarting Forth…`, and leaves the editor, tabs, and file list in place.
+- **Boot messages.** AutoLoad `:Loading module` / `:Reloading module` lines and the boot `HYPER-REINDEX:` note go to Help → Show Boot Messages.
 
 ---
 
@@ -350,7 +370,7 @@
 - **F9 / ⌘\\ while paused.** `kernel_break_toggle_name` updates the break table without `EVALUATE`.
 - **Gutter dots** for breakpoint lines (red enabled, gray disabled).
 - **Idle Arm** runs `BPGO` on the caret word, or the first enabled breakpoint.
-- **RUN / F5** fills from the caret token when it is one Forth word, otherwise `LAST`.
+- **RUN / F5** fills from a highlighted word when the selection is one Forth word, otherwise `LAST`. A bare caret is not used.
 - **Idle F6** emits the current tab. While debugging, F6 stays Step Over.
 - **Break Now** sets the floor to the caller frame so returning past that word disarms. A blocked console `KEY` or graphics `(APP-KEY)` wakes so the next threaded step can pause. Tight `CODE` that never hits `NEXT` still runs until it returns.
 - **Run to Here** miss text says to click a call site, not a `: header`. While Run-to is executing, Space, Return, and Esc go to the program (GCLOCK) instead of Step Over. The pause on `DUP` after `KEY` is before the `IF` that redraws the clock.

@@ -9,6 +9,11 @@ import Foundation
 import Combine
 import AppKit
 
+extension Notification.Name {
+    /// Restart replaced `consoleTranscript`. Consoles copy it into the text view now.
+    static let editForthConsoleReset = Notification.Name("EditForthConsoleReset")
+}
+
 final class ForthConnectionManager: NSObject, ObservableObject {
     static var socketURL: URL {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -68,7 +73,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// BREAK table slots from the host (pale-red wash uses enabled names).
     @Published private(set) var breakpointEntries: [BreakpointEntry] = []
 
-    /// How F5 / ⌘F5 / ⌘⇧F5 / RUN should fill the console from LAST.
+    /// How F5 / ⌘F5 / ⌘⇧F5 / RUN should fill the console.
     enum RunLineKind {
         /// `NAME` — user may prepend stack args, then Return.
         case execute
@@ -114,6 +119,10 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     @Published private(set) var consoleHidden = false
     /// Bumps when companion console text arrives (DockedConsoleView drains via takeConsoleEmit).
     @Published private(set) var consoleEmitSeq: UInt = 0
+    /// Bumps when Restart replaces the whole console. The text view copies
+    /// `consoleTranscript` itself; a form-feed in the emit buffer is not enough,
+    /// because a later chunk can be drained without the clear ever painting.
+    @Published private(set) var consoleResetSeq: UInt = 0
     /// Durable full transcript for remount / Show Forth Console (not cleared by takeConsoleEmit).
     /// Not `@Published`: only `DockedConsoleView`’s coordinator reads it. Seeding from
     /// `makeNSView` must not publish or SwiftUI warns about view-update mutations.
@@ -136,6 +145,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var viewMissSeqCounter: UInt = 0
     /// Cancels an in-flight Start Forth launch reconnect when pressed again.
     private var launchConnectGeneration: UInt = 0
+    /// Bumped when the sock client is dropped, so a late read cannot mark the next connection down.
+    private var sockGeneration: UInt = 0
     /// True between launch and first successful sock connect (blocks re-entrant ping chatter).
     private var companionLaunchInFlight = false
     /// Raw companion emit stream for DockedConsoleView (not line-split).
@@ -152,6 +163,12 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     private var consoleByeOutstanding = false
     /// Editor asked the child to stop. Its exit must not start another quit.
     private var companionStopRequested = false
+    /// Restart button: after the child exits, launch a fresh companion.
+    private var relaunchAfterStop = false
+    /// Sock drop during Restart is not a lost connection and not BYE.
+    private var sockCloseIsRestart = false
+    /// Restart already printed "Restarting Forth…". Skip "Starting EditForth…".
+    private var omitStartingLine = false
     private var showConsoleOnNextConnect = false
 
     override init() {
@@ -236,6 +253,26 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleRefreshSeq &+= 1
     }
 
+    /// Replace the visible console with `text`. Docked and floating consoles
+    /// copy this immediately; later emit only appends.
+    private func replaceConsoleDisplay(_ text: String) {
+        consoleTranscript = text
+        consoleEmitBuffer = ""
+        var lines = [""]
+        for ch in text {
+            if ch == "\n" || ch == "\r" {
+                lines.append("")
+            } else if ch != "\u{8}" {
+                lines[lines.count - 1].append(ch)
+            }
+        }
+        consoleLines = lines
+        consoleEmitSeq &+= 1
+        consoleResetSeq &+= 1
+        consoleRefreshSeq &+= 1
+        NotificationCenter.default.post(name: .editForthConsoleReset, object: self)
+    }
+
     /// Editor-side refusal (no open tab, debugger armed, …) — sticky strip + console.
     /// Directory for EditForth NSOpenPanel: pending request path, else cached cwd, else Documents/EditForth.
     var panelStartURL: URL {
@@ -267,7 +304,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     /// Put `NAME` / `DEBUG NAME` / `BPGO NAME` on the console input line.
-    /// `name` overrides LAST (caret token). Does not submit — user edits and presses Return.
+    /// `name` is a highlighted word. Empty uses LAST. Does not submit — Return runs the line.
     func prepareRunLine(_ kind: RunLineKind, name overrideName: String? = nil) {
         guard isConnected else {
             noteUserError("Forth is not connected")
@@ -307,7 +344,7 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         consoleTranscript = banner
     }
 
-    /// Drop buffered emit that is already reflected in `consoleTranscript` (remount).
+    /// Drop buffered emit that is already reflected in `consoleTranscript` (remount / Restart).
     func discardPendingConsoleEmit(syncing lastSeq: inout UInt) {
         consoleEmitBuffer = ""
         lastSeq = consoleEmitSeq
@@ -407,15 +444,57 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// Companion left on its own (BYE's process exit). A crash keeps the editor.
     private func companionExited(_ proc: Process) {
         let requested = companionStopRequested
+        let relaunch = relaunchAfterStop
         if companionProcess === proc {
             companionProcess = nil
             launchedForthURL = nil
+        }
+        if relaunch {
+            relaunchAfterStop = false
+            companionStopRequested = false
+            companionLaunchInFlight = false
+            ping()
+            return
         }
         guard !requested else { return }
         guard proc.terminationReason == .exit else { return }
         forthQuitExpected = true
         consoleByeOutstanding = false
         NSApp.terminate(nil)
+    }
+
+    /// Fresh Forth image. Relaunches the companion this editor started.
+    /// Does not close the editor, the file list, or open tabs.
+    func restartCompanion() {
+        guard !relaunchAfterStop else { return }
+        sockCloseIsRestart = true
+        forthQuitExpected = false
+        consoleByeOutstanding = false
+        launchConnectGeneration &+= 1
+        pendingRunKind = nil
+        lastError = nil
+        isDebugSessionArmed = false
+        isDebugPaused = false
+        debugLocation = nil
+        breakpointEntries = []
+        disconnectSock(closeUndockedWindow: false)
+        // Paint the wipe before the child is signaled, so shutdown is obvious
+        // even while the new image is still launching.
+        omitStartingLine = true
+        replaceConsoleDisplay(EditForthConsoleBanner.text + "Restarting Forth…\n")
+
+        companionStopRequested = true
+        let dying = companionProcess
+        companionProcess = nil
+        launchedForthURL = nil
+        if let dying, dying.isRunning {
+            relaunchAfterStop = true
+            dying.terminate()
+            return
+        }
+        companionStopRequested = false
+        companionLaunchInFlight = false
+        ping()
     }
 
     /// Dirty-file Cancel after BYE. Forth stays up, so a later sock drop is a real error.
@@ -481,9 +560,15 @@ final class ForthConnectionManager: NSObject, ObservableObject {
 
     /// Drop the edit.sock client without terminating the companion process.
     private func disconnectSock(closeUndockedWindow: Bool) {
+        sockGeneration &+= 1
         readSource?.cancel()
         readSource = nil
         fd = -1
+        // Drop a partial line so the next companion does not parse it.
+        // `incoming` is only appended on ioQueue; this runs after the in-flight read.
+        ioQueue.async { [weak self] in
+            self?.incoming.removeAll()
+        }
         isConnected = false
         isDebugSessionArmed = false
         isDebugPaused = false
@@ -670,6 +755,8 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     /// If edit.sock is down, launches this same executable with `--companion`
     /// and retries connect.
     func ping() {
+        let omitStarting = omitStartingLine
+        omitStartingLine = false
         // Banner before any "Starting…" so undocked (window mounts later) still
         // restores `=== EditForth … ===` from consoleTranscript.
         seedConsoleBannerIfEmpty()
@@ -699,7 +786,9 @@ final class ForthConnectionManager: NSObject, ObservableObject {
         companionLaunchInFlight = true
         lastError = nil
         consoleHidden = false
-        appendConsole("Starting EditForth…\n")
+        if !omitStarting {
+            appendConsole("Starting EditForth…\n")
+        }
         // Defer hosting the undocked window so we are not creating SwiftUI
         // views in the same turn as the appendConsole @Published bump.
         DispatchQueue.main.async { [weak self] in
@@ -741,10 +830,22 @@ final class ForthConnectionManager: NSObject, ObservableObject {
     }
 
     private func readAvailable() {
+        let gen = sockGeneration
         var buf = [UInt8](repeating: 0, count: 16_384)
         let n = Darwin.read(fd, &buf, buf.count)
         if n <= 0 {
             DispatchQueue.main.async {
+                guard self.sockGeneration == gen else { return }
+                if self.sockCloseIsRestart {
+                    self.sockCloseIsRestart = false
+                    self.isConnected = false
+                    self.isDebugSessionArmed = false
+                    self.isDebugPaused = false
+                    self.debugLocation = nil
+                    self.breakpointEntries = []
+                    self.lastError = nil
+                    return
+                }
                 let expected = self.forthQuitExpected
                 self.forthQuitExpected = false
                 self.isConnected = false
@@ -778,18 +879,22 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             let line = incoming.subdata(in: incoming.startIndex..<range)
             incoming.removeSubrange(incoming.startIndex...range)
             guard !line.isEmpty else { continue }
-            handleIncoming(line)
+            handleIncoming(line, generation: gen)
         }
     }
 
-    private func handleIncoming(_ data: Data) {
+    private func handleIncoming(_ data: Data, generation: UInt) {
         do {
             let response = try IPCCodec.decodeResponse(data)
             DispatchQueue.main.async {
+                // Restart bumps the generation before the child dies. Output
+                // already queued from that socket must not refill the console.
+                guard self.sockGeneration == generation else { return }
                 self.apply(response)
             }
         } catch {
             DispatchQueue.main.async {
+                guard self.sockGeneration == generation else { return }
                 self.lastError = error.localizedDescription
                 self.appendConsole("Bad response: \(error.localizedDescription)")
             }

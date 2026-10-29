@@ -1806,8 +1806,14 @@ final class KernelBridge {
 
     /// Text emitted during `kernel_init` (cold `.incbin` blobs) and immediate
     /// post-init host diagnostics, before any console/agent sink was attached.
-    /// Retained for Help → Show Boot Messages and console auto-insert; survives CLS.
+    /// AutoLoad module lines (`:Loading module`) and `HYPER-REINDEX:` notes are
+    /// appended here too. Help → Show Boot Messages. Survives CLS.
     private(set) var bootTranscript: String = ""
+    /// True while `runAutoLoadIfPresent` is loading the product boot file.
+    /// Module-load and HYPER-REINDEX lines stay in `bootTranscript`.
+    private var bootModuleCapture = false
+    /// Incomplete AutoLoad line held until a newline arrives.
+    private var bootModuleLine = ""
 
     /// Coalesced emit buffer. Kernel TYPE/EMIT fires per character; without
     /// batching, each char schedules a main-queue NSTextView update and the UI
@@ -1863,16 +1869,8 @@ final class KernelBridge {
 
     /// Drain pending emit buffer to `onEmit` immediately on this thread.
     func forceFlushEmitSync() {
-        lock.lock()
-        absorbEmitBytesLocked()
-        let chunk = pendingEmit
-        pendingEmit = ""
-        emitFlushScheduled = false
-        let sink = onEmit
-        lock.unlock()
-        if !chunk.isEmpty, let sink {
-            sink(chunk)
-        }
+        let (chunk, filterBoot) = takePendingEmit()
+        deliverEmitChunk(chunk, filterBoot: filterBoot, sink: onEmit)
     }
 
     private init() {
@@ -2000,18 +1998,14 @@ final class KernelBridge {
     /// Drain `pendingEmit` to `onEmit` (main thread). Used at startup and when
     /// installing the sink; long-running eval uses `scheduleEmitFlush`.
     private func flushPendingEmit() {
-        lock.lock()
-        absorbEmitBytesLocked()
-        let pending = pendingEmit
-        pendingEmit = ""
-        emitFlushScheduled = false
+        let (pending, filterBoot) = takePendingEmit()
+        guard !pending.isEmpty else { return }
         let sink = onEmit
-        lock.unlock()
-        guard !pending.isEmpty, let sink else { return }
+        let deliver = { self.deliverEmitChunk(pending, filterBoot: filterBoot, sink: sink) }
         if Thread.isMainThread {
-            sink(pending)
+            deliver()
         } else {
-            DispatchQueue.main.async { sink(pending) }
+            DispatchQueue.main.async(execute: deliver)
         }
     }
 
@@ -2050,20 +2044,12 @@ final class KernelBridge {
     /// Always invokes `onEmit` on the main thread — `(SZ-CONSOLE-EMIT) 0` drains
     /// from the Forth queue; mutating SwiftUI/AppKit there hung the UI after commands.
     private func drainEmitBufferToSink() {
-        lock.lock()
-        absorbEmitBytesLocked()
-        let chunk = pendingEmit
-        pendingEmit = ""
+        let (chunk, filterBoot) = takePendingEmit()
         let sink = onEmit
-        // Clear schedule flag before calling sink so concurrent emit can re-schedule.
-        emitFlushScheduled = false
-        lock.unlock()
 
         let deliver: () -> Void = { [weak self] in
             guard let self else { return }
-            if !chunk.isEmpty, let sink {
-                sink(chunk)
-            }
+            self.deliverEmitChunk(chunk, filterBoot: filterBoot, sink: sink)
             // If more was buffered while we delivered, schedule another drain.
             // Incomplete UTF-8 tails stay in pendingEmitBytes without forcing a spin.
             self.lock.lock()
@@ -3337,6 +3323,15 @@ final class KernelBridge {
         host.logicalCurrentDirectory = bootRoot.path
         _ = FileManager.default.changeCurrentDirectoryPath(bootRoot.path)
 
+        // Module-load and HYPER-REINDEX lines go to bootTranscript, not the console.
+        // The flag is snapshotted with each emit chunk, so a drain that runs
+        // after this function returns still files the line in the boot log.
+        lock.lock()
+        bootModuleCapture = true
+        bootModuleLine = ""
+        lock.unlock()
+        defer { finishBootModuleCapture() }
+
         // Embed kernel_eval never prints "ok"; ConsoleView prints ok(n)> once after boot.
         // SEE/HELP are defined in the kernel bootstrap (forth_init_str).
         _ = evaluate("INCLUDE \(autoURL.path)")
@@ -3500,6 +3495,79 @@ final class KernelBridge {
             Thread.sleep(forTimeInterval: 0.01)
         }
         return ready ? 1 : 0
+    }
+
+    /// Take the emit buffer. `filterBoot` is the capture flag at take time.
+    private func takePendingEmit() -> (String, Bool) {
+        lock.lock()
+        absorbEmitBytesLocked()
+        let chunk = pendingEmit
+        pendingEmit = ""
+        let filterBoot = bootModuleCapture
+        emitFlushScheduled = false
+        lock.unlock()
+        return (chunk, filterBoot)
+    }
+
+    /// `:Loading module` / `:Reloading module` and `HYPER-REINDEX:` lines.
+    private static func isBootModuleLine(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { return false }
+        if t.contains(":Loading module") || t.contains(":Reloading module") { return true }
+        if t.hasPrefix("HYPER-REINDEX:") { return true }
+        return false
+    }
+
+    /// While AutoLoad is capturing, file module lines into `bootTranscript`.
+    /// Other lines still reach the console. A chunk taken with `filterBoot`
+    /// stays on that path even if capture has since ended.
+    private func deliverEmitChunk(_ chunk: String, filterBoot: Bool, sink: ((String) -> Void)?) {
+        guard !chunk.isEmpty else { return }
+        if !filterBoot {
+            sink?(chunk)
+            return
+        }
+        lock.lock()
+        bootModuleLine.append(chunk)
+        var console = ""
+        let passThrough = agentSyncEmit
+        while let range = bootModuleLine.range(of: "\n") {
+            let line = String(bootModuleLine[..<range.upperBound])
+            bootModuleLine.removeSubrange(..<range.upperBound)
+            if Self.isBootModuleLine(line) {
+                bootTranscript.append(line)
+                if passThrough {
+                    console.append(line)
+                }
+            } else {
+                console.append(line)
+            }
+        }
+        lock.unlock()
+        if !console.isEmpty {
+            sink?(console)
+        }
+    }
+
+    /// End AutoLoad capture. Flush a held partial line into the boot log or the console.
+    private func finishBootModuleCapture() {
+        let (chunk, _) = takePendingEmit()
+        deliverEmitChunk(chunk, filterBoot: true, sink: onEmit)
+        lock.lock()
+        bootModuleCapture = false
+        let tail = bootModuleLine
+        bootModuleLine = ""
+        let chatter = Self.isBootModuleLine(tail)
+        if chatter {
+            bootTranscript.append(tail.hasSuffix("\n") ? tail : tail + "\n")
+        }
+        let passThrough = agentSyncEmit && chatter
+        lock.unlock()
+        if passThrough {
+            onEmit?(tail.hasSuffix("\n") ? tail : tail + "\n")
+        } else if !chatter && !tail.isEmpty {
+            onEmit?(tail)
+        }
     }
 
     /// Console note from a host thread (hyper reindex). Same path as kernel TYPE.

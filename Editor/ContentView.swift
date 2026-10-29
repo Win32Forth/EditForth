@@ -43,11 +43,19 @@ struct ContentView: View {
     @State private var aiPanelWidth = 340.0
     @State private var aiWidthDragStart: CGFloat?
     @StateObject private var aiAssistant = AIAssistantModel()
+    /// Left file-list width. Starts at the PWA's 220pt column.
+    @AppStorage("fileListWidth") private var storedFileListWidth = 220.0
+    @State private var fileListWidth = 220.0
+    @State private var fileListDragStart: CGFloat?
+    @StateObject private var fileList = FileListModel()
 
     private static let consoleMinHeight: CGFloat = 88
     private static let editorMinHeight: CGFloat = 120
     private static let splitMinPaneWidth: CGFloat = 160
     private static let aiPanelMinWidth: CGFloat = 260
+    private static let fileListMinWidth: CGFloat = 140
+    /// Editor column keeps at least this much when the file list is dragged.
+    private static let fileListEditorMin: CGFloat = 240
 
     /// Ask Forth may grow until the editor pane still has `splitMinPaneWidth`.
     private static func aiPanelMaxWidth(forWindowWidth width: CGFloat) -> CGFloat {
@@ -61,105 +69,99 @@ struct ContentView: View {
                 geo.size.height - Self.editorMinHeight - ConsoleSplitter.height
             )
             let clampedConsole = min(max(consoleHeight, Self.consoleMinHeight), maxConsole)
-            let aiMaxW = Self.aiPanelMaxWidth(forWindowWidth: geo.size.width)
+            let askReserve = (showAIAssistant && askForthDocked)
+                ? EditorHSplitter.width + max(aiPanelWidth, Self.aiPanelMinWidth)
+                : 0
+            let fileListMax = max(
+                Self.fileListMinWidth,
+                geo.size.width - EditorHSplitter.width - Self.fileListEditorMin - askReserve
+            )
+            let clampedFileList = min(max(fileListWidth, Self.fileListMinWidth), fileListMax)
+            let rightWidth = geo.size.width - EditorHSplitter.width - clampedFileList
+            let aiMaxW = Self.aiPanelMaxWidth(forWindowWidth: rightWidth)
             let clampedAIWidth = min(max(aiPanelWidth, Self.aiPanelMinWidth), aiMaxW)
 
             VStack(spacing: 0) {
-                tabBar
+                workspaceStatusBar
 
                 HStack(spacing: 0) {
-                    editorArea
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    FileListSidebar(model: fileList, workspace: workspace)
+                        .frame(width: clampedFileList)
 
-                    if showAIAssistant, askForthDocked {
-                        EditorHSplitter(
-                            onDrag: { translationX in
-                                let base = aiWidthDragStart ?? clampedAIWidth
-                                if aiWidthDragStart == nil { aiWidthDragStart = clampedAIWidth }
-                                // Splitter is left of the panel: drag left grows Ask Forth.
-                                let next = min(
-                                    max(base - translationX, Self.aiPanelMinWidth),
-                                    aiMaxW
-                                )
-                                aiPanelWidth = next
-                            },
-                            onEnd: {
-                                aiWidthDragStart = nil
-                                storedAIPanelWidth = Double(aiPanelWidth)
-                            }
-                        )
-                        .accessibilityLabel("Resize Ask Forth")
-
-                        AIAssistantPanel(model: aiAssistant)
-                            .frame(width: clampedAIWidth)
-                            .frame(maxHeight: .infinity)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear {
-                    aiPanelWidth = max(storedAIPanelWidth, Self.aiPanelMinWidth)
-                    AskForthWindowController.shared.onRequestHide = {
-                        showAIAssistant = false
-                    }
-                    syncAskForthWindow()
-                }
-                .onChange(of: showAIAssistant) { _, _ in
-                    syncAskForthWindow()
-                }
-                .onChange(of: askForthDocked) { _, _ in
-                    syncAskForthWindow()
-                }
-                .onChange(of: geo.size.width) { _, newWidth in
-                    let cap = Self.aiPanelMaxWidth(forWindowWidth: newWidth)
-                    if aiPanelWidth > cap {
-                        aiPanelWidth = cap
-                        storedAIPanelWidth = Double(cap)
-                    }
-                }
-
-                // Keep the docked console mounted while chrome is "hidden" so Show
-                // Forth Console can restore the same NSView / transcript.
-                let consoleEmbedded = forth.preferDocked && !forth.consoleHidden
-
-                if showForthChrome, consoleEmbedded {
-                    ConsoleSplitter(
-                        onDrag: { translationY in
-                            let base = dragStartHeight ?? clampedConsole
-                            if dragStartHeight == nil { dragStartHeight = clampedConsole }
+                    EditorHSplitter(
+                        label: "Resize file list",
+                        onDrag: { translationX in
+                            let base = fileListDragStart ?? clampedFileList
+                            if fileListDragStart == nil { fileListDragStart = clampedFileList }
                             let next = min(
-                                max(base - translationY, Self.consoleMinHeight),
-                                maxConsole
+                                max(base + translationX, Self.fileListMinWidth),
+                                fileListMax
                             )
-                            consoleHeight = next
+                            fileListWidth = next
                         },
                         onEnd: {
-                            dragStartHeight = nil
-                            storedConsoleHeight = consoleHeight
+                            fileListDragStart = nil
+                            storedFileListWidth = Double(fileListWidth)
                         }
                     )
-                }
 
-                // Debug chrome belongs with the Forth console (below the splitter),
-                // replacing the idle status strip — not above the editor/console split.
-                if forth.isDebugSessionArmed, showForthChrome {
-                    DebugToolbar(forth: forth, idleArmWord: { workspace.forthTokenAtCaret() })
-                }
+                    VStack(spacing: 0) {
+                        tabBar
 
-                if showForthChrome, consoleEmbedded {
-                    consolePane
-                        .frame(height: clampedConsole)
-                } else if showForthChrome {
-                    // Undocked or hidden: status strip only — no empty dock well.
-                    consolePane
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if consoleEmbedded {
-                    consolePane
-                        .frame(height: 0)
-                        .clipped()
-                        .opacity(0)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                        HStack(spacing: 0) {
+                            editorArea
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            if showAIAssistant, askForthDocked {
+                                EditorHSplitter(
+                                    onDrag: { translationX in
+                                        let base = aiWidthDragStart ?? clampedAIWidth
+                                        if aiWidthDragStart == nil { aiWidthDragStart = clampedAIWidth }
+                                        // Splitter is left of the panel: drag left grows Ask Forth.
+                                        let next = min(
+                                            max(base - translationX, Self.aiPanelMinWidth),
+                                            aiMaxW
+                                        )
+                                        aiPanelWidth = next
+                                    },
+                                    onEnd: {
+                                        aiWidthDragStart = nil
+                                        storedAIPanelWidth = Double(aiPanelWidth)
+                                    }
+                                )
+                                .accessibilityLabel("Resize Ask Forth")
+
+                                AIAssistantPanel(model: aiAssistant)
+                                    .frame(width: clampedAIWidth)
+                                    .frame(maxHeight: .infinity)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .onAppear {
+                            aiPanelWidth = max(storedAIPanelWidth, Self.aiPanelMinWidth)
+                            AskForthWindowController.shared.onRequestHide = {
+                                showAIAssistant = false
+                            }
+                            syncAskForthWindow()
+                        }
+                        .onChange(of: showAIAssistant) { _, _ in
+                            syncAskForthWindow()
+                        }
+                        .onChange(of: askForthDocked) { _, _ in
+                            syncAskForthWindow()
+                        }
+                        .onChange(of: geo.size.width) { _, _ in
+                            if aiPanelWidth > aiMaxW {
+                                aiPanelWidth = aiMaxW
+                                storedAIPanelWidth = Double(aiMaxW)
+                            }
+                        }
+
+                        consoleChrome(clampedConsole: clampedConsole, maxConsole: maxConsole)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onChange(of: geo.size.height) { _, _ in
                 guard showForthChrome else { return }
@@ -182,6 +184,7 @@ struct ContentView: View {
         .background(WindowChrome(url: workspace.selectedTab?.fileURL))
         .onAppear {
             consoleHeight = storedConsoleHeight
+            fileListWidth = storedFileListWidth
             installGotoObserver()
             // Visible console (docked or undocked) → auto-start companion.
             // Hidden (Show Forth Console off) → connect only if already listening;
@@ -415,6 +418,54 @@ struct ContentView: View {
         }
     }
 
+    /// Docked console, debug bar, and the undocked status strip, under the editor.
+    @ViewBuilder
+    private func consoleChrome(clampedConsole: CGFloat, maxConsole: CGFloat) -> some View {
+        // Keep the docked console mounted while chrome is "hidden" so Show
+        // Forth Console can restore the same NSView / transcript.
+        let consoleEmbedded = forth.preferDocked && !forth.consoleHidden
+
+        if showForthChrome, consoleEmbedded {
+            ConsoleSplitter(
+                onDrag: { translationY in
+                    let base = dragStartHeight ?? clampedConsole
+                    if dragStartHeight == nil { dragStartHeight = clampedConsole }
+                    let next = min(
+                        max(base - translationY, Self.consoleMinHeight),
+                        maxConsole
+                    )
+                    consoleHeight = next
+                },
+                onEnd: {
+                    dragStartHeight = nil
+                    storedConsoleHeight = consoleHeight
+                }
+            )
+        }
+
+        // Debug chrome belongs with the Forth console (below the splitter),
+        // replacing the idle status strip — not above the editor/console split.
+        if forth.isDebugSessionArmed, showForthChrome {
+            DebugToolbar(forth: forth, idleArmWord: { workspace.forthTokenAtCaret() })
+        }
+
+        if showForthChrome, consoleEmbedded {
+            consolePane
+                .frame(height: clampedConsole)
+        } else if showForthChrome {
+            // Undocked or hidden: status strip only — no empty dock well.
+            consolePane
+                .fixedSize(horizontal: false, vertical: true)
+        } else if consoleEmbedded {
+            consolePane
+                .frame(height: 0)
+                .clipped()
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
     /// Center editor stack (empty / search / diff / split / file).
     @ViewBuilder
     private var editorArea: some View {
@@ -536,25 +587,20 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Tab bar
-
-    private var tabBar: some View {
-        HStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(workspace.tabStripItems, id: \.id) { item in
-                        TabChip(
-                            title: item.title,
-                            isSelected: item.id == workspace.selectedTabID,
-                            onSelect: { workspace.selectedTabID = item.id },
-                            onClose: { workspace.closeTab(id: item.id) }
-                        )
-                    }
-                }
+    /// Full-width strip above the file list and the editor.
+    private var workspaceStatusBar: some View {
+        HStack(spacing: 10) {
+            Text("Edit Forth")
+                .font(.system(size: 13, weight: .bold))
+            if !openFilePath.isEmpty {
+                Text(openFilePath)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(openFilePath)
             }
-            .frame(maxWidth: .infinity)
-
-            // Xcode-style trailing inspector toggle (same as View → Ask Forth / ⌥⌘A).
+            Spacer(minLength: 8)
             Button {
                 showAIAssistant.toggle()
             } label: {
@@ -567,9 +613,57 @@ struct ContentView: View {
             .buttonStyle(.borderless)
             .help(showAIAssistant ? "Hide Ask Forth (⌥⌘A)" : "Show Ask Forth (⌥⌘A)")
             .accessibilityLabel(showAIAssistant ? "Hide Ask Forth" : "Show Ask Forth")
-            .padding(.trailing, 6)
         }
+        .padding(.horizontal, 10)
         .frame(height: 28)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+    }
+
+    /// Path of the file, diff, or web page in front. Home is shown as `~`.
+    private var openFilePath: String {
+        let url: URL? = {
+            if let file = workspace.selectedTab?.fileURL { return file }
+            if let diff = workspace.selectedDiffTab?.fileURL { return diff }
+            return workspace.selectedWebTab?.currentURL
+        }()
+        guard let url else { return "" }
+        if url.isFileURL {
+            return Self.tildePath(url.path)
+        }
+        return url.absoluteString
+    }
+
+    private static func tildePath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
+
+    // MARK: - Tab bar
+
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(workspace.tabStripItems, id: \.id) { item in
+                    TabChip(
+                        title: item.title,
+                        isSelected: item.id == workspace.selectedTabID,
+                        onSelect: { workspace.selectedTabID = item.id },
+                        onClose: { workspace.closeTab(id: item.id) }
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -619,11 +713,11 @@ struct ContentView: View {
                 Button("RUN") {
                     forth.prepareRunLine(
                         ForthConnectionManager.runLineKindFromCurrentModifiers(),
-                        name: workspace.forthTokenAtCaret()
+                        name: workspace.forthHighlightedWord()
                     )
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
-                .help("RUN (F5) — caret token, else LAST. Return to run. ⌘F5 = DEBUG; ⌘⇧F5 = BPGO")
+                .help("RUN (F5) — highlighted word, else LAST. Return to run. ⌘F5 = DEBUG; ⌘⇧F5 = BPGO")
                 .controlSize(.small)
                 Button("EMIT") {
                     ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
@@ -640,6 +734,11 @@ struct ContentView: View {
                 .help("Break Now — next ITC instruction at/above DEBUGGER-END (⌃⌘Y). Not inside CODE or a blocked KEY.")
                 .controlSize(.small)
                 .keyboardShortcut("y", modifiers: [.control, .command])
+                Button("Restart") {
+                    forth.restartCompanion()
+                }
+                .help("Restart Forth — fresh image. The editor, file list, and open tabs stay.")
+                .controlSize(.small)
                 Spacer()
                 BreakpointsPanelButton(forth: forth, idleArmWord: { workspace.forthTokenAtCaret() })
                 if forth.isConnected {
@@ -1060,10 +1159,11 @@ private struct DebugToolbar: View {
     private static let f8 = KeyEquivalent(Character(UnicodeScalar(NSF8FunctionKey)!))
 }
 
-/// Vertical drag handle between left and right editor panes.
+/// Vertical drag handle between side-by-side panes.
 private struct EditorHSplitter: View {
     static let width: CGFloat = 8
 
+    var label: String = "Resize editor split"
     var onDrag: (CGFloat) -> Void
     var onEnd: () -> Void
 
@@ -1096,7 +1196,7 @@ private struct EditorHSplitter: View {
         }
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
-        .accessibilityLabel("Resize editor split")
+        .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -1148,7 +1248,8 @@ private struct ConsoleSplitter: View {
     }
 }
 
-/// Keep the window title / representedURL in sync with the selected tab.
+/// Keep the window title at EditForth. `representedURL` is the open file for
+/// proxy-icon and pending-goto, and does not rename the window.
 private struct WindowChrome: NSViewRepresentable {
     var url: URL?
 
@@ -1178,11 +1279,7 @@ private struct WindowChrome: NSViewRepresentable {
         }
         window.identifier = id
         window.representedURL = url
-        if let url {
-            window.title = url.lastPathComponent
-        } else if window.title.isEmpty {
-            window.title = "EditForth"
-        }
+        window.title = "EditForth"
     }
 }
 

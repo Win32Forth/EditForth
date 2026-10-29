@@ -255,18 +255,19 @@ struct SixtyFourEditApp: App {
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
 
-                Button("RUN LAST (F5)") {
-                    forth.prepareRunLine(.execute)
+                Button("RUN (F5)") {
+                    forth.prepareRunLine(.execute, name: workspace.forthHighlightedWord())
+                }
+                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
+                .help("Type the highlighted word, or LAST, on the console. Return runs it.")
+
+                Button("DEBUG (⌘F5)") {
+                    forth.prepareRunLine(.debug, name: workspace.forthHighlightedWord())
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
 
-                Button("DEBUG LAST (⌘F5)") {
-                    forth.prepareRunLine(.debug)
-                }
-                .disabled(!forth.isConnected || forth.isDebugSessionArmed)
-
-                Button("BPGO LAST (⌘⇧F5)") {
-                    forth.prepareRunLine(.bpgo)
+                Button("BPGO (⌘⇧F5)") {
+                    forth.prepareRunLine(.bpgo, name: workspace.forthHighlightedWord())
                 }
                 .disabled(!forth.isConnected || forth.isDebugSessionArmed)
 
