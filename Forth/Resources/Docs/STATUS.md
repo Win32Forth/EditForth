@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.6.1** (build **28**) — read-only Docs and System, PAUSE, and the find bar. No disk image yet. Shipped image remains `Releases/EditForth-2.6.0-macOS.dmg`.
+**Current:** **2.6.1** (build **28**) — read-only Docs and System, PAUSE, and the find bar. Disk image `Releases/EditForth-2.6.1-macOS.dmg`.
 
 **Last updated:** 2026-10-29
 
@@ -8,7 +8,7 @@
 
 ## v2.6.1 — Read-only system files, PAUSE, and find
 
-**Version strings:** marketing **2.6.1**, build **28**. Prepared for release. No disk image in this version yet. Shipped image remains **v2.6.0** (`Releases/EditForth-2.6.0-macOS.dmg`). Console stamp `Oct 29, 2026 6:45 PM`.
+**Version strings:** marketing **2.6.1**, build **28**. One-app disk image `Releases/EditForth-2.6.1-macOS.dmg`. Previous image remains `Releases/EditForth-2.6.0-macOS.dmg`. Console stamp `Oct 29, 2026 6:45 PM`. `scripts/release.sh` on this build: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.6.1**.
 
 **Console header stamp:**
 
