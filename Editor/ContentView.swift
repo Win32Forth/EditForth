@@ -590,8 +590,10 @@ struct ContentView: View {
     /// Full-width strip above the file list and the editor.
     private var workspaceStatusBar: some View {
         HStack(spacing: 10) {
-            Text("Edit Forth")
+            Text("EditForth")
                 .font(.system(size: 13, weight: .bold))
+            Text(EditForthConsoleBanner.marketingVersion)
+                .font(.system(size: 13, weight: .semibold))
             if !openFilePath.isEmpty {
                 Text(openFilePath)
                     .font(.system(size: 12))

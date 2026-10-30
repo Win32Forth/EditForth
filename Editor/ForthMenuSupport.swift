@@ -17,6 +17,54 @@ enum ForthMenuSupport {
             .appendingPathComponent("EditForth", isDirectory: true)
     }
 
+    /// True when `url` is inside `Documents/EditForth/<folder>/`.
+    static func isInUserTreeFolder(_ url: URL, named folder: String) -> Bool {
+        let path = url.standardizedFileURL.path
+        let root = userTreeURL.standardizedFileURL.path
+        guard path.hasPrefix(root + "/") else { return false }
+        let rest = path.dropFirst(root.count + 1)
+        guard let top = rest.split(separator: "/", maxSplits: 1).first else { return false }
+        return String(top).caseInsensitiveCompare(folder) == .orderedSame
+    }
+
+    /// Docs and System open read-only. Library and files outside the tree stay editable.
+    static func opensReadOnly(_ url: URL) -> Bool {
+        isInUserTreeFolder(url, named: "Docs") || isInUserTreeFolder(url, named: "System")
+    }
+
+    static let loadRefusedMessage =
+        "Only .fth, .fs, and .f files can be loaded, and you cannot load a system file because they are already loaded."
+
+    /// True when `url` is Documents/EditForth/System/Testing or a file under it.
+    static func isUnderUserTreeTesting(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let testing = userTreeURL.standardizedFileURL.path + "/System/Testing"
+        if path.caseInsensitiveCompare(testing) == .orderedSame { return true }
+        return path.range(of: testing + "/", options: [.caseInsensitive, .anchored]) != nil
+    }
+
+    /// INCLUDE / FLOAD: `.fth`, `.fs`, and `.f` only.
+    /// System files are refused, except files under System/Testing.
+    static func canLoadForthFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        let allowed = ext == "fth" || ext == "fs" || ext == "f"
+        let systemBlocked = isInUserTreeFolder(url, named: "System") && !isUnderUserTreeTesting(url)
+        return allowed && !systemBlocked
+    }
+
+    /// Shows the load dialog and returns true when INCLUDE / FLOAD must stop.
+    @discardableResult
+    static func refuseLoadIfNeeded(_ url: URL) -> Bool {
+        guard canLoadForthFile(url) else {
+            let alert = NSAlert()
+            alert.messageText = loadRefusedMessage
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return true
+        }
+        return false
+    }
+
     /// Finder window on Documents/EditForth (Library, System, Docs).
     static func openUserTree() {
         let url = userTreeURL
@@ -134,6 +182,7 @@ enum ForthMenuSupport {
             forth.noteUserError("EMIT needs a saved file")
             return
         }
+        if refuseLoadIfNeeded(url) { return }
         let path = url.standardizedFileURL.path
         let escaped = path
             .replacingOccurrences(of: "\\", with: "\\\\")
@@ -173,6 +222,7 @@ enum ForthMenuSupport {
     }
 
     private static func includeFile(at url: URL, forth: ForthConnectionManager, autoAnew: Bool) {
+        if refuseLoadIfNeeded(url) { return }
         let path = url.standardizedFileURL.path
         let escaped = path
             .replacingOccurrences(of: "\\", with: "\\\\")

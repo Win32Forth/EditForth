@@ -74,5 +74,5 @@ User data (Documents/64Forth)
 After editing Library .fth files, rebuild/run so the bundle copy updates
 (or use Tools → Update / Restore for the Documents/64Forth tree).
 
-See Testing/ANSValidate/README.txt, Editor/SZ-EDITOR-README.txt,
+See Testing/ANSValidate/src/README.txt, Editor/SZ-EDITOR-README.txt,
 Pascal/README.txt, and Docs/README.txt.

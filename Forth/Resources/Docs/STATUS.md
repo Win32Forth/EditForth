@@ -1,8 +1,29 @@
 # 64Forth development status
 
-**Current:** **2.6.0** (build **27**) — file list, System folder, Getting Started, RUN. Disk image `Releases/EditForth-2.6.0-macOS.dmg`. Previous image remains `Releases/EditForth-2.5.6-macOS.dmg`.
+**Current:** **2.6.1** (build **28**) — read-only Docs and System, PAUSE, and the find bar. No disk image yet. Shipped image remains `Releases/EditForth-2.6.0-macOS.dmg`.
 
 **Last updated:** 2026-10-29
+
+---
+
+## v2.6.1 — Read-only system files, PAUSE, and find
+
+**Version strings:** marketing **2.6.1**, build **28**. Prepared for release. No disk image in this version yet. Shipped image remains **v2.6.0** (`Releases/EditForth-2.6.0-macOS.dmg`). Console stamp `Oct 29, 2026 6:45 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.6.1 === Oct 29, 2026 6:45 PM ===
+```
+
+### Highlights since 2.6.0
+
+- **Status bar.** The left end reads **EditForth**, then the marketing version, then the open file path.
+- **Read-only Docs and System.** Files under those folders open in view mode. The yellow bar still has Edit. INCLUDE, FLOAD, and EMIT accept only `.fth`, `.fs`, and `.f`. They refuse a system file, except files under `System/Testing`. The dialog says: Only .fth, .fs, and .f files can be loaded, and you cannot load a system file because they are already loaded.
+- **ANSValidate.** Suite modules live in `System/Testing/ANSValidate/src`. The driver stays `ANS-VALIDATE.fth`. The entry line is still `FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth`.
+- **PAUSE.** `PAUSE ( -- )` flushes pending console output, then waits 1 ms.
+- **Find keys.** Find and Replace is ⌘⇧F. Search in Folders is ⌥⌘F.
+- **Find bar.** Find and Replace shows two rows in the console and in the editor. Replacing a view-mode file still does nothing until you click Edit.
 
 ---
 

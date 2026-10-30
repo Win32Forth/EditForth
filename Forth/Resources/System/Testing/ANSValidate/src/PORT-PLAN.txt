@@ -47,9 +47,9 @@ Rules when porting
 
 How to run - no absolute paths
 ------------------------------
-  FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+  FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
   Library is copied into the app bundle on every build - FROMLIB resolves there.
 
 Standalone XChar still works
 ----------------------------
-  FROMLIB FLOAD ANSValidate/all-in-one.fth
+  FROMLIB FLOAD Testing/ANSValidate/src/all-in-one.fth

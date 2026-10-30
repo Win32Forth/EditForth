@@ -340,6 +340,7 @@ struct FileListSidebar: View {
 
     private func openFile(_ url: URL) {
         if FileListModel.opensInEditor(url) {
+            // Docs and System open read-only inside openURL.
             workspace.openURL(url, viewMode: false)
         } else {
             NSWorkspace.shared.activateFileViewerSelecting([url])

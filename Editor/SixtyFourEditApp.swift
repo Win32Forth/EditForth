@@ -123,7 +123,7 @@ struct SixtyFourEditApp: App {
                 Button("Find and Replace…") {
                     FindSupport.perform(.showReplaceInterface)
                 }
-                .keyboardShortcut("f", modifiers: [.command, .option])
+                .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Find Next") {
                     FindSupport.perform(.nextMatch)
                 }
@@ -157,7 +157,7 @@ struct SixtyFourEditApp: App {
                 Button("Search in Folders…") {
                     SearchFoldersPanel.run(workspace: workspace)
                 }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .keyboardShortcut("f", modifiers: [.command, .option])
             }
             // Merge into the system View menu (CommandMenu("View") creates a second one).
             CommandGroup(after: .toolbar) {

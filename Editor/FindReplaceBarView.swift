@@ -27,8 +27,11 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
     private let countField = NSTextField(string: "")
 
     private var showsReplace = false
-    /// Replace row is only laid out when the target text view is editable.
+    /// True while Find and Replace is showing the second row.
+    /// View-mode text still shows the row; replacement itself stays refused.
     private var replaceRowVisible = false
+    /// Stops setFrameSize from re-entering findBarViewDidChangeHeight.
+    private var inHeightNotify = false
     private let rowH: CGFloat = 28
     private let pad: CGFloat = 8
     private let gap: CGFloat = 8
@@ -158,6 +161,22 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
         button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
     }
 
+    /// NSScrollView records find-bar height when the view is first assigned
+    /// (one row) and will tile us back to that height. Keep the height we
+    /// actually need, and ask the scroll view to remeasure when it disagrees.
+    override func setFrameSize(_ newSize: NSSize) {
+        let height = preferredHeight
+        super.setFrameSize(NSSize(width: newSize.width, height: height))
+        guard !inHeightNotify else { return }
+        guard abs(newSize.height - height) > 0.5,
+              let scroll = ownerScrollView,
+              scroll.isFindBarVisible
+        else { return }
+        inHeightNotify = true
+        scroll.findBarViewDidChangeHeight()
+        inHeightNotify = false
+    }
+
     override func layout() {
         super.layout()
         let w = bounds.width
@@ -258,7 +277,10 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
 
     func show(replace: Bool, in scroll: NSScrollView, focus: Bool = true) {
         showsReplace = replace
-        replaceRowVisible = replace && (targetTextView?.isEditable == true)
+        // Show the replace row whenever Find and Replace was requested.
+        // Docs, System, and GettingStarted open in view mode (`isEditable`
+        // is false); hiding the row there made Replace look missing.
+        replaceRowVisible = replace
         replaceLabel.isHidden = !replaceRowVisible
         replaceField.isHidden = !replaceRowVisible
         replaceButton.isHidden = !replaceRowVisible
@@ -272,18 +294,18 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
             findField.stringValue = clip
         }
 
-        // NSScrollView sizes the find bar from our frame height. Toggle
-        // visibility when the height changes so the content insets update.
-        let newHeight = preferredHeight
-        let heightChanged = abs(frame.height - newHeight) > 0.5
-        frame.size = NSSize(width: max(scroll.bounds.width, 200), height: newHeight)
-        needsLayout = true
+        // The scroll view keeps the height from the first `findBarView`
+        // assignment (one row). Setting `frame` alone is ignored: tile
+        // writes that saved height back, and both rows land in one slot.
+        // `findBarViewDidChangeHeight` is what refreshes the content inset.
         invalidateIntrinsicContentSize()
-        scroll.findBarView = self
-        if heightChanged && scroll.isFindBarVisible {
-            scroll.isFindBarVisible = false
+        if scroll.findBarView !== self {
+            scroll.findBarView = self
         }
+        setFrameSize(NSSize(width: max(scroll.bounds.width, 200), height: preferredHeight))
         scroll.isFindBarVisible = true
+        scroll.findBarViewDidChangeHeight()
+        needsLayout = true
         layoutSubtreeIfNeeded()
 
         if focus {
@@ -332,7 +354,10 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
     }
 
     @objc func replaceSelection(_ sender: Any?) {
-        guard let tv = targetTextView, tv.isEditable else { return }
+        guard let tv = targetTextView, tv.isEditable else {
+            NSSound.beep()
+            return
+        }
         let needle = findField.stringValue
         guard !needle.isEmpty else { return }
         syncFindPasteboard()
@@ -357,12 +382,19 @@ final class FindReplaceBarView: NSView, NSTextFieldDelegate {
     }
 
     @objc func replaceAndFind(_ sender: Any?) {
+        guard targetTextView?.isEditable == true else {
+            NSSound.beep()
+            return
+        }
         replaceSelection(sender)
         performFind(forward: true)
     }
 
     @objc func replaceAll(_ sender: Any?) {
-        guard let tv = targetTextView, tv.isEditable else { return }
+        guard let tv = targetTextView, tv.isEditable else {
+            NSSound.beep()
+            return
+        }
         let needle = findField.stringValue
         guard !needle.isEmpty else { return }
         syncFindPasteboard()

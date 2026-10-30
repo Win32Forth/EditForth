@@ -10,18 +10,12 @@ See PORT-PLAN.txt for the full module roadmap.
 
 Canonical run
 -------------
-  FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+  FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
 
-  Library sources live in the Xcode project under
-    64Forth/Resources/Library/
-  and are copied into the app bundle at
-    Contents/Resources/Library/
-  on every build - same model as TZForth. FROMLIB resolves under that
-  bundle Library, independent of the session cwd - Documents, home, etc.
-
-  After editing .fth files: rebuild/run in Xcode so the bundle is refreshed.
-  Nested FLOAD inside ANS-VALIDATE.fth uses the driver's folder - ANSValidate/ -
-  so sibling modules need no absolute paths.
+  FROMLIB resolves Testing under System (Documents/EditForth/System/Testing,
+  or the bundled System copy). The driver stays in ANSValidate/. Modules
+  live in src/. Named FLOAD chdirs into the file being loaded, then returns,
+  so each module is loaded as FLOAD src/<name>.fth from the driver folder.
 
 Expected
 --------
@@ -56,7 +50,7 @@ Current modules - driver load order
 
 Standalone XChar only
 ---------------------
-  FROMLIB FLOAD ANSValidate/all-in-one.fth
+  FROMLIB FLOAD Testing/ANSValidate/src/all-in-one.fth
 
 CRITICAL 64Forth rules
 ----------------------
@@ -65,11 +59,12 @@ CRITICAL 64Forth rules
 
 Layout
 ------
-  ANS-VALIDATE.fth   multi-module driver - FROMLIB entry point
-  PORT-PLAN.txt      word-set port order
-  tester.fth         harness
-  core.fth … float.fth  word-set modules
-  host.fth           extra FTEST port wave (see above)
-  all-in-one.fth     self-contained XChar suite
-  run-from-disk.fth  alias → FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
-  probe / bisect / hello   diagnostics
+  ANS-VALIDATE.fth          multi-module driver - FROMLIB entry point
+  ANS-VALIDATE-RESULTS.txt  last green log
+  src/PORT-PLAN.txt         word-set port order
+  src/tester.fth            harness
+  src/core.fth … src/float.fth  word-set modules
+  src/host.fth              extra FTEST port wave (see above)
+  src/all-in-one.fth        self-contained XChar suite
+  src/run-from-disk.fth     alias → FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
+  src/probe src/bisect src/hello   diagnostics

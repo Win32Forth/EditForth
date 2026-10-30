@@ -549,6 +549,14 @@ _kernel_set_key_q:
     str  x0, [x1]
     ret
 
+// void kernel_set_pause(void (*fn)(void)) — PAUSE host flush
+.globl _kernel_set_pause
+_kernel_set_pause:
+    adrp x1, pause_hook@page
+    add  x1, x1, pause_hook@pageoff
+    str  x0, [x1]
+    ret
+
 // void kernel_set_time_date(void (*fn)(int64_t out[6]))
 .globl _kernel_set_time_date
 _kernel_set_time_date:
@@ -2914,6 +2922,34 @@ XKEYQ:
     cmp  x0, #0
     csetm x20, ne                  // Forth true = -1
 XKEYQ_END:
+    NEXT
+
+// PAUSE ( -- )  Show output already emitted, then wait 1 ms.
+// The host hook flushes the console buffer and sleeps. With no hook, sleep only.
+
+    BOOT_WORD "PAUSE", "PAUSE ( -- ) show pending console output, then wait 1 ms", 0, XPAUSE, XPAUSE_END
+XPAUSE:
+    SAVE_VM
+    adrp x1, pause_hook@page
+    add  x1, x1, pause_hook@pageoff
+    ldr  x1, [x1]
+    cbz  x1, 1f
+    blr  x1
+    b    2f
+1:
+    mov  x2, #1000
+    mov  x3, #1000
+    mul  x2, x2, x3                // 1_000_000 ns
+    sub  sp, sp, #16
+    str  xzr, [sp]                 // tv_sec
+    str  x2, [sp, #8]              // tv_nsec
+    mov  x0, sp
+    mov  x1, #0
+    bl   _nanosleep
+    add  sp, sp, #16
+2:
+    RESTORE_VM
+XPAUSE_END:
     NEXT
 
 // EKEY ( -- u )  Facility: next key event (implementation-defined encoding).
@@ -18990,6 +19026,7 @@ debug_nest_rstack: .skip DEBUG_CALL_MAX * RETURN_STACK_SIZE
 
 key_hook:       .quad 0            // int (*)(void) — KEY (blocking)
 key_q_hook:     .quad 0            // int (*)(void) — KEY? (non-zero if ready)
+pause_hook:     .quad 0            // void (*)(void) — PAUSE flush + 1 ms
 time_date_hook: .quad 0            // void (*)(int64_t out[6]) — TIME&DATE
 file_op_hook:   .quad 0            // file_op multiplex
 fromlib_hook:   .quad 0            // void (*)(void) — FROMLIB arm

@@ -1,7 +1,7 @@
 \ core.fth — ANS Core spot-checks ported from TZForth ANS-VALIDATE / FTEST TEST6
 \
 \ Requires: tester.fth already loaded - EXPECT / #PASS / #FAIL
-\ Loaded by ANS-VALIDATE.fth via relative FLOAD - siblings under ANSValidate/
+\ Loaded by ANS-VALIDATE.fth via FLOAD src/core.fth
 \
 \ Port status: first Core batch - arithmetic, logic, compare, stack, return
 \ stack, memory, constants, pictured numeric, basic control, EXECUTE.

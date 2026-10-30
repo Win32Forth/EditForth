@@ -1,7 +1,7 @@
 # ANS-VALIDATE modular suite (CLI harness + app FROMLIB path)
 # Last green: 2026-07-30  v0.9.0 (multi-thread dict; File-Access stack fix)
 #
-# Run:  FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+# Run:  FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
 #
 # ANS-VALIDATE: 383 passed, 0 failed.
 # ALL PASS

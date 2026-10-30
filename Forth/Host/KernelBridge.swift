@@ -145,6 +145,9 @@ private func kernel_set_key(_ fn: (@convention(c) () -> Int32)?)
 @_silgen_name("kernel_set_key_q")
 private func kernel_set_key_q(_ fn: (@convention(c) () -> Int32)?)
 
+@_silgen_name("kernel_set_pause")
+private func kernel_set_pause(_ fn: (@convention(c) () -> Void)?)
+
 @_silgen_name("kernel_set_time_date")
 private func kernel_set_time_date(
     _ fn: (@convention(c) (UnsafeMutablePointer<Int64>?) -> Void)?
@@ -324,6 +327,10 @@ private let kernelKeyTrampoline: @convention(c) () -> Int32 = {
 
 private let kernelKeyQTrampoline: @convention(c) () -> Int32 = {
     kernelHookTarget?.handleKeyAvailableFromKernel() ?? 0
+}
+
+private let kernelPauseTrampoline: @convention(c) () -> Void = {
+    kernelHookTarget?.handlePauseFromKernel()
 }
 
 private let kernelTimeDateTrampoline: @convention(c) (UnsafeMutablePointer<Int64>?) -> Void = { out in
@@ -1889,6 +1896,7 @@ final class KernelBridge {
         kernel_set_emit_buf(kernelEmitBufTrampoline)
         kernel_set_key(kernelKeyTrampoline)
         kernel_set_key_q(kernelKeyQTrampoline)
+        kernel_set_pause(kernelPauseTrampoline)
         kernel_set_time_date(kernelTimeDateTrampoline)
         kernel_set_file_op(kernelFileOpTrampoline)
         kernel_set_fromlib(kernelFromlibTrampoline)
@@ -3491,6 +3499,19 @@ final class KernelBridge {
             if Date() > deadline { return -1 }
             // Short wait; main thread's evaluate loop keeps AppKit alive.
             _ = keyAvailable.wait(timeout: .now() + 0.05)
+        }
+    }
+
+    /// PAUSE: hand pending console text to the host, then wait 1 ms.
+    /// Do not wait on the main queue. `executeCommand` already holds main inside
+    /// evaluate's pump, so a nested main block sits until PAUSE returns and
+    /// waiting for it deadlocks.
+    fileprivate func handlePauseFromKernel() {
+        forceFlushEmitSync()
+        if Thread.isMainThread {
+            pumpUIForKeyInput(seconds: 0.001)
+        } else {
+            Thread.sleep(forTimeInterval: 0.001)
         }
     }
 

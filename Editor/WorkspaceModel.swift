@@ -229,7 +229,8 @@ final class WorkspaceModel: ObservableObject {
     ) -> EditorTab? {
         let standardized = url.standardizedFileURL
         if let existing = findTab(matching: standardized.path) {
-            focus(existing, viewMode: viewMode, line: line, reloadIfClean: reloadIfClean, fileURL: standardized)
+            let mode = ForthMenuSupport.opensReadOnly(existing.fileURL ?? standardized) ? true : viewMode
+            focus(existing, viewMode: mode, line: line, reloadIfClean: reloadIfClean, fileURL: standardized)
             return existing
         }
 
@@ -239,7 +240,8 @@ final class WorkspaceModel: ObservableObject {
         if !exists {
             let leaf = standardized.lastPathComponent
             if let byLeaf = tabForLeaf(leaf) {
-                focus(byLeaf, viewMode: viewMode, line: line, reloadIfClean: false, fileURL: nil)
+                let mode = (byLeaf.fileURL.map(ForthMenuSupport.opensReadOnly) ?? false) ? true : viewMode
+                focus(byLeaf, viewMode: mode, line: line, reloadIfClean: false, fileURL: nil)
                 return byLeaf
             }
             return nil
@@ -250,7 +252,7 @@ final class WorkspaceModel: ObservableObject {
             text: text,
             fileURL: standardized,
             isDirty: false,
-            isViewMode: viewMode ?? false,
+            isViewMode: ForthMenuSupport.opensReadOnly(standardized) || (viewMode ?? false),
             gotoLine: (line ?? 0) > 0 ? line : nil
         )
         insertTab(tab)
@@ -287,7 +289,7 @@ final class WorkspaceModel: ObservableObject {
         }
         guard response == .OK else { return }
         for url in panel.urls {
-            // File menu Open always unlocks editing.
+            // Docs and System stay read-only inside openURL. Other files unlock.
             openURL(url, viewMode: false, line: nil)
         }
     }
@@ -790,7 +792,7 @@ final class WorkspaceModel: ObservableObject {
             seedStartupDocument(at: note)
         }
         if FileManager.default.fileExists(atPath: note.path) {
-            _ = openURL(note, viewMode: false)
+            _ = openURL(note, viewMode: true)
             return
         }
         _ = newFile()
@@ -922,8 +924,12 @@ final class WorkspaceModel: ObservableObject {
         fileURL: URL?
     ) {
         selectedTabID = tab.id
-        // nil = preserve (open -a must not strip VIEW/debug browse mode).
-        if let viewMode {
+        // Docs and System stay read-only. Otherwise nil preserves the current mode
+        // so open -a does not strip VIEW/debug browse mode.
+        let locked = (fileURL ?? tab.fileURL).map(ForthMenuSupport.opensReadOnly) ?? false
+        if locked {
+            tab.isViewMode = true
+        } else if let viewMode {
             tab.isViewMode = viewMode
         }
         if let line, line > 0 {

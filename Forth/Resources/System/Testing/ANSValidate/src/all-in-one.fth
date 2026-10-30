@@ -1,9 +1,9 @@
 \ all-in-one.fth -- single-file XChar validate (no nested FLOAD)
 \
-\   FROMLIB FLOAD ANSValidate/all-in-one.fth
+\   FROMLIB FLOAD Testing/ANSValidate/src/all-in-one.fth
 \
 \ Prefer the multi-module driver for the full ANS-VALIDATE port:
-\   FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth
+\   FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
 \
 \ CRITICAL 64Forth rules:
 \   1) Do NOT use IF/ELSE/THEN/BEGIN while interpreting -- they always compile.

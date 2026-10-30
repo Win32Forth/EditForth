@@ -33,7 +33,7 @@ This document tracks implementation status of the 2012 ANS Forth Standard word s
 **Validation (64Forth):**\
 \
 - **Hayes:** `FROMLIB FLOAD HayesTest/HayesTest.fth` \'97 core through FP/paranoia Excellent, Block, File, Facility structures.\
-- **ANS-VALIDATE (modular pure Forth):** `FROMLIB FLOAD ANSValidate/ANS-VALIDATE.fth` \'97 modules tester through float; expect **~351 passed, 0 failed** (spot-checks, not a formal certificate).\
+- **ANS-VALIDATE (modular pure Forth):** `FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth` \'97 modules tester through float; expect **~351 passed, 0 failed** (spot-checks, not a formal certificate).\
 \
 ## Core (6.1) \'97 Complete (64Forth)\
 \
@@ -479,7 +479,7 @@ ANS word set 18 with **UTF-8** encoded in the ARM64 kernel (`forth.s` / `boot_wo
 | `MAX-XCHAR` | `$10FFFF` true |\
 | `XCHAR-MAXMEM` | `4` true |\
 \
-**Validate:** absolute `INCLUDE` of `Resources/Library/ANSValidate/all-in-one.fth` (expect **28 passed, 0 failed**).\
+**Validate:** `FROMLIB FLOAD Testing/ANSValidate/src/all-in-one.fth` (expect **28 passed, 0 failed**).\
 \
 ## Float (12) \'97 Tier A + Tier B (Float Ext)\
 \
