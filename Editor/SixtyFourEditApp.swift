@@ -180,6 +180,11 @@ struct SixtyFourEditApp: App {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .help("Open an embedded browser tab (forth-standard.org). Type a URL or search in the address field.")
 
+                Button("Open GitHub in Safari") {
+                    ForthMenuSupport.openGitHubInSafari()
+                }
+                .help("Open https://github.com/Win32Forth/EditForth in Safari.")
+
                 Divider()
 
                 Button(workspace.isEditorSplit ? "Close Split" : "Split Editor") {

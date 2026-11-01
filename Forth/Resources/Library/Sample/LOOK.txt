@@ -1,0 +1,27 @@
+LOOK
+
+LOOK searches text files from the EditForth or EditForthPWA console.
+It is the EditForth form of Tom Zimmer's DOS LOOK utility.
+
+Load the program, then run it:
+
+    FROMLIB FLOAD Sample/LOOK.fth
+    LOOK
+
+LOOK asks for the text, then for file names. Type one name per line.
+Each name is searched when you press Return. A blank line finishes.
+Names are paths in the working folder,
+such as:
+
+    Library/Sample/HELLO.fth
+
+DIR lists the working folder. CHDIR changes it. Wildcards and a
+recursive directory walk are not part of this copy.
+
+Space pauses the listing. Esc stops it. Matching is case-sensitive.
+A line longer than 240 characters is searched in that first piece only.
+
+The DOS program also accepted a command tail, quoted phrases, output
+redirection, and -g for a global directory walk. Those were command.com
+features. The console prompts above are the EditForth and EditForthPWA
+interface.

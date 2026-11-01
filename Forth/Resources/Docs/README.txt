@@ -21,7 +21,7 @@ Library/Pascal — Tiny Pascal → Forth translator (`PASCAL"`, `PASCAL-TO-FILE`
 See Library/Pascal/README.txt. Prefer PASY.PAS; PASX.PAS is the older stress sample.
 
 REF / XREF / ANYWORDS — cold-loaded from Kernel/xref.fth (always present after
-boot). Classic TCOM source kept at Library/TCOM/REF.FTH. REF does not
+boot). Library/TCOM was removed in 2.6.2, including REF.FTH. REF does not
 cross-reference IMMEDIATE words. See Docs/STATUS.md.
 
 Samples (App Output): Library/Sample/VED64.fth → VED64 (minimal VED);

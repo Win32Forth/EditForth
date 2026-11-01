@@ -65,6 +65,18 @@ enum ForthMenuSupport {
         return false
     }
 
+    /// View → Open GitHub in Safari. The EditForth repository, not an editor tab.
+    static func openGitHubInSafari() {
+        guard let url = URL(string: "https://github.com/Win32Forth/EditForth") else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        if let safari = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari") {
+            NSWorkspace.shared.open([url], withApplicationAt: safari, configuration: config)
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     /// Finder window on Documents/EditForth (Library, System, Docs).
     static func openUserTree() {
         let url = userTreeURL

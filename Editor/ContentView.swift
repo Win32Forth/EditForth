@@ -26,6 +26,8 @@ struct ContentView: View {
     /// Character columns when mode is `column` (preset or Other…).
     @AppStorage("editorWrapColumn") private var wrapColumn = 100
     @State private var gotoObserver: NSObjectProtocol?
+    /// Horizontal center of the selected tab, in the tab strip. Used to scroll it into view.
+    @State private var selectedTabMidX: CGFloat = -1
     @State private var dragStartHeight: CGFloat?
     @State private var debugKeys = DebugKeyMonitor()
     /// After cold start settles, allow auto-reveal (do not pop chrome for Engine down alone).
@@ -653,19 +655,36 @@ struct ContentView: View {
     // MARK: - Tab bar
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TabBarScroller(selectedID: workspace.selectedTabID, selectedMidX: selectedTabMidX) {
             HStack(spacing: 0) {
                 ForEach(workspace.tabStripItems, id: \.id) { item in
                     TabChip(
                         title: item.title,
                         isSelected: item.id == workspace.selectedTabID,
+                        isReadOnly: item.isReadOnly,
                         onSelect: { workspace.selectedTabID = item.id },
                         onClose: { workspace.closeTab(id: item.id) }
                     )
+                    .background {
+                        if item.id == workspace.selectedTabID {
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: SelectedTabMidKey.self,
+                                    value: geo.frame(in: .named("tabstrip")).midX
+                                )
+                            }
+                        }
+                    }
                 }
             }
+            .fixedSize(horizontal: true, vertical: true)
+            .coordinateSpace(name: "tabstrip")
+            .onPreferenceChange(SelectedTabMidKey.self) { midX in
+                selectedTabMidX = midX
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -811,11 +830,130 @@ struct ContentView: View {
 
 // MARK: - Tab UI
 
+private struct SelectedTabMidKey: PreferenceKey {
+    static var defaultValue: CGFloat = -1
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next >= 0 { value = next }
+    }
+}
+
+/// Horizontal tab strip. A classic scrollbar appears under the names when they
+/// do not fit, and hides again when they do.
+private struct TabBarScroller<Content: View>: NSViewRepresentable {
+    var selectedID: UUID?
+    var selectedMidX: CGFloat
+    var content: Content
+
+    init(selectedID: UUID?, selectedMidX: CGFloat, @ViewBuilder content: () -> Content) {
+        self.selectedID = selectedID
+        self.selectedMidX = selectedMidX
+        self.content = content()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> TabBarScrollView {
+        let scroll = TabBarScrollView()
+        scroll.drawsBackground = false
+        scroll.backgroundColor = .clear
+        scroll.borderType = .noBorder
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .legacy
+        scroll.horizontalScrollElasticity = .automatic
+        scroll.verticalScrollElasticity = .none
+        scroll.usesPredominantAxisScrolling = true
+        scroll.setContentHuggingPriority(.required, for: .vertical)
+        scroll.setContentCompressionResistancePriority(.required, for: .vertical)
+        let clip = TabBarClipView()
+        clip.drawsBackground = false
+        scroll.contentView = clip
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = .intrinsicContentSize
+        host.translatesAutoresizingMaskIntoConstraints = true
+        scroll.documentView = host
+        return scroll
+    }
+
+    func updateNSView(_ scroll: TabBarScrollView, context: Context) {
+        guard let host = scroll.documentView as? NSHostingView<Content> else { return }
+        host.rootView = content
+        scroll.relayoutHost()
+        let coordinator = context.coordinator
+        guard coordinator.scrolledID != selectedID else { return }
+        if coordinator.pendingID != selectedID {
+            coordinator.pendingID = selectedID
+            coordinator.midAtChange = selectedMidX
+            return
+        }
+        guard selectedMidX >= 0, selectedMidX != coordinator.midAtChange else { return }
+        coordinator.scrolledID = selectedID
+        let rect = NSRect(x: selectedMidX - 24, y: 0, width: 48, height: 1)
+        let visible = scroll.contentView.bounds
+        if rect.minX < visible.minX || rect.maxX > visible.maxX {
+            scroll.contentView.scrollToVisible(rect)
+        }
+    }
+
+    final class Coordinator {
+        var scrolledID: UUID?
+        var pendingID: UUID?
+        var midAtChange: CGFloat = -1
+    }
+}
+
+private final class TabBarClipView: NSClipView {
+    override var isFlipped: Bool { true }
+}
+
+private final class TabBarScrollView: NSScrollView {
+    private var lastIntrinsicHeight: CGFloat = 28
+    private var layingOut = false
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: lastIntrinsicHeight)
+    }
+
+    func relayoutHost() {
+        guard !layingOut, let host = documentView else { return }
+        layingOut = true
+        defer { layingOut = false }
+        host.layoutSubtreeIfNeeded()
+        let fit = host.fittingSize
+        let clipW = bounds.width > 1 ? contentView.bounds.width : 0
+        let contentW = max(fit.width, 1)
+        // One row of tabs. A bad fitting height during a panel resize must not stick.
+        let chipH: CGFloat = (fit.height >= 20 && fit.height <= 36) ? fit.height : 28
+        let overflow = clipW > 1 && contentW > clipW + 1
+        let scrollerH: CGFloat = overflow ? min(max(horizontalScroller?.fittingSize.height ?? 0, 14), 16) : 0
+        host.frame = NSRect(x: 0, y: 0, width: contentW, height: chipH)
+        let next = chipH + scrollerH
+        if abs(next - lastIntrinsicHeight) > 0.5 {
+            lastIntrinsicHeight = next
+            invalidateIntrinsicContentSize()
+        }
+        reflectScrolledClipView(contentView)
+    }
+
+    override func layout() {
+        super.layout()
+        relayoutHost()
+    }
+}
+
 private struct TabChip: View {
     var title: String
     var isSelected: Bool
+    var isReadOnly: Bool
     var onSelect: () -> Void
     var onClose: () -> Void
+
+    /// Selected editable file. Pale enough to read black text on the white window.
+    private static let selectedGreen = Color(red: 0.84, green: 0.94, blue: 0.84)
+    /// Selected read-only file. Same fill as the View mode bar.
+    private static let selectedYellow = Color.yellow.opacity(0.22)
 
     var body: some View {
         HStack(spacing: 6) {
@@ -835,7 +973,7 @@ private struct TabChip: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(isSelected ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+        .background(isSelected ? (isReadOnly ? Self.selectedYellow : Self.selectedGreen) : Color.clear)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(isSelected ? Color.accentColor : Color.clear)

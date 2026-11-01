@@ -141,11 +141,12 @@ final class WorkspaceModel: ObservableObject {
     }
 
     /// Ordered strip: file tabs then search / diff / web tabs.
-    var tabStripItems: [(id: UUID, title: String, isSearch: Bool)] {
-        let files = tabs.map { (id: $0.id, title: $0.title, isSearch: false) }
-        let searches = searchTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
-        let diffs = diffTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
-        let webs = webTabs.map { (id: $0.id, title: $0.title, isSearch: true) }
+    /// `isReadOnly` is the file's view mode. Search, diff, and web tabs are not files.
+    var tabStripItems: [(id: UUID, title: String, isReadOnly: Bool)] {
+        let files = tabs.map { (id: $0.id, title: $0.title, isReadOnly: $0.isViewMode) }
+        let searches = searchTabs.map { (id: $0.id, title: $0.title, isReadOnly: false) }
+        let diffs = diffTabs.map { (id: $0.id, title: $0.title, isReadOnly: false) }
+        let webs = webTabs.map { (id: $0.id, title: $0.title, isReadOnly: false) }
         return files + searches + diffs + webs
     }
 

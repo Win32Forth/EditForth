@@ -1,0 +1,31 @@
+Help for Complex Floating Point Arithmetic
+Sample/COMPLEX.fth — Mark Smiley, corrections by R. L. Smith.
+
+Complex numbers sit on the floating-point stack with the imaginary
+part on top and the real part under it. Load the source, then run
+COMPLEX-DEMO.
+
+ZDROP        ( Z: z -- )              drop one complex value
+ZDUP         ( Z: z -- z z )          copy one complex value
+ZSWAP        ( Z: z1 z2 -- z2 z1 )    exchange two complex values
+ZNIP         ( Z: z1 z2 -- z2 )       drop the deeper complex value
+ZNEGATE      ( Z: z -- -z )           negate both parts
+ZCONJUGATE   ( Z: z -- z* )           negate the imaginary part
+ZJ*          ( Z: z -- z*j )          multiply by the imaginary unit
+Z+           ( Z: z1 z2 -- z3 )       add
+Z-           ( Z: z1 z2 -- z3 )       subtract z2 from z1
+Z*           ( Z: z1 z2 -- z3 )       multiply
+Z/           ( Z: z1 z2 -- z3 )       divide z1 by z2
+ZVARIABLE    ( -- )                   create a complex variable
+Z!           ( Z: z -- ) ( addr -- )  store
+Z@           ( Z: -- z ) ( addr -- )  fetch
+ZMAG         ( F: re im -- r )        magnitude
+TOPOLAR      ( F: x y -- r theta )    cartesian to polar, radians
+TOCART       ( F: r theta -- x y )    polar to cartesian
+F^2          ( F: r -- r^2 )          square
+F2/          ( F: r -- r/2 )          halve
+F2*          ( F: r -- 2*r )          double
+ZSQRT        ( Z: z -- root )         root with a positive real part
+-ZSQRT       ( Z: z -- root )         the other square root
+Z.           ( Z: z -- )              print real and imag
+COMPLEX-DEMO ( -- )                  print a few known values

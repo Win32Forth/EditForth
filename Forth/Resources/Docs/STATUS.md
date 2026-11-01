@@ -1,8 +1,29 @@
 # 64Forth development status
 
-**Current:** **2.6.1** (build **28**) — read-only Docs and System, PAUSE, and the find bar. Disk image `Releases/EditForth-2.6.1-macOS.dmg`.
+**Current:** **2.6.2** (build **29**) — Sample ports, TCOM folder removed. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`.
 
-**Last updated:** 2026-10-29
+**Last updated:** 2026-10-31
+
+---
+
+## v2.6.2 — Sample ports, TCOM removed
+
+**Version strings:** marketing **2.6.2**, build **29**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`. Console stamp `Oct 31, 2026 10:16 PM`. `scripts/release.sh` was not run.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.6.2 === Oct 31, 2026 10:16 PM ===
+```
+
+### Highlights since 2.6.1
+
+- **Library/TCOM removed.** The DOS originals are no longer in the tree. Programs that run on EditForth are in `Library/Sample`. `ZTREE` lists sizes through the host shell and does not delete files. Some of the new samples still need a debug pass.
+- **Tab strip.** Names scroll sideways when they do not fit. The scrollbar hides when they do.
+- **Selected tab.** Pale green for an editable file. Pale yellow, the same fill as the View mode bar, when the file is read-only.
+- **View → Open GitHub in Safari.** Opens https://github.com/Win32Forth/EditForth in Safari.
+
+**Release:** not yet (no DMG).
 
 ---
 
@@ -674,15 +695,15 @@ Append new design sections as we go; mark items done when implemented.
 - **Emitter LIT-PAYLOAD-MARK:** only `@`-probe payloads that look like user VAs (≥4 GiB); aligned immediates such as `$808080` (IMAGEVIEW chrome) must not be treated as VALUE PFAs (was EXC_BAD_ACCESS in `XFETCH` / `@` during `EMIT-WINDOW-APP`).
 - **Sample EDIT64:** GRAPHICS mini-editor (`Library/Sample/EDIT64.fth` → `EDIT64`) — COLOR8 white paper / black text; reverse-video caret; click/arrows/wheel; CRLF normalize on load; OPEN/SAVE via `(APP-FILE-*)` slots **21–25** (NSOpenPanel/NSSavePanel + slurp/spew, no ANS File-Access in emit reach); dirty quit **S**/**D**/**Esc**; chrome buttons only on the label row. Emit: `EMIT-WINDOW-APP EDIT64` (not Facility SZ-EDITOR).
 - **Host file ABI:** `(APP-FILE-CHOOSE/SAVE-AS/PATH/SLURP/SPEW)` in Swift `AppOutputHost` and Emitter `emit-host` / `reloc.fth` (`#HOST-APP` **26**).
-- **Cold REF / XREF:** `Kernel/xref.fth` is `.incbin`’d after `vocsys.fth` (always present after boot — no `FLOAD`). Port of classic TCOM `Library/TCOM/REF.FTH` (kept as the unchanged reference). Public: `REF` / `XREF` / `USEDIN` / `CALLS` / `ANYREF`, `FINDANY`, `ANYWORDS`.
+- **Cold REF / XREF:** `Kernel/xref.fth` is `.incbin`’d after `vocsys.fth` (always present after boot — no `FLOAD`). Port of classic TCOM `REF.FTH`. The Library/TCOM copy was removed in 2.6.2. Public: `REF` / `XREF` / `USEDIN` / `CALLS` / `ANYREF`, `FINDANY`, `ANYWORDS`.
   - **Wordlists:** FORTH + every named `VOCABULARY` (FORTH traverse) + extra `GET-ORDER` wids — **not** the raw `WORDLISTS` registry (garbage wids crash SEARCH/TRAVERSE). Guards: `XREF-XT-OK?` / `XREF-WID-OK?` / `XREF-WID-SANE?`. Zeroable loops use `?DO` (plain `0 0 DO` runs once and hit stale buffers).
   - **Titles:** `-------- references to: NAME leaf:line --------` from `VIEW-FILE#` / `VIEW-LINE` / `VIEW-PATH` (`XREF-.LOC` / `XREF-LEAF`); unstamped → `(no source)`. Multi-def `FINDANY` summaries list each def with `(leaf:line)`.
   - **ANYWORDS** `[filter]`: WORDS-like multi-vocab name listing (headers only; one TRAVERSE per wid; VOCABULARY nts cached at collect; optional case-insensitive substring; Space pause every 32 names; Esc/Q stop). Contrast: `WORDS` is **CONTEXT / first search-order only**.
   - **Build:** `project.pbxproj` touch-forth.s + Kernel→Sources sync lists include `xref.fth`; Sources mirror at `System/Sources/xref.fth`.
   - **Host:** `KernelBridge.deliverConsoleEvalKeyDown` feeds Esc/Space into the KEY queue while console `kernel_eval` runs (otherwise pause/abort never see keys).
   - **IMMEDIATE targets:** `REF` does not scan a definition whose FLAGS bit 63 (`FLAG_IMM`) is set. Those words compile other words into a definition, so the body is not a call list. Message: `-------- NAME is immediate (not cross-referenced) --------`. A name with both an immediate and an ordinary definition still scans the ordinary one.
-- **Sample VED64:** `Library/Sample/VED64.fth` → `VED64`. Minimal app-window port of TCOM `Library/TCOM/VED.FTH` (that file stays the DOS/TCOM reference). Flat 256KB buffer (not the 40MB swap-file cache). COLOR8 grid; OPEN/SAVE/FIND/HELP via the same `(APP-FILE-*)` panels as EDIT64; dirty quit **S**/**D**/**Esc**. Status numbers go through graphics `TYPE` (`U.R` is console-only and was leaking digits). `S" file" VED-LOAD` optional. Not emitted yet.
-- **Sample MIDNIGHT:** `Library/Sample/MIDNIGHT.FTH` → `MAIN` (Towers of Hanoi). Peter Midnight’s F-PC demo, adapted: `RECURSE`, `CHAR`/`[CHAR]`, `AT-XY`, `(APP-TONE)` for `BEEP`. `FROMLIB FLOAD Sample/MIDNIGHT.FTH` then `MAIN`. Classic source also updated in `Library/TCOM/MIDNIGHT.FTH`.
+- **Sample VED64:** `Library/Sample/VED64.fth` → `VED64`. Minimal app-window port of TCOM `VED.FTH`. The Library/TCOM copy was removed in 2.6.2. Flat 256KB buffer (not the 40MB swap-file cache). COLOR8 grid; OPEN/SAVE/FIND/HELP via the same `(APP-FILE-*)` panels as EDIT64; dirty quit **S**/**D**/**Esc**. Status numbers go through graphics `TYPE` (`U.R` is console-only and was leaking digits). `S" file" VED-LOAD` optional. Not emitted yet.
+- **Sample MIDNIGHT:** `Library/Sample/MIDNIGHT.FTH` → `MAIN` (Towers of Hanoi). Peter Midnight’s F-PC demo, adapted: `RECURSE`, `CHAR`/`[CHAR]`, `AT-XY`, `(APP-TONE)` for `BEEP`. `FROMLIB FLOAD Sample/MIDNIGHT.FTH` then `MAIN`. The Library/TCOM copy of MIDNIGHT was removed in 2.6.2.
 - **Tiny Pascal:** `FACTOR-` / `SIMP-EXPR` call `RECURSE` (the name is smudged until `;`, so a direct call was undefined). Generated sample `Library/Pascal/PASY.fth` kept beside `PASY.PAS`.
 
 **Release:** WIP / not yet (no DMG).
@@ -704,7 +725,7 @@ Append new design sections as we go; mark items done when implemented.
 - **ANS hide-until-`;`:** NFA count bit7 = SMUDGE (max name length 127). `:` / `:NONAME` set it; `;` / `DOES>` clear it. FIND/SEARCH-WORDLIST/WORDS/TRAVERSE skip hidden. Forth `SMUDGE` / `REVEAL` on `LAST`; `NAME>STRING` masks `$7F`. `RECURSE` via `LAST` still works while smudged. ANSValidate `host.fth` covers hide/reveal/CREATE/RECURSE.
 - **FILE-ECHO line numbers:** each echoed INCLUDE/FLOAD source line is prefixed with a 5-digit right-aligned line number and `| `.
 - **GRAPHICS mouse:** host `host_app_mouse` + kernel `(APP-MOUSE)` → `G-MOUSE` / `GETMOUS` (PLOT origin bottom-left; buttons 1=left 2=right 4=middle). Emitter SA slot 15 + `EmitGridView` mouse tracking for stand-alone `.app`s. `host_app_open` clears the key queue so a prior ESC does not make the next `KEY` return immediately.
-- **Sample DOODLE64:** `Library/Sample/DOODLE64.fth` — TCOM DOODLE port for 640×400 1-bit + mouse (`FROMLIB FLOAD Sample/DOODLE64.fth` then `DOODLE`). Ink bar WHITE/BLACK/INVERT; flags as `VARIABLE` (not `VALUE`/`TO`) so Emitter reach sees xts. Classic `TCOM/DOODLE.FTH` unchanged. `EMIT-WINDOW-APP` stand-alone DOODLE verified.
+- **Sample DOODLE64:** `Library/Sample/DOODLE64.fth` — TCOM DOODLE port for 640×400 1-bit + mouse (`FROMLIB FLOAD Sample/DOODLE64.fth` then `DOODLE`). Ink bar WHITE/BLACK/INVERT; flags as `VARIABLE` (not `VALUE`/`TO`) so Emitter reach sees xts. The Library/TCOM copy of DOODLE was removed in 2.6.2. `EMIT-WINDOW-APP` stand-alone DOODLE verified.
 - **Emitter SA reloc:** `SCAN-DOCON` + DOCON `IMPORT-RELOC-XT-CELLS` mark/rebase CONSTANT PFA xts; `LIT-PAYLOAD-MARK` follows VALUE/VARIABLE PFAs from `TO`; host-VA LIT abort ignores sign-extended immediates (`-1` TRUE, etc.). `GRAPH-BYE` does not `WINDOW-OFF` when the emit runner owns the window.
 - **PLOT BLACK fix:** clear-ink path uses `-1 XOR` so GRAPHICS `INVERT` (ink) no longer shadows bitwise invert.
 - **CODE-BOUNDS / Emitter:** walk `__bootptr` as an array of row pointers (plus `BOOT-WORD-TABLE-END`); restores non-zero ends for `(S")` and other labeled prims so Emitter `PRIM-SPAN` works again. Same fix in Emitter `BOOT-SPAN-NAMED` / `EMM-SPAN-OF` (`reloc.fth`) so `sa-block missing (SA-PRINT)` no longer fires after a good rebuild.

@@ -1,6 +1,6 @@
 \ VED64.fth — minimal 64Forth port of VED (Tom Zimmer, F-PC / TCOM)
 \
-\ Reference: Resources/Library/TCOM/VED.FTH
+\ Port of TCOM VED.FTH. Library/TCOM was removed in 2.6.2.
 \
 \ This cut runs in the App Output window (same grid as EDIT64). It is a
 \ line editor over one flat buffer, not the original 40MB swap-file cache.
