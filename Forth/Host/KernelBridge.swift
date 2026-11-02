@@ -2908,8 +2908,17 @@ final class KernelBridge {
 
         // Kernel VM is single-threaded; reject overlapping evaluate (e.g. paste storm).
         guard evalLock.try() else {
-            handleEmitString("(busy — finish current command first)\n")
+            if CompanionChannel.isRequested {
+                ForthEditorServer.shared.postBusyStatus()
+            } else {
+                handleEmitString("(busy — finish current command first)\n")
+            }
             return -3
+        }
+        defer {
+            if CompanionChannel.isRequested {
+                ForthEditorServer.shared.clearBusyStatusIfNeeded()
+            }
         }
 
         let quiet = Self.shouldQuietEmit(for: t)

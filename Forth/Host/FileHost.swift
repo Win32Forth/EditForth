@@ -1309,7 +1309,6 @@ final class FileHost {
     /// the app is left alone. Called from `installUserTree` (launch and
     /// Update User Data). Restore Shipped Files still replaces the whole tree.
     func syncNewerShippedFiles() {
-        let fm = FileManager.default
         guard let res = Bundle.main.resourceURL else { return }
         guard let destRoot = userTreeURL else { return }
         var copied = 0

@@ -241,7 +241,13 @@ final class WorkspaceModel: ObservableObject {
         if !exists {
             let leaf = standardized.lastPathComponent
             if let byLeaf = tabForLeaf(leaf) {
-                let mode = (byLeaf.fileURL.map(ForthMenuSupport.opensReadOnly) ?? false) ? true : viewMode
+                let readOnly: Bool
+                if let url = byLeaf.fileURL {
+                    readOnly = ForthMenuSupport.opensReadOnly(url)
+                } else {
+                    readOnly = false
+                }
+                let mode = readOnly ? true : viewMode
                 focus(byLeaf, viewMode: mode, line: line, reloadIfClean: false, fileURL: nil)
                 return byLeaf
             }
@@ -927,7 +933,12 @@ final class WorkspaceModel: ObservableObject {
         selectedTabID = tab.id
         // Docs and System stay read-only. Otherwise nil preserves the current mode
         // so open -a does not strip VIEW/debug browse mode.
-        let locked = (fileURL ?? tab.fileURL).map(ForthMenuSupport.opensReadOnly) ?? false
+        let locked: Bool
+        if let url = fileURL ?? tab.fileURL {
+            locked = ForthMenuSupport.opensReadOnly(url)
+        } else {
+            locked = false
+        }
         if locked {
             tab.isViewMode = true
         } else if let viewMode {

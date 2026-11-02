@@ -926,7 +926,21 @@ final class ForthConnectionManager: NSObject, ObservableObject {
             }
             appendConsole(text)
         case .statusNote(let text):
-            showStatusNote(text)
+            let trimmed = text
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                // Companion cleared a note because evaluate finished.
+                statusNoteToken &+= 1
+                statusNote = nil
+            } else if trimmed.hasPrefix("busy —") {
+                // Stay up for the whole command. The 3-second timer is for other notes.
+                statusNoteToken &+= 1
+                statusNote = trimmed
+            } else {
+                showStatusNote(trimmed)
+            }
         case .breakpointHit(let line, let stackTrace):
             appendConsole("BREAK line \(line)")
             stackTrace.forEach { appendConsole("  \($0)") }

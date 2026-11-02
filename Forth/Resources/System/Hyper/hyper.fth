@@ -338,19 +338,40 @@ VARIABLE HYPER-LEAF-U
       THEN THEN
    REPEAT ;
 
-\ --- Cold / Library VIEW restamp from HYPER.NDX --------------------------------
+\ --- Cold VIEW restamp from HYPER.NDX ---------------------------------------
 \ Cold .incbin blobs boot with SOURCE-ID 0, so CREATE never stamped VIEW-FILE#.
-\ Also restamp System/Hyper (and other Library) if live INCLUDE stamp was
-\ missed. Walk @ Library/… NDX sections and VIEW-STAMP matching dictionary
-\ words. Runs after HYPER-LOAD / HYPER-REINDEX.
+\ Also restamp System/ and Library/ if a live INCLUDE stamp was missed.
+\ forth.s is indexed before the .fth files. A BOOT_WORD line must not claim
+\ a colon word (HERE, CELLS); the later System/Sources/*.fth line is the
+\ definition the interpreter finds. Runs after HYPER-LOAD / HYPER-REINDEX.
+
+: HYPER-PREFIX?  ( ca u sa su -- flag )
+   DUP >R 2SWAP
+   DUP R@ < IF  2DROP 2DROP R> DROP FALSE EXIT  THEN
+   R> MIN COMPARE 0= ;
+
+: HYPER-ENDS?  ( a u b v -- flag )
+   >R ROT ROT                               \ b a u
+   DUP R@ < IF  2DROP DROP R> DROP FALSE EXIT  THEN
+   DUP R@ - /STRING                         \ b tail v
+   >R R@ SWAP >R R> R> R> DROP COMPARE 0= ;
 
 : HYPER-LIB-PATH?  ( ca u -- flag )
-   DUP 8 < IF  2DROP FALSE EXIT  THEN
-   DROP 8 S" Library/" COMPARE 0= ;
+   2DUP S" Library/" HYPER-PREFIX? IF  2DROP TRUE EXIT  THEN
+   S" System/" HYPER-PREFIX? ;
+
+\ forth.s / *.inc. Colon words in those files are not the live definition.
+: HYPER-ASM-PATH?  ( ca u -- flag )
+   2DUP S" .s" HYPER-ENDS? IF  2DROP TRUE EXIT  THEN
+   2DUP S" .S" HYPER-ENDS? IF  2DROP TRUE EXIT  THEN
+   S" .inc" HYPER-ENDS? ;
 
 \ Stamp one xt from HYPER-CUR + line. True if stamped.
 : (HYPER-STAMP-XT)  ( xt line -- flag )
-   OVER VIEW-FILE# IF  2DROP FALSE EXIT  THEN   \ keep earlier Library stamp
+   OVER VIEW-FILE# IF  2DROP FALSE EXIT  THEN   \ keep an earlier stamp
+   OVER DOCOL? IF
+      HYPER-CUR COUNT HYPER-ASM-PATH? IF  2DROP FALSE EXIT  THEN
+   THEN
    SWAP >R                                       \ R: xt  ( line )
    HYPER-CUR COUNT VIEW-REG                      \ line id
    DUP 0= IF  DROP R> DROP FALSE EXIT  THEN
@@ -364,7 +385,7 @@ VARIABLE HYPER-LEAF-U
    DROP R> (HYPER-STAMP-XT) ;
 
 \ One NDX body line under current HYPER-CUR path: "NAME line"
-\ First Library hit wins: do not overwrite a non-zero VIEW-FILE#.
+\ First System/ or Library/ hit wins: do not overwrite a non-zero VIEW-FILE#.
 \ NDX can list the same name twice (e.g. real OVER in forth.s, then a
 \ mid-line CREATE OVER under +FIELD); last-wins stamped the wrong line.
 \

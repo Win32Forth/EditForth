@@ -8,8 +8,11 @@
 \   FROMLIB FLOAD Sample/MANGEN.fth
 \   MANGEN
 \
-\ Any key stops the drawing and returns to the console.
-\ S after a finished picture writes mandel.raw in the working folder.
+\ Left click centers on that point and zooms in. Middle click pans
+\ there. Right click redraws. S writes mandel.raw in the working folder.
+\ Q or Esc returns to the console. A key during the picture stops that pass.
+\ Each sample is a 2 by 2 block. The loops cover half of G-PX and
+\ G-PY so those blocks fill the window.
 \
 \ Public domain.
 
@@ -21,7 +24,8 @@ DECIMAL
 
 : MANGEN-CREDIT ( -- )
   CR ." MANGEN draws the Mandelbrot set (C. H. Ting, public domain)."
-  CR ." Any key stops and returns to the console." CR
+  CR ." Left click zooms in at the cursor. Middle pans. Right redraws."
+  CR ." S saves mandel.raw. Q quits." CR
   ;
 
 ONLY FORTH ALSO FLOATING ALSO GRAPHICS DEFINITIONS
@@ -37,7 +41,12 @@ FVARIABLE MB-CI
 VARIABLE MB-MAX
 VARIABLE MB-N
 VARIABLE MB-DX
-CREATE MB-RAW 160 100 * ALLOT
+VARIABLE MB-STOP
+VARIABLE MB-HIT
+VARIABLE MB-MX
+VARIABLE MB-MY
+VARIABLE MB-MB
+CREATE MB-RAW G-PX 2/ G-PY 2/ * ALLOT
 
 : MB-SETUP ( -- )
   -2.2e0 MB-X0 F!
@@ -85,30 +94,112 @@ CREATE MB-RAW 160 100 * ALLOT
     DROP CR ." Could not write mandel.raw" CR EXIT
   THEN
   >R
-  MB-RAW 160 100 * R@ WRITE-FILE DROP
+  MB-RAW G-PX 2/ G-PY 2/ * R@ WRITE-FILE DROP
   R> CLOSE-FILE DROP
   CR ." Wrote mandel.raw" CR ;
+
+\ Put pixel (x,y) at the window center. Step is one pixel.
+: MB-CENTER ( x y -- )
+  G-PY 2/ - S>D D>F MB-STEP F@ F* MB-Y0 F@ F+ MB-Y0 F!
+  G-PX 2/ - S>D D>F MB-STEP F@ F* MB-X0 F@ F+ MB-X0 F! ;
+
+: MB-ZOOM ( F: factor -- )
+  MB-X0 F@ MB-STEP F@ G-PX 2/ S>D D>F F* F+
+  MB-Y0 F@ MB-STEP F@ G-PY 2/ S>D D>F F* F+
+  FROT
+  MB-STEP F@ F* MB-STEP F!
+  MB-STEP F@ G-PY 2/ S>D D>F F* F- MB-Y0 F!
+  MB-STEP F@ G-PX 2/ S>D D>F F* F- MB-X0 F! ;
+
+\ Latest sample. (APP-MOUSE) does not sleep; (APP-PUMP) sleeps 10 ms.
+: MB-NOTE ( -- flag )
+  (APP-MOUSE)
+  DUP IF
+    MB-MB !
+    MB-MY !
+    MB-MX !
+    -1 MB-HIT !
+    -1
+  ELSE
+    DROP 2DROP
+    0
+  THEN ;
+
+: MB-UP ( -- )
+  BEGIN
+    PAUSE
+    (APP-MOUSE) NIP NIP 0=
+  UNTIL ;
+
+: MB-DRAW ( -- )
+  CLS
+  0 0 AT ." Q quit  L-click zoom  M pan  R redraw  S save"
+  0 MB-HIT !
+  G-PY 2/ 0 DO
+    MB-STOP @ MB-HIT @ OR IF LEAVE THEN
+    G-PX 2/ 0 DO
+      I 2* J 2* MB-COLOR
+      DUP MB-RAW J G-PX 2/ * I + + C!
+      I 2* J 2* ROT MB-DOT
+      I 15 AND 0= IF
+        MB-NOTE IF LEAVE THEN
+      THEN
+    LOOP
+    MB-HIT @ IF LEAVE THEN
+    PREFRESH
+    KEY? IF LEAVE THEN
+    PAUSE
+    MB-NOTE IF LEAVE THEN
+  LOOP
+  PREFRESH ;
+
+\ Left recenters and zooms in. Middle recenters. Right redraws.
+: MB-ACT ( -- )
+  BEGIN
+    MB-HIT @
+  WHILE
+    0 MB-HIT !
+    MB-UP
+    MB-MB @ DUP 1 AND IF
+      DROP
+      MB-MX @ MB-MY @ MB-CENTER
+      0.5e0 MB-ZOOM
+    ELSE DUP 4 AND IF
+      DROP
+      MB-MX @ MB-MY @ MB-CENTER
+    ELSE
+      DROP
+    THEN THEN
+    MB-DRAW
+  REPEAT ;
+
+: MB-REDRAW ( -- )
+  MB-DRAW
+  MB-ACT ;
 
 : MANGEN ( -- )
   DECIMAL
   MB-SETUP
+  0 MB-STOP !
   S" EditForth MANGEN" APP-NAME
   WINDOW PIXEL-ON COLOR8
-  WHITE
-  100 0 DO
-    160 0 DO
-      I 2* J 2* MB-COLOR
-      DUP MB-RAW J 160 * I + + C!
-      I 2* J 2* ROT MB-DOT
-    LOOP
-    PREFRESH
-    KEY? IF LEAVE THEN
-    PAUSE
-  LOOP
-  PREFRESH
-  KEY
-  DUP [CHAR] S = OVER [CHAR] s = OR IF MB-SAVE THEN
-  DROP
+  MB-REDRAW
+  BEGIN
+    MB-STOP @ 0=
+  WHILE
+    MB-NOTE IF
+      MB-ACT
+    ELSE KEY? IF
+      KEY
+      DUP 27 = OVER [CHAR] Q = OR OVER [CHAR] q = OR IF
+        DROP -1 MB-STOP !
+      ELSE DUP [CHAR] S = OVER [CHAR] s = OR IF
+        DROP MB-SAVE
+      ELSE DROP THEN THEN
+    ELSE
+      PAUSE
+    THEN THEN
+  REPEAT
   1BIT
   WINDOW-OFF
   ;

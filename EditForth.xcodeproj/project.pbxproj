@@ -85,6 +85,7 @@
 		B1000119 /* AppOutputHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOutputHost.swift; sourceTree = "<group>"; };
 		B100011A /* FacilityEditorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilityEditorHost.swift; sourceTree = "<group>"; };
 		B1000120 /* HyperReindex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperReindex.swift; sourceTree = "<group>"; };
+		B1000121 /* System */ = {isa = PBXFileReference; lastKnownFileType = folder; path = System; sourceTree = "<group>"; };
 		EFED17010000000100000001 /* EditForth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditForth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EFEDD0CC0000000100000001 /* DockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockController.swift; sourceTree = "<group>"; };
 		EFEDD0CC0000000100000011 /* CompanionChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChannel.swift; sourceTree = "<group>"; };
@@ -216,6 +217,7 @@
 		B1000306 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				B1000121 /* System */,
 				B1000109 /* Library */,
 				B100010A /* Docs */,
 				B1000115 /* Config */,
@@ -790,7 +792,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -806,7 +808,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -825,7 +827,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
@@ -841,7 +843,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.win32forth.SixtyFourForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -986,7 +988,7 @@
 				CODE_SIGN_ENTITLEMENTS = Forth/64Forth.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1002,7 +1004,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1024,7 +1026,7 @@
 				CODE_SIGN_ENTITLEMENTS = Forth/64Forth.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = X5YCJL3LJ8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1040,7 +1042,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				OTHER_CFLAGS = "-I$(SRCROOT)/Forth/Kernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.Win32Forth.EditForth;
 				PRODUCT_NAME = "$(TARGET_NAME)";

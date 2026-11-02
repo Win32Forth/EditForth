@@ -137,9 +137,9 @@ final class FileListModel: ObservableObject {
         generation += 1
         let token = generation
         let directory = root
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let found = Self.scan(directory)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self, self.generation == token else { return }
                 self.entries = found
             }

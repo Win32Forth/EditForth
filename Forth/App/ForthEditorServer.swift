@@ -42,6 +42,8 @@ final class ForthEditorServer {
     private var emitEndsWithNewline = true
     /// Bumped in `noteConsoleEmit` so executeCommand can tell “Forth printed” vs silence.
     private var emitGeneration: UInt = 0
+    /// A busy note is on the editor status line until the in-flight evaluate returns.
+    private var busyStatusPosted = false
 
     /// True when at least one 64Edit sock client is connected (edit.sock).
     /// Used to skip `open -a` on DEBUG/EDIT when the editor can take pending-goto
@@ -367,8 +369,9 @@ final class ForthEditorServer {
         // executeCommand would sit silently until the first returns — EMIT and
         // console lines look dead. Reject now from the I/O thread.
         if kernel.isEvaluating {
-            let msg = "busy — finish current command first (Esc/Q in the graphics window, or Stop Forth)"
-            writeResponse(.error(message: msg), to: fd)
+            // Immediate: there is no delay. A second command while evaluate
+            // still holds the VM posts the status line and is not run.
+            postBusyStatus()
             return
         }
 
@@ -381,7 +384,8 @@ final class ForthEditorServer {
                 if kernel.isAnyDebugArmed {
                     response = .error(message: "debugger paused — use Step/Continue")
                 } else if kernel.isEvaluating {
-                    response = .error(message: "busy — finish current command first")
+                    self.postBusyStatus()
+                    response = .consoleOutput(text: "")
                 } else {
                     // Editor submitLine always appends \n after the input line before
                     // results stream. If Forth emits nothing, that client newline already
@@ -408,6 +412,9 @@ final class ForthEditorServer {
                         self.queue.async { self.byeExitWhenIdle = true }
                         self.broadcast(.requestQuit)
                         response = .consoleOutput(text: "")
+                    } else if st == -3 {
+                        // Overlapping evaluate. The status line already has the busy note.
+                        response = .consoleOutput(text: "")
                     } else {
                         response = .error(message: "status=\(st)")
                     }
@@ -424,7 +431,9 @@ final class ForthEditorServer {
                     // VIEW uses PARSE-NAME (VIEW) DROP — miss prints "undefined: name" depth-clean.
                     let st = kernel.evaluate("VIEW \(word)")
                     kernel.forceFlushEmitSync()
-                    if st != 0 {
+                    if st == -3 {
+                        response = .consoleOutput(text: "")
+                    } else if st != 0 {
                         response = .error(message: "status=\(st)")
                     } else {
                         let opened = FileHost.shared.editAtOpenCount > before
@@ -447,7 +456,9 @@ final class ForthEditorServer {
                     kernel.forceFlushEmitSync()
                     response = st == 0
                         ? .consoleOutput(text: "ok(\(kernel.dataStackDepth))")
-                        : .error(message: "status=\(st)")
+                        : (st == -3
+                            ? .consoleOutput(text: "")
+                            : .error(message: "status=\(st)"))
                 }
             case .loadSource(let path):
                 if kernel.isAnyDebugArmed {
@@ -455,7 +466,9 @@ final class ForthEditorServer {
                 } else {
                     let st = kernel.loadFile(named: path)
                     kernel.forceFlushEmitSync()
-                    response = st == 0 ? .consoleOutput(text: "ok") : .error(message: "load status=\(st)")
+                    response = st == 0 || st == -3
+                        ? .consoleOutput(text: st == 0 ? "ok" : "")
+                        : .error(message: "load status=\(st)")
                 }
             default:
                 return
@@ -480,6 +493,24 @@ final class ForthEditorServer {
             return false
         }
         return true
+    }
+
+    /// Status-line notice while a command is still evaluating. Not console text.
+    func postBusyStatus() {
+        emitLock.lock()
+        busyStatusPosted = true
+        emitLock.unlock()
+        broadcast(.statusNote(text: "busy — finish current command first (Esc/Q in the graphics window, or Stop Forth)"))
+    }
+
+    /// Drop the busy notice once the evaluate that was in progress returns.
+    func clearBusyStatusIfNeeded() {
+        emitLock.lock()
+        let posted = busyStatusPosted
+        busyStatusPosted = false
+        emitLock.unlock()
+        guard posted else { return }
+        broadcast(.statusNote(text: ""))
     }
 
     func broadcast(_ response: ForthResponse) {

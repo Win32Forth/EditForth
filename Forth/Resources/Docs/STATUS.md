@@ -1,8 +1,32 @@
 # 64Forth development status
 
-**Current:** **2.6.2** (build **29**) — Sample ports, TCOM folder removed. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`.
+**Current:** **2.6.3** (build **30**) — Busy status, Hyper restamp, sample input, Forth-1968. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`.
 
-**Last updated:** 2026-10-31
+**Last updated:** 2026-11-02
+
+---
+
+## v2.6.3 — Busy status, Hyper restamp, sample input
+
+**Version strings:** marketing **2.6.3**, build **30**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`. Console stamp `Nov 2, 2026 4:07 PM`. `scripts/release.sh` was not run.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.6.3 === Nov 2, 2026 4:07 PM ===
+```
+
+### Highlights since 2.6.2
+
+- **Busy status.** A second command while Forth is still evaluating posts `busy — finish current command first (Esc/Q in the graphics window, or Stop Forth)` on the editor status line. It does not print on the Forth console. There is no delay. The note stays until that evaluate returns.
+- **HYPER restamp.** Cold VIEW stamps cover `System/` and `Library/`. A colon word is not taken from a `.s`, `.S`, or `.inc` path, so names such as `(SLURP)`, `HERE`, and `CELLS` stay on the Forth sources.
+- **SPLAT.** No password. Esc returns to the console. A negative key is dropped. The walk no longer underflows the stack.
+- **LINEWALK.** `CLAMP-STEP` keeps the limit until the chosen edge is applied, so a bounce stays inside the window.
+- **MANGEN and MANSHOW.** Half-resolution 2×2 blocks fill the 640×400 window. Left click zooms in 2×, middle pans, right redraws. Q or Esc quits. S writes `mandel.raw`.
+- **Forth-1968.** `Library/Forth1968CM` is Charles Moore's 1968 IBM 1130 Forth, assembler and simulator included. `FROMLIB FLOAD Forth1968CM/main.fth`, then `FORTH-1968`. That session owns the console until Restart. Type the line. A paste does not reach the 1130 keyboard.
+- **System folder reference.** `Forth/Resources/System` is a folder reference beside Library, Docs, and Config. It is not a list of loose files in Copy Bundle Resources.
+
+**Release:** not yet (no DMG).
 
 ---
 

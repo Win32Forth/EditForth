@@ -1,17 +1,15 @@
 \ SPLAT.fth — wandering dots
 \
 \ Port of TCOM SPLAT.FTH (Tom Zimmer, public domain). The DOS program was
-\ a graphics screen saver with a video-mode list and a reboot hook. This
-\ copy draws on the GRAPHICS window. An empty password lets Esc stop it.
-\ A password must be typed and confirmed with Enter. It runs on EditForth
-\ and EditForthPWA.
+\ a graphics screen saver with a video-mode list and a password. This
+\ copy draws on the GRAPHICS window. Esc returns to the console. It runs
+\ on EditForth and EditForthPWA.
 \
 \ Load:
 \   FROMLIB FLOAD Sample/SPLAT.fth
 \   SPLAT
 \
 \ S toggles a second erasing dot. + slows the walk and - speeds it up.
-\ Those keys are available when no password was set.
 \
 \ Public domain.
 
@@ -22,8 +20,7 @@ DECIMAL
 
 : SPLAT-CREDIT ( -- )
   CR ." SPLAT walks colored dots around the window."
-  CR ." With no password, Esc returns to the console."
-  CR ." With a password, type it and press Enter."
+  CR ." Esc returns to the console."
   CR ." S toggles an erasing dot. + slows the walk. - speeds it up." CR
   ;
 
@@ -58,10 +55,6 @@ VARIABLE SP-EY
 VARIABLE SP-SNAKE
 VARIABLE SP-DELAY
 VARIABLE SP-QUIT
-CREATE SP-PASS 80 ALLOT
-VARIABLE SP-PLEN
-CREATE SP-TYPE 80 ALLOT
-VARIABLE SP-TLEN
 
 : SP-DOT ( x y c -- )
   COLOR !
@@ -69,35 +62,27 @@ VARIABLE SP-TLEN
 
 : SP-MOVE ( x-addr y-addr -- )
   DUP @ 3 RND 1- + G-PY SP-WRAP SWAP !
-  @ 3 RND 1- + G-PX SP-WRAP SWAP ! ;
-
-: SP-MATCH ( -- flag )
-  SP-TLEN @ SP-PLEN @ <> IF FALSE EXIT THEN
-  SP-TYPE SP-TLEN @ SP-PASS SP-PLEN @ COMPARE 0= ;
+  DUP @ 3 RND 1- + G-PX SP-WRAP SWAP ! ;
 
 : SP-KEY ( c -- )
-  SP-PLEN @ 0= IF
-    DUP 27 = IF -1 SP-QUIT ! THEN
-    DUP 83 = OVER 115 = OR IF
-      SP-SNAKE @ 0= SP-SNAKE !
-    THEN
-    DUP 43 = IF SP-DELAY @ 1+ 20 MIN SP-DELAY ! THEN
-    DUP 45 = IF SP-DELAY @ 1- 0 MAX SP-DELAY ! THEN
-    DROP EXIT
+  DUP 27 = IF -1 SP-QUIT ! THEN
+  DUP 83 = OVER 115 = OR IF
+    SP-SNAKE @ 0= SP-SNAKE !
   THEN
-  DUP 13 = OVER 10 = OR IF
-    DROP
-    SP-MATCH IF -1 SP-QUIT ! THEN
-    0 SP-TLEN !
-    EXIT
-  THEN
-  DUP 27 = IF DROP 0 SP-TLEN ! EXIT THEN
-  SP-TLEN @ 70 < IF
-    SP-TYPE SP-TLEN @ + C!
-    1 SP-TLEN +!
-  ELSE
-    DROP
-  THEN ;
+  DUP 43 = IF SP-DELAY @ 1+ 20 MIN SP-DELAY ! THEN
+  DUP 45 = IF SP-DELAY @ 1- 0 MAX SP-DELAY ! THEN
+  DROP ;
+
+\ GRAPHICS KEY waits until a non-negative code arrives. One bad entry
+\ would leave the window sitting on this frame. Drop negatives and move on.
+: SP-POLL ( -- )
+  (APP-KEY?) 0= IF EXIT THEN
+  (APP-KEY) DUP 0< IF DROP EXIT THEN
+  SP-KEY ;
+
+\ SP-DELAY 0 still pauses 1 ms so the window can redraw. + and - change it.
+: SP-WAIT ( -- )
+  SP-DELAY @ 1+ MS ;
 
 : SPLAT-GO ( -- )
   DECIMAL
@@ -110,7 +95,6 @@ VARIABLE SP-TLEN
   -1 SP-SNAKE !
   0 SP-DELAY !
   0 SP-QUIT !
-  0 SP-TLEN !
   BEGIN
     SP-QUIT @ 0=
   WHILE
@@ -123,8 +107,8 @@ VARIABLE SP-TLEN
       THEN
     LOOP
     PREFRESH
-    SP-DELAY @ 0 DO PAUSE LOOP
-    KEY? IF KEY SP-KEY THEN
+    SP-WAIT
+    SP-POLL
   REPEAT
   1BIT
   WINDOW-OFF
@@ -134,8 +118,6 @@ ONLY FORTH ALSO GRAPHICS ALSO FORTH DEFINITIONS
 
 : SPLAT ( -- )
   SPLAT-CREDIT
-  CR ." Password (empty line, then Enter, allows Esc to quit): "
-  SP-PASS 60 ACCEPT SP-PLEN !
   SPLAT-GO
   ;
 
