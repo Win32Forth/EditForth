@@ -363,6 +363,7 @@ struct ContentView: View {
                             onPrepareRunLine: { kind, name in forth.prepareRunLine(kind, name: name) },
                             onCommandClickWord: { word in forth.viewWord(word) },
                             onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                            isSelectedEditor: false,
                             onEmitCurrent: {
                                 ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
                             },
@@ -575,6 +576,7 @@ struct ContentView: View {
                     onPrepareRunLine: { kind, name in forth.prepareRunLine(kind, name: name) },
                     onCommandClickWord: { word in forth.viewWord(word) },
                     onToggleBreakpoint: { word in forth.toggleBreakpoint(word) },
+                    isSelectedEditor: selected,
                     onEmitCurrent: {
                         ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
                     },
@@ -1003,6 +1005,7 @@ private struct TabEditorPane: View {
     var onPrepareRunLine: (ForthConnectionManager.RunLineKind, String?) -> Void
     var onCommandClickWord: (String) -> Void
     var onToggleBreakpoint: (String) -> Void
+    var isSelectedEditor: Bool
     var onEmitCurrent: () -> Void
     var onRunToOffset: (Int) -> Void
 
@@ -1073,6 +1076,7 @@ private struct TabEditorPane: View {
                 onPrepareRunLine: onPrepareRunLine,
                 onCommandClickWord: onCommandClickWord,
                 onToggleBreakpoint: onToggleBreakpoint,
+                isSelectedEditor: isSelectedEditor,
                 onEmitCurrent: onEmitCurrent,
                 onRunToOffset: onRunToOffset
             )

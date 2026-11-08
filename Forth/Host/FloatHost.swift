@@ -5,11 +5,17 @@
 //  Public domain.
 //
 //  ANS floating-point (IEEE 64-bit) — ported from TZForthFloat.swift.
-//  Separate 16-deep F-stack; ops invoked via kernel float_op multiplex.
+//  The 16-deep F-stack lives in the kernel BSS (sa_float_bss_*). Arithmetic
+//  runs there in assembly. This type still owns text ops (F. >FLOAT
+//  REPRESENT) and the few ops whose edge cases differ (F~ FMAX FM/MOD
+//  FALIGN), and it uses that same buffer.
 //  Word headers live in the FLOATING vocabulary (not FORTH).
 //
 
 import Foundation
+
+@_silgen_name("sa_float_state")
+private func saFloatStatePtr() -> UnsafeMutableRawPointer
 
 /// Float-op multiplex codes (must match forth.s FOP_*).
 enum FloatOpCode: Int64 {
@@ -98,41 +104,69 @@ final class FloatHost {
     static let shared = FloatHost()
 
     static let fstackSize = 16
-    private var stack: [Double] = []
-    private(set) var precision: Int = 6
+    /// Kernel BSS: depth@0, precision@8, stack[16]@16.
+    private let state: UnsafeMutableRawPointer
 
     /// Character emit (set by KernelBridge to console path).
     var onEmit: ((String) -> Void)?
 
-    private init() {}
+    private init() {
+        state = saFloatStatePtr()
+    }
+
+    private var count: Int {
+        get { Int(state.load(fromByteOffset: 0, as: Int64.self)) }
+        set { state.storeBytes(of: Int64(newValue), toByteOffset: 0, as: Int64.self) }
+    }
+
+    private var precision: Int {
+        get {
+            let p = Int(state.load(fromByteOffset: 8, as: Int64.self))
+            return max(1, p)
+        }
+        set { state.storeBytes(of: Int64(max(1, newValue)), toByteOffset: 8, as: Int64.self) }
+    }
 
     func reset() {
-        stack.removeAll(keepingCapacity: true)
+        count = 0
         precision = 6
     }
 
     // MARK: - F-stack
 
+    private func slot(_ i: Int) -> Double {
+        state.load(fromByteOffset: 16 + i * 8, as: Double.self)
+    }
+
+    private func setSlot(_ i: Int, _ v: Double) {
+        state.storeBytes(of: v, toByteOffset: 16 + i * 8, as: Double.self)
+    }
+
     private func fpush(_ v: Double) {
-        if stack.count >= Self.fstackSize {
+        let n = count
+        if n >= Self.fstackSize {
             // Soft: drop oldest policy not ANS; just ignore push on overflow
             return
         }
-        stack.append(v)
+        setSlot(n, v)
+        count = n + 1
     }
 
     private func fpop() -> Double {
-        guard !stack.isEmpty else { return 0 }
-        return stack.removeLast()
+        let n = count
+        if n == 0 { return 0 }
+        let v = slot(n - 1)
+        count = n - 1
+        return v
     }
 
     private func fpeek(_ u: Int) -> Double {
-        let i = stack.count - 1 - u
-        guard i >= 0, i < stack.count else { return 0 }
-        return stack[i]
+        let i = count - 1 - u
+        if i < 0 || i >= count { return 0 }
+        return slot(i)
     }
 
-    var fdepth: Int { stack.count }
+    var fdepth: Int { count }
 
     // MARK: - Memory (real host pointers)
 

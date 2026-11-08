@@ -219,5 +219,28 @@ ALSO SYSVOC
 ' >SYSVOC        >SYSVOC
 ' (SLURP)        >SYSVOC
 
-ONLY FORTH DEFINITIONS
+ONLY FORTH ALSO DEFINITIONS
+
+\ order-stack is in allocated memory
+\ max vocabulary search order depth is 8 vocabularies
+\ we allocate one more cell for the count of how many vocs are in the stack
+0 value orders-buf    \ place to save the search order (cell counted)
+
+\ push-orders
+: push-orders    ( -- )    \ save search order in our buffer
+        orders-buf throw
+        9 cells allocate throw to orders-buf
+        get-order dup orders-buf !         \ count is at the beginning
+        0                                    \ loop through storing each wid
+        do    orders-buf i 1+ cells + !        \ save each wid in a cell
+        loop ;
+    
+\ pop-orders
+: pop-orders    ( -- )
+        orders-buf dup 0= throw        \ have to have something to pop
+        @ 0
+        do    orders-buf @ i - cells orders-buf + @ \ fetch each wid to stack
+        loop orders-buf @ set-order
+        orders-buf free throw
+        0 to orders-buf ;
 

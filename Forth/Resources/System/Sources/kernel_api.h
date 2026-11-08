@@ -122,7 +122,8 @@ typedef long long (*kernel_file_op_fn)(long long op, long long a, long long b, l
                                        void *ptr, long long *o1, long long *o2, long long *o3);
 void kernel_set_file_op(kernel_file_op_fn fn);
 
-/// Floating-point multiplexor (IEEE 64-bit F-stack in host). Same ABI shape as file_op.
+/// Floating-point multiplexor (IEEE 64-bit). Arithmetic uses the kernel BSS
+/// stack; this hook still serves F. / >FLOAT / REPRESENT and a few edges.
 typedef long long (*kernel_float_op_fn)(long long op, long long a, long long b, long long c, long long d,
                                         void *ptr, long long *o1, long long *o2, long long *o3);
 void kernel_set_float_op(kernel_float_op_fn fn);

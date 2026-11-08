@@ -1,8 +1,35 @@
 # 64Forth development status
 
-**Current:** **2.6.3** (build **30**) — Busy status, Hyper restamp, sample input, Forth-1968. No disk image yet. The shipped image remains `Releases/EditForth-2.6.1-macOS.dmg`.
+**Current:** **2.6.4** (build **31**) — kernel float stack, image writer, search-order save. Disk image `Releases/EditForth-2.6.4-macOS.dmg`.
 
-**Last updated:** 2026-11-02
+**Last updated:** 2026-11-07
+
+---
+
+## v2.6.4 — Kernel floats, images, and search order
+
+**Version strings:** marketing **2.6.4**, build **31**. One-app disk image `Releases/EditForth-2.6.4-macOS.dmg`. Previous image remains `Releases/EditForth-2.6.1-macOS.dmg`. Console stamp `Nov 7, 2026 10:11 PM`. `scripts/release.sh` on this build: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.6.4**.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.6.4 === Nov 7, 2026 10:11 PM ===
+```
+
+### Highlights since 2.6.3
+
+- **Float stack.** Arithmetic, memory, and libm (`FCOS`, `FTAN`, `FSIN`, and the rest) run in the kernel on one 16-deep IEEE-64 stack. `F.`, `>FLOAT`, `REPRESENT`, `F~`, `FMAX`, `FMIN`, `FMOD`, and the align words still use the host, on that same stack.
+- **Console caret.** A wrapped debugger line keeps the block cursor on screen. A width change corrects a caret that slipped just below the fold.
+- **Evaluate pump.** The Forth queue is `.userInitiated`. During a compute word the main thread sleeps 50 ms and takes one AppKit turn. It pumps events while `EKEY` is waiting.
+- **`TO`.** An unknown name after `TO` prints `undefined:` and raises -13, while compiling and at the prompt.
+- **`FPICK`.** `( u -- ) ( F: r_u ... r_0 -- r_u ... r_0 r_u )`. `0 FPICK` is `FDUP`.
+- **Search order.** `PUSH-ORDERS` saves the current order. `POP-ORDERS` restores it and frees the buffer. Both words are defined at the end of `vocsys.fth`.
+- **`IMAGE-OUT.fth`.** `Library/Sample/IMAGE-OUT.fth` writes a PNG and a baseline JPEG. `SAVE-PNG` and `SAVE-JPG` are `( pix w h c-addr u -- ior )` for an RGB8 buffer. The PNG stores the pixels without deflate. The JPEG is 4:4:4, quality 85.
+- **`GCLOCK.fth`.** The sample file extension is lowercase. Load with `FROMLIB FLOAD Sample/GCLOCK.fth`.
+- **Breakpoints.** Click a line number to toggle a breakpoint on that definition. The gutter dot stays on the colon line. A hidden tab does not take the toggle.
+- **Samples.** `LINESCAN` `CLAMP-STEP` keeps the limit until the edge is applied. `SSBLIT` clears with `PIX-ERASE` so the finished frame reaches the screen.
+
+**Release:** disk image `Releases/EditForth-2.6.4-macOS.dmg`.
 
 ---
 

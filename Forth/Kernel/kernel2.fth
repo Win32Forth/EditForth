@@ -724,6 +724,23 @@ DOC" FVALUE ( F: r 'name' -- ) create a float value; change with TO"
 : FVALUE CREATE F, DOES> F@ ;
 DOC" FLITERAL ( F: r -- ) compile float literal (immediate)"
 : FLITERAL 102 (F-OP) FLIT-ADDR , , ; IMMEDIATE
+
+CREATE FPICK-BUF 32 FLOATS ALLOT
+CREATE FPICK-TOP  1 FLOATS ALLOT
+
+DOC" FPICK ( u -- ) ( F: r_u ... r_0 -- r_u ... r_0 r_u ) 0 FPICK is FDUP"
+: FPICK ( u -- ) ( F: r_u ... r_0 -- r_u ... r_0 r_u )
+  DUP 0= IF DROP FDUP EXIT THEN
+  DUP 0 DO
+    i FLOATS FPICK-BUF + F!
+  LOOP
+  FDUP FPICK-TOP F!
+  DUP 0 DO
+    DUP I - 1- FLOATS FPICK-BUF + F@
+  LOOP
+  DROP
+  FPICK-TOP F@ ;
+
 ONLY FORTH DEFINITIONS
 
 \ --- Extended-Character word set (ANS 18, UTF-8) ---

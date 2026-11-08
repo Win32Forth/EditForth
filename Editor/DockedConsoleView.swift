@@ -72,6 +72,8 @@ struct DockedConsoleView: NSViewRepresentable {
         private var didBootstrap = false
         private var isProgrammatic = false
         private var resetObserver: NSObjectProtocol?
+        private var caretScrollForce = false
+        private var caretScrollScheduled = false
 
         init(forth: ForthConnectionManager) {
             self.forth = forth
@@ -140,9 +142,8 @@ struct DockedConsoleView: NSViewRepresentable {
             tv.string = forth.consoleTranscript
             protectedUTF16 = (tv.string as NSString).length
             tv.setSelectedRange(NSRange(location: protectedUTF16, length: 0))
-            if protectedUTF16 > 0 {
-                tv.scrollRangeToVisible(NSRange(location: protectedUTF16 - 1, length: 1))
-            }
+            scrollCaretLineIntoView(tv, force: true)
+            scheduleCaretScroll(force: true)
             isProgrammatic = false
             forth.discardPendingConsoleEmit(syncing: &lastEmitSeq)
         }
@@ -198,9 +199,94 @@ struct DockedConsoleView: NSViewRepresentable {
             protectedUTF16 = (tv.string as NSString).length
             if atEnd {
                 tv.setSelectedRange(NSRange(location: protectedUTF16, length: 0))
-                tv.scrollRangeToVisible(NSRange(location: protectedUTF16, length: 0))
+                // A zero-length range has no height. When the pane is a little
+                // narrower than the debug line, the block cursor wraps onto the
+                // next fragment and that point stays on the clip's bottom edge.
+                scrollCaretLineIntoView(tv, force: true)
+                scheduleCaretScroll(force: true)
             }
             isProgrammatic = false
+        }
+
+        /// Line fragment that holds the insertion point, in text-view coordinates.
+        /// Includes the empty fragment after a newline, and one more line when the
+        /// caret sits past a fragment that is already full.
+        private func caretLineRect(in tv: NSTextView) -> NSRect {
+            let fallbackH = tv.font?.boundingRectForFont.height ?? 14
+            guard let layout = tv.layoutManager, let container = tv.textContainer else {
+                return NSRect(x: 0, y: 0, width: 1, height: fallbackH)
+            }
+            layout.ensureLayout(for: container)
+            let ns = tv.string as NSString
+            let len = ns.length
+            let origin = tv.textContainerOrigin
+            let rect: NSRect
+            if len == 0 || (len > 0 && ns.character(at: len - 1) == 10),
+               layout.extraLineFragmentTextContainer === container,
+               layout.extraLineFragmentRect.height > 0 {
+                rect = layout.extraLineFragmentRect
+            } else if len > 0 {
+                let glyph = layout.glyphIndexForCharacter(at: len - 1)
+                var line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                let used = layout.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+                let limit = container.containerSize.width
+                if limit.isFinite, used.maxX >= limit - 1 {
+                    line.origin.y += line.height
+                }
+                rect = line
+            } else {
+                rect = NSRect(x: 0, y: 0, width: 1, height: fallbackH)
+            }
+            return rect.offsetBy(dx: origin.x, dy: origin.y)
+        }
+
+        /// Keep the caret's line inside the clip. `force` follows new output.
+        /// A width change uses `force == false` and only corrects a caret that
+        /// slipped just below the fold, so a scroll-back through history stays put.
+        private func scrollCaretLineIntoView(_ tv: NSTextView, force: Bool) {
+            guard let scroll = tv.enclosingScrollView else { return }
+            let len = (tv.string as NSString).length
+            guard tv.selectedRange().location >= len, tv.selectedRange().length == 0 else { return }
+            var show = caretLineRect(in: tv)
+            guard show.height > 0 else { return }
+            show.size.height += 2
+
+            let bottom = show.maxY + tv.textContainerInset.height
+            if tv.frame.height + 0.5 < bottom {
+                var frame = tv.frame
+                frame.size.height = bottom
+                tv.frame = frame
+            }
+
+            let clip = scroll.contentView.bounds
+            let gap = show.maxY - clip.maxY
+            if !force {
+                guard gap > 0.5, gap < show.height * 3 else { return }
+            }
+            guard gap > 0.5 else { return }
+            let targetY = max(0, show.maxY - clip.height)
+            guard abs(clip.origin.y - targetY) > 0.5 else { return }
+            scroll.contentView.scroll(to: NSPoint(x: clip.origin.x, y: targetY))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+
+        /// Layout after a wrap often lands once the current updateNSView returns.
+        private func scheduleCaretScroll(force: Bool) {
+            caretScrollForce = caretScrollForce || force
+            guard !caretScrollScheduled else { return }
+            caretScrollScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let force = self.caretScrollForce
+                self.caretScrollScheduled = false
+                self.caretScrollForce = false
+                guard let tv = self.textView else { return }
+                self.scrollCaretLineIntoView(tv, force: force)
+            }
+        }
+
+        func caretWidthChanged() {
+            scheduleCaretScroll(force: false)
         }
 
         func submitLine() {
@@ -253,6 +339,8 @@ struct DockedConsoleView: NSViewRepresentable {
             tv.replaceCharacters(in: NSRange(location: prot, length: full.length - prot), with: s)
             let end = (tv.string as NSString).length
             tv.setSelectedRange(NSRange(location: end, length: 0))
+            scrollCaretLineIntoView(tv, force: true)
+            scheduleCaretScroll(force: true)
             isProgrammatic = false
         }
 
@@ -269,7 +357,8 @@ struct DockedConsoleView: NSViewRepresentable {
             tv.window?.makeFirstResponder(tv)
             let end = (tv.string as NSString).length
             tv.setSelectedRange(NSRange(location: end, length: 0))
-            tv.scrollRangeToVisible(NSRange(location: end, length: 0))
+            scrollCaretLineIntoView(tv, force: true)
+            scheduleCaretScroll(force: true)
         }
 
         func pushTypedCharacter(_ c: Int32) {
@@ -317,6 +406,14 @@ struct DockedConsoleView: NSViewRepresentable {
 
 final class DockedConsoleTextView: NSTextView {
     weak var coordinator: DockedConsoleView.Coordinator?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = abs(newSize.width - bounds.width) > 0.5
+        super.setFrameSize(newSize)
+        if widthChanged {
+            coordinator?.caretWidthChanged()
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

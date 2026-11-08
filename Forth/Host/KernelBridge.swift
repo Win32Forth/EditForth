@@ -1855,9 +1855,16 @@ final class KernelBridge {
     /// Line fed to ACCEPT when that prompt appears (stack effect only is checked).
     private static let hayesAcceptReply = "hayes-accept"
 
-    /// Serial queue for `kernel_eval` so the main thread stays free to run AppKit
-    /// (KEY/KEY? input). Main waits by pumping `NSApp.nextEvent`.
-    private let forthQueue = DispatchQueue(label: "64Forth.kernel")
+    /// Serial queue for `kernel_eval`. `.userInitiated` keeps this compute on a
+    /// performance core, apart from the main thread's AppKit pump. An unspecified
+    /// queue is eligible for an efficiency core while the main thread stays runnable.
+    private let forthQueue = DispatchQueue(
+        label: "64Forth.kernel",
+        qos: .userInitiated
+    )
+    /// Set from the Forth queue while `EKEY` is blocked. The main thread pumps
+    /// `nextEvent` only then; a compute word leaves the main thread asleep.
+    private var kernelAwaitingKey = false
 
     /// Local keyDown monitor: delivers KEY/KEY? bytes while `isEvaluating`.
     private var keyDownMonitor: Any?
@@ -2937,29 +2944,32 @@ final class KernelBridge {
                 status = self.runKernelEval(t)
                 done.signal()
             }
-            // Pump UI until the kernel finishes (KEY waits use keyAvailable + queue).
-            // Service the main GCD queue so batched emit flushes, scroll events,
-            // and off-main FLOAD/CHDIR panels can run — keeps the console live.
+            // The kernel runs on forthQueue. This loop only services AppKit.
+            // A 12 ms nextEvent every 16 ms kept the main thread runnable for the
+            // whole word and crowded that queue. Compute sleeps here for 50 ms
+            // and does one cheap turn (emit, WINDOW, blit). KEY shortens the
+            // slice so keyDown is still dequeued within a frame or two.
             // Nested CFRunLoopRunInMode re-entry (e.g. from scroll/layout while
             // already pumping) has trapped as EXC_BREAKPOINT on some macOS builds.
-            while done.wait(timeout: .now() + 0.016) == .timedOut {
+            while true {
+                let awaitingKey = self.isKernelAwaitingKey()
+                let slice: TimeInterval = awaitingKey ? 0.02 : 0.05
+                if done.wait(timeout: .now() + slice) != .timedOut { break }
                 // Drain here. The async main-queue flush can sit unrun while this
                 // loop is inside nextEvent, so a long FLOAD shows nothing until
                 // KEY blocks and the queue gets a turn.
                 self.drainEmitBufferToSink()
                 // Companion GRAPHICS: (APP-OPEN) waits on a pending-open semaphore;
                 // service it here so WINDOW does not deadlock with nextEvent.
+                // Blit posts are applied on this same turn (companion does not
+                // async them). 50 ms is the gap between frames.
                 AppOutputHost.shared.servicePendingUIOnMain()
                 if !self.isPumpingEvents {
-                    var more = true
-                    var steps = 0
-                    while more, steps < 8 {
-                        let r = CFRunLoopRunInMode(CFRunLoopMode.defaultMode, 0, true)
-                        more = (r == .handledSource)
-                        steps += 1
-                    }
+                    _ = CFRunLoopRunInMode(CFRunLoopMode.defaultMode, 0, true)
                 }
-                self.pumpUIForKeyInput(seconds: 0.012)
+                if awaitingKey {
+                    self.pumpUIForKeyInput(seconds: 0.005)
+                }
             }
             // Final emit drain (anything still buffered after last TYPE).
             self.drainEmitBufferToSink()
@@ -3492,8 +3502,10 @@ final class KernelBridge {
     }
 
     fileprivate func handleKeyFromKernel() -> Int32 {
-        // Called from the Forth queue during kernel_eval. Main is pumping events;
-        // wait on keyAvailable (signaled by pushKey from the keyDown monitor).
+        // Called from the Forth queue during kernel_eval. Main pumps nextEvent
+        // only while this flag is set. keyAvailable is signaled by pushKey.
+        setKernelAwaitingKey(true)
+        defer { setKernelAwaitingKey(false) }
         let deadline = Date().addingTimeInterval(120)
         while true {
             lock.lock()
@@ -3506,9 +3518,21 @@ final class KernelBridge {
             // Break Now, queue empty: XKEY treats -2 as "pause on KEY".
             if debugBreakPending() { return -2 }
             if Date() > deadline { return -1 }
-            // Short wait; main thread's evaluate loop keeps AppKit alive.
             _ = keyAvailable.wait(timeout: .now() + 0.05)
         }
+    }
+
+    private func setKernelAwaitingKey(_ on: Bool) {
+        lock.lock()
+        kernelAwaitingKey = on
+        lock.unlock()
+    }
+
+    private func isKernelAwaitingKey() -> Bool {
+        lock.lock()
+        let on = kernelAwaitingKey
+        lock.unlock()
+        return on
     }
 
     /// PAUSE: hand pending console text to the host, then wait 1 ms.

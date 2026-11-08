@@ -1321,6 +1321,14 @@ _kernel_set_float_op:
     str  x0, [x1]
     ret
 
+// SaFloatState* — depth, precision, 16 IEEE-64 slots. Host Swift uses this
+// same buffer for F. / >FLOAT / REPRESENT so the stack is not split.
+.globl _sa_float_state
+_sa_float_state:
+    adrp x0, sa_float_bss_depth@page
+    add  x0, x0, sa_float_bss_depth@pageoff
+    ret
+
 .globl _kernel_set_bi_divmod
 _kernel_set_bi_divmod:
     adrp x1, bi_divmod_hook@page
@@ -7553,8 +7561,9 @@ _lb_done:
     BOOT_WORD "TO", "TO ( x 'name' -- ) store to VALUE or local (immediate)", FLAG_IMM, XTO_IMM, XTO_IMM_END
 XTO_IMM:
     bl   _next_word
-    cbz  x1, 9f
-    // Save name
+    cbz  x1, _to_noname
+    // Save name until FIND succeeds. A miss must report undefined:
+    // the name was already taken out of the input stream.
     stp  x0, x1, [sp, #-16]!
     adrp x2, state_var@page
     add  x2, x2, state_var@pageoff
@@ -7581,9 +7590,10 @@ XTO_IMM:
     b    9f
 1:
     // VALUE path: FIND name, data at CFA+16 (>BODY of a DOES> word), ! or compile
-    ldp  x0, x1, [sp], #16
+    ldp  x0, x1, [sp]
     bl   _find_word
-    cbz  x0, 9f
+    cbz  x0, _to_missing
+    add  sp, sp, #16
     // x0 = CFA; data for VALUE/CREATE DOES> @ is at CFA+16
     add  x0, x0, #16
     adrp x2, state_var@page
@@ -7622,10 +7632,21 @@ _to_find_store:
     bl   _compile_cell
     ldp  x0, x1, [sp], #16
     add  sp, sp, #16               // drop data addr
+    stp  x0, x1, [sp, #-16]!
     bl   _find_word
-    cbz  x0, 9f
+    cbz  x0, _to_missing
+    add  sp, sp, #16
     bl   _compile_cell
     b    9f
+_to_noname:
+    mov  x0, #0
+    mov  x1, #0
+    bl   _capture_undef_name
+    b    _undefined_word
+_to_missing:
+    ldp  x0, x1, [sp], #16
+    bl   _capture_undef_name
+    b    _undefined_word
 2:
     // interpret TO: VALUE ( x -- ) or 2VALUE ( x1 x2 -- )
     // DEPTH is (SP0-DSP)/8, including the bottom sentinel. 2VALUE when that
@@ -9096,6 +9117,8 @@ XFLOAT_OP:
     cmp  x9, #74
     b.eq _fo_a1
     cmp  x9, #75
+    b.eq _fo_a1
+    cmp  x9, #101                  // fpushBits (a = bits)
     b.eq _fo_a1
     cmp  x9, #30                   // D>F lo under hi TOS
     b.eq _fo_d2
@@ -15501,6 +15524,16 @@ _float_op_call:
 1:
     ldr x9, [x9]
     cbz x9, _sa_float_local
+    // Host: arithmetic, memory, and libm run on the BSS stack. x19 is
+    // SAVE_VM'd by the caller. Unhandled ops (F. >FLOAT F~ FALIGN …) fall
+    // through to Swift, which reads that same buffer. x1–x5 stay intact
+    // on the unhandled path.
+    mov x20, x0
+    mov x19, x9
+    bl _host_float_fast
+    cbz x0, _float_op_host_done
+    mov x0, x20
+    mov x9, x19
     sub sp, sp, #64
     add x6, sp, #16
     add x7, sp, #24
@@ -15514,6 +15547,7 @@ _float_op_call:
     ldr x7, [sp, #24]
     ldr x8, [sp, #32]
     add sp, sp, #64
+_float_op_host_done:
     ldp x29, x30, [sp], #16
     ret
 
@@ -15933,6 +15967,240 @@ sa_float_zero_cell:  .quad 0
 sa_float_state_ptr:  .quad 0
 sa_float_pool_pad:   .quad 0
 SA_FLOAT_END:
+
+// Host fast path. Outside SA_FLOAT so /EMIT-STANDALONE does not copy the
+// libm calls. In: x0=op x1=a (x2–x5 preserved when returning -1).
+// Out: x0=0 and x6=o1 when handled (frame already popped via _saf_ok),
+// or x0=-1 and x1–x5 unchanged. Caller has one frame pushed.
+_host_float_fast:
+    stp x29, x30, [sp, #-16]!
+    cmp x0, #1
+    b.eq _saf_fdepth
+    cmp x0, #2
+    b.eq _saf_fdrop
+    cmp x0, #3
+    b.eq _hf_fdup
+    cmp x0, #4
+    b.eq _saf_fswap
+    cmp x0, #5
+    b.eq _hf_fover
+    cmp x0, #6
+    b.eq _saf_frot
+    cmp x0, #7
+    b.eq _saf_fplus
+    cmp x0, #8
+    b.eq _saf_fminus
+    cmp x0, #9
+    b.eq _saf_fstar
+    cmp x0, #10
+    b.eq _saf_fslash
+    cmp x0, #11
+    b.eq _saf_fnegate
+    cmp x0, #12
+    b.eq _saf_fabs
+    cmp x0, #15
+    b.eq _saf_f0eq
+    cmp x0, #16
+    b.eq _saf_f0lt
+    cmp x0, #17
+    b.eq _saf_flt
+    cmp x0, #18
+    b.eq _saf_fgt
+    cmp x0, #19
+    b.eq _saf_feq
+    cmp x0, #20
+    b.eq _saf_fne
+    cmp x0, #22
+    b.eq _hf_fat
+    cmp x0, #23
+    b.eq _saf_fstore
+    cmp x0, #24
+    b.eq _hf_sfat
+    cmp x0, #25
+    b.eq _saf_sfstore
+    cmp x0, #26
+    b.eq _hf_fat
+    cmp x0, #27
+    b.eq _saf_fstore
+    cmp x0, #28
+    b.eq _saf_stf
+    cmp x0, #29
+    b.eq _saf_fts
+    cmp x0, #39
+    b.eq _saf_floats
+    cmp x0, #40
+    b.eq _saf_floatplus
+    cmp x0, #41
+    b.eq _saf_sfloats
+    cmp x0, #42
+    b.eq _saf_sfloatplus
+    cmp x0, #43
+    b.eq _saf_floats
+    cmp x0, #44
+    b.eq _saf_floatplus
+    cmp x0, #45
+    b.eq _saf_fsqrt
+    cmp x0, #46
+    b.eq _hf_pow
+    cmp x0, #47
+    b.eq _hf_exp
+    cmp x0, #48
+    b.eq _hf_expm1
+    cmp x0, #49
+    b.eq _hf_ln
+    cmp x0, #50
+    b.eq _hf_lnp1
+    cmp x0, #51
+    b.eq _hf_log
+    cmp x0, #52
+    b.eq _hf_alog
+    cmp x0, #53
+    b.eq _hf_sin
+    cmp x0, #54
+    b.eq _hf_cos
+    cmp x0, #55
+    b.eq _hf_tan
+    cmp x0, #56
+    b.eq _hf_asin
+    cmp x0, #57
+    b.eq _hf_acos
+    cmp x0, #58
+    b.eq _hf_atan
+    cmp x0, #59
+    b.eq _hf_atan2
+    cmp x0, #60
+    b.eq _hf_sincos
+    cmp x0, #61
+    b.eq _hf_sinh
+    cmp x0, #62
+    b.eq _hf_cosh
+    cmp x0, #63
+    b.eq _hf_tanh
+    cmp x0, #64
+    b.eq _hf_asinh
+    cmp x0, #65
+    b.eq _hf_acosh
+    cmp x0, #66
+    b.eq _hf_atanh
+    cmp x0, #67
+    b.eq _hf_floor
+    cmp x0, #68
+    b.eq _hf_round
+    cmp x0, #101
+    b.eq _saf_fpushbits
+    cmp x0, #102
+    b.eq _saf_fpopbits
+    cmp x0, #103
+    b.eq _saf_fdepth
+    mov x0, #-1
+    ldp x29, x30, [sp], #16
+    ret
+
+// FDUP on an empty stack pushes one zero (same as the old Swift fpeek).
+_hf_fdup:
+    bl _sa_fdepth_addr
+    ldr x11, [x10]
+    cbz x11, _hf_push0
+    add x12, x10, #16
+    sub x11, x11, #1
+    ldr d0, [x12, x11, lsl #3]
+    bl _sa_fpush
+    b _saf_ok
+_hf_push0:
+    fmov d0, xzr
+    bl _sa_fpush
+    b _saf_ok
+// FOVER is fpush of the second stack item, or one zero if it is missing.
+_hf_fover:
+    bl _sa_fdepth_addr
+    ldr x11, [x10]
+    cmp x11, #2
+    b.lo _hf_push0
+    add x12, x10, #16
+    sub x11, x11, #2
+    ldr d0, [x12, x11, lsl #3]
+    bl _sa_fpush
+    b _saf_ok
+// Null address pushes 0.0, matching FloatHost.readFloat.
+_hf_fat:
+    cbz x1, _hf_push0
+    ldr d0, [x1]
+    bl _sa_fpush
+    b _saf_ok
+_hf_sfat:
+    cbz x1, _hf_push0
+    ldr s0, [x1]
+    fcvt d0, s0
+    bl _sa_fpush
+    b _saf_ok
+
+.macro HF_UNARY dest
+    bl _sa_fpop
+    bl \dest
+    bl _sa_fpush
+    b _saf_ok
+.endm
+_hf_sin:    HF_UNARY _sin
+_hf_cos:    HF_UNARY _cos
+_hf_tan:    HF_UNARY _tan
+_hf_asin:   HF_UNARY _asin
+_hf_acos:   HF_UNARY _acos
+_hf_atan:   HF_UNARY _atan
+_hf_sinh:   HF_UNARY _sinh
+_hf_cosh:   HF_UNARY _cosh
+_hf_tanh:   HF_UNARY _tanh
+_hf_asinh:  HF_UNARY _asinh
+_hf_acosh:  HF_UNARY _acosh
+_hf_atanh:  HF_UNARY _atanh
+_hf_exp:    HF_UNARY _exp
+_hf_expm1:  HF_UNARY _expm1
+_hf_ln:     HF_UNARY _log
+_hf_lnp1:   HF_UNARY _log1p
+_hf_log:    HF_UNARY _log10
+_hf_floor:  HF_UNARY _floor
+_hf_round:  HF_UNARY _round
+_hf_pow:
+    bl _sa_fpop
+    str d0, [sp, #-16]!
+    bl _sa_fpop
+    ldr d1, [sp], #16
+    bl _pow
+    bl _sa_fpush
+    b _saf_ok
+_hf_alog:
+    bl _sa_fpop
+    fmov d1, d0
+    adr x11, _hf_ten
+    ldr d0, [x11]
+    bl _pow
+    bl _sa_fpush
+    b _saf_ok
+    .align 3
+_hf_ten:
+    .double 10.0
+// FSINCOS pushes sin then cos. FATAN2 is atan2(y, x) with x on top.
+_hf_sincos:
+    bl _sa_fpop
+    str d0, [sp, #-16]!
+    bl _sin
+    str d0, [sp, #-16]!
+    ldr d0, [sp, #16]
+    bl _cos
+    str d0, [sp, #-16]!
+    ldr d0, [sp, #16]
+    bl _sa_fpush
+    ldr d0, [sp]
+    bl _sa_fpush
+    add sp, sp, #48
+    b _saf_ok
+_hf_atan2:
+    bl _sa_fpop
+    str d0, [sp, #-16]!
+    bl _sa_fpop
+    ldr d1, [sp], #16
+    bl _atan2
+    bl _sa_fpush
+    b _saf_ok
 
 
 // _print_dots: print stack without destroying DSP/TOS.

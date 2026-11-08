@@ -226,10 +226,13 @@ VARIABLE ZX
   DECIMAL
   S" EditForth SSBLIT" APP-NAME
   WINDOW PIXEL-ON COLOR8
-  WHITE
   20 ZX !
   BEGIN
-    PCLS
+    \ Clear the maps only. PREFRESH waits until this frame is drawn.
+    \ A blit of the empty map is what the page keeps until the next
+    \ yield, so the finished picture never reaches the screen.
+    PIX-ERASE
+    G-BUF G-COLS G-ROWS * BL FILL
     14 COLOR !
     SS-ICON 80 160 SS-BLIT
     11 COLOR !

@@ -18,6 +18,8 @@ final class LineNumberRulerView: NSRulerView {
     private var frameObserver: NSObjectProtocol?
     /// 1-based line → enabled. Drawn as a gutter dot (red enabled, gray off).
     private var gutterMarks: [Int: Bool] = [:]
+    /// Click a line number. `line` is 1-based.
+    var onToggleLine: ((Int) -> Void)?
 
     convenience init(textView: NSTextView) {
         self.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
@@ -58,6 +60,15 @@ final class LineNumberRulerView: NSRulerView {
 
     func invalidate() {
         needsDisplay = true
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        onToggleLine?(lineNumber(atRulerPoint: point))
     }
 
     /// Breakpoint dots. `line` is 1-based. `enabled` false draws gray.
@@ -194,6 +205,29 @@ final class LineNumberRulerView: NSRulerView {
             self?.needsDisplay = true
         }
         textView.postsFrameChangedNotifications = true
+    }
+
+    /// 1-based hard line under a point in this ruler's coordinates.
+    func lineNumber(atRulerPoint point: NSPoint) -> Int {
+        guard let textView = clientView as? NSTextView,
+              let layout = textView.layoutManager,
+              let container = textView.textContainer
+        else { return 1 }
+        let ns = textView.string as NSString
+        if ns.length == 0 { return 1 }
+        layout.ensureLayout(for: container)
+        let originInRuler = convert(NSPoint.zero, from: textView)
+        let containerY = point.y - originInRuler.y - textView.textContainerOrigin.y
+        let glyphs = layout.numberOfGlyphs
+        if glyphs == 0 { return 1 }
+        let hit = layout.glyphIndex(
+            for: NSPoint(x: 0, y: max(0, containerY)),
+            in: container,
+            fractionOfDistanceThroughGlyph: nil
+        )
+        let glyph = min(max(0, hit), glyphs - 1)
+        let charIndex = layout.characterIndexForGlyph(at: glyph)
+        return Self.lineNumber(forCharacter: charIndex, in: ns)
     }
 
     static func lineNumber(forCharacter index: Int, in ns: NSString) -> Int {

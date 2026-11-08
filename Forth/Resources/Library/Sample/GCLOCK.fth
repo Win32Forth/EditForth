@@ -1,11 +1,11 @@
-\ GCLOCK.FTH — Graphic Clock for 64Forth GRAPHICS (COLOR8)
+\ GCLOCK.fth — Graphic Clock for 64Forth GRAPHICS (COLOR8)
 \
 \ Port of Tom Zimmer & Robert Smith GCLOCK.SEQ (public domain).
 \ Original targeted TCOM / EGA 640x350x16; this version uses
 \ 64Forth WINDOW + COLOR8 (640x400) like DOODLECOLOR64 / BRESENHAM.
 \
 \ Load (not Autoload):
-\   FROMLIB FLOAD Sample/GCLOCK.FTH
+\   FROMLIB FLOAD Sample/GCLOCK.fth
 \   GCLOCK
 \
 \ Controls (graphics window must have key focus):

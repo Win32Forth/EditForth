@@ -50,6 +50,9 @@ struct EditorTextView: NSViewRepresentable {
     var onCommandClickWord: ((String) -> Void)?
     /// F9 / ⌘\ / Debug menu: toggle BREAK on the Forth token under the caret.
     var onToggleBreakpoint: ((String) -> Void)?
+    /// Visible tab in the main editor. Hidden keep-alive tabs stay false so
+    /// a breakpoint toggle does not also hit their caret word.
+    var isSelectedEditor: Bool = true
     /// Idle F6 — EMIT current tab. Ignored while DEBUG is armed (F6 is Step Over).
     var onEmitCurrent: (() -> Void)?
     /// Right-click Run to Here while DEBUG armed: UTF-8 file-relative byte offset.
@@ -109,6 +112,10 @@ struct EditorTextView: NSViewRepresentable {
             fontSize: fontSize
         )
         let ruler = LineNumberRulerView(textView: tv)
+        ruler.onToggleLine = { [weak coordinator = context.coordinator] line in
+            coordinator?.toggleBreakpoint(onLine: line)
+        }
+        ruler.toolTip = "Click a line number to toggle a breakpoint on that definition"
         scroll.verticalRulerView = ruler
         scroll.hasVerticalRuler = showLineNumbers
         scroll.rulersVisible = showLineNumbers
@@ -439,6 +446,8 @@ struct EditorTextView: NSViewRepresentable {
         private var breakpointHighlightRanges: [NSRange] = []
         /// Last applied BREAK entries (skip redundant rewashes).
         private var lastBreakpointEntries: [BreakpointEntry] = []
+        /// Extra gutter lines for a word set by clicking that line.
+        private var gutterLinesByName: [String: Set<Int>] = [:]
         /// SZ-style 5-column line-number gutter (source editor only).
         weak var lineNumberRuler: LineNumberRulerView?
         private var toggleBreakpointObserver: NSObjectProtocol?
@@ -497,7 +506,10 @@ struct EditorTextView: NSViewRepresentable {
             if !force, normalized == lastBreakpointEntries { return }
             clearBreakpointWash()
             lastBreakpointEntries = normalized
-            guard !normalized.isEmpty, let layout = tv.layoutManager else { return }
+            guard !normalized.isEmpty, let layout = tv.layoutManager else {
+                gutterLinesByName = [:]
+                return
+            }
             let ns = tv.string as NSString
             let charCount = ns.length
             var painted: [NSRange] = []
@@ -542,6 +554,19 @@ struct EditorTextView: NSViewRepresentable {
                 idx = hi
             }
             breakpointHighlightRanges = painted
+            // The colon line gets a dot even when the name is on the next line.
+            // A gutter click also keeps a dot on the line that was clicked.
+            gutterLinesByName = gutterLinesByName.filter { enabledByName[$0.key] != nil }
+            for header in ForthColonScan.headers(in: tv.string) {
+                guard let enabled = enabledByName[header.name] else { continue }
+                gutter[header.line] = (gutter[header.line] ?? false) || enabled
+            }
+            for (name, lines) in gutterLinesByName {
+                guard let enabled = enabledByName[name] else { continue }
+                for line in lines {
+                    gutter[line] = (gutter[line] ?? false) || enabled
+                }
+            }
             lineNumberRuler?.setGutterMarks(gutter)
             for range in painted {
                 layout.invalidateDisplay(forCharacterRange: range)
@@ -670,9 +695,43 @@ struct EditorTextView: NSViewRepresentable {
             }
         }
 
+        /// Gutter click. The `: NAME` that contains the line is toggled when
+        /// it is already a breakpoint, and when the line has no other breakpoint.
+        /// A breakpoint token on the line toggles that word instead.
+        func toggleBreakpoint(onLine line: Int) {
+            guard let tv = textView else { return }
+            let source = tv.string
+            let names = Set(lastBreakpointEntries.map(\.name))
+            let defined = ForthColonScan.definitionName(containingLine: line, in: source)
+            if let defined, names.contains(defined) {
+                gutterLinesByName[defined] = nil
+                parent.onToggleBreakpoint?(defined)
+                return
+            }
+            let tokens = ForthColonScan.tokens(onLine: line, in: source)
+            if let hit = tokens.first(where: { names.contains($0) }) {
+                gutterLinesByName[hit] = nil
+                parent.onToggleBreakpoint?(hit)
+                return
+            }
+            if let defined {
+                gutterLinesByName[defined, default: []].insert(line)
+                parent.onToggleBreakpoint?(defined)
+            }
+        }
+
         /// F9 / ⌘\ / Debug menu: toggle BREAK on the whitespace-delimited token at the caret.
+        /// Hidden tabs stay mounted. Only the focused editor answers, or the
+        /// selected tab when the console has the caret.
         func toggleBreakpointUnderCaret() {
             guard let tv = textView else { return }
+            if editorIsFocused(tv) {
+                // This editor owns the caret.
+            } else if EditorFocus.editorIsKeyFirstResponder() {
+                return
+            } else if !parent.isSelectedEditor {
+                return
+            }
             let ns = tv.string as NSString
             var idx = tv.selectedRange().location
             if idx > ns.length { idx = ns.length }

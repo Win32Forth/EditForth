@@ -45,10 +45,13 @@ VARIABLE SEED3
   MS@ 2* 1- $FFFF AND SEED2 !
   MS@ 2/ 1+ $FFFF AND SEED3 ! ;
 
+\ ( x dx lim -- x2 dx2 )  keep the point inside 0 .. lim-1
 : CLAMP-STEP ( x dx lim -- x2 dx2 )
-  >R OVER +
+  >R
+  2DUP +
   DUP 0< IF DROP 2DROP 0 1 R> DROP EXIT THEN
-  DUP R> >= IF DROP 2DROP 1- -1 EXIT THEN
+  DUP R@ >= IF DROP 2DROP R> 1- -1 EXIT THEN
+  R> DROP
   ROT DROP SWAP ;
 
 CREATE LS-X  LS-MAX CELLS ALLOT
