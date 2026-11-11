@@ -54,6 +54,51 @@
 // Return stack (grows down). Match data-stack headroom for Forth DBG-PAUSE nesting.
 .equ RETURN_STACK_SIZE, 4096          // bytes (= 512 cells)
 .equ RETURN_STACK_CELLS, 512
+// Cooperative task user area. Defined here so KEY (above the task block)
+// can use the offsets as immediates. 0 asleep, -1 awake.
+.equ TU_LINK,        0
+.equ TU_STATUS,      8
+.equ TU_IP,          16
+.equ TU_TOS,         24
+.equ TU_DSP,         32
+.equ TU_RSP,         40
+.equ TU_S0,          48
+.equ TU_R0,          56
+.equ TU_BASE,        64
+.equ TU_STATE,       72
+.equ TU_RESUME,      80             // KEY continuation across a yield
+.equ TU_RETRY_XT,    88             // code field: XKEY_RETRY
+.equ TU_RETRY_LIST,  96             // threaded cell pointing at TU_RETRY_XT
+// Per-task source and pictured state. Cells live in the user area.
+// Buffer pointers aim at this task's scratch (console: the BSS buffers).
+.equ TU_SRC_ADDR,    104
+.equ TU_SRC_LEN,     112
+.equ TU_TO_IN,       120
+.equ TU_SRC_ID,      128
+.equ TU_BLK,         136
+.equ TU_LINE_MODE,   144
+.equ TU_LINE_ORIGIN, 152
+.equ TU_LINE_LIMIT,  160
+.equ TU_LINE_NEXT,   168
+.equ TU_ECHO_POS,    176
+.equ TU_WORD_CURSOR, 184
+.equ TU_SRC_SP,      192
+.equ TU_HLD,         200            // HLD returns this cell
+.equ TU_EVAL_SP,     208
+.equ TU_WORD_PTR,    216            // word_scratch, 512 bytes
+.equ TU_PAD_PTR,     224            // PAD, 1024 bytes
+.equ TU_INPUT_PTR,   232            // ACCEPT / REFILL buffer, 1024 bytes
+.equ TU_SSTK_PTR,    240            // source stack, 640 bytes
+.equ TU_EVALSTK_PTR, 248            // EVALUATE resume stack, 64 bytes
+.equ TU_BYTES,       256
+.equ TASK_STACK_BYTES, 4096
+.equ TASK_WORD_BYTES, 512
+.equ TASK_PAD_BYTES, 1024
+.equ TASK_INPUT_BYTES, 1024
+.equ TASK_SRCSTK_BYTES, 640
+.equ TASK_EVALSTK_BYTES, 64
+.equ TASK_SCRATCH_BYTES, TASK_WORD_BYTES + TASK_PAD_BYTES + TASK_INPUT_BYTES + TASK_SRCSTK_BYTES + TASK_EVALSTK_BYTES
+.equ TASK_ALLOT, TU_BYTES + TASK_STACK_BYTES + TASK_STACK_BYTES + TASK_SCRATCH_BYTES
 .equ DEBUG_CALL_MAX, 4                // reentrant _debug_call_xt depth
 .equ DEBUG_VMSAVE_SIZE, 72            // x19-x24, x29-x30, x28 per depth
 //
@@ -505,6 +550,7 @@ _kernel_cold_common:
     adrp x0, latest_var@page
     add  x0, x0, latest_var@pageoff
     bl   _wordlist_register
+    bl   _task_cold_init
     ldp x29, x30, [sp], #16
     ret
 
@@ -1448,8 +1494,10 @@ _kernel_init:
 3:
     mov  x1, x2
     bl   _set_source
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str  xzr, [x0]
     b    _interpret_loop
 
@@ -1591,8 +1639,10 @@ _kernel_eval:
     adrp x1, eval_arg_len@page
     add  x1, x1, eval_arg_len@pageoff
     ldr  x1, [x1]
-    adrp x2, input_buffer@page
-    add  x2, x2, input_buffer@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_INPUT_PTR]
     mov  x3, #1023
     cmp  x1, x3
     csel x1, x3, x1, hi
@@ -1610,8 +1660,10 @@ _kernel_eval:
     mov  x0, x2
     mov  x1, x3
     bl   _set_source
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str  xzr, [x0]
     b    _interpret_loop
 
@@ -1666,8 +1718,10 @@ _vm_reset_stacks:
     adrp x0, state_var@page
     add  x0, x0, state_var@pageoff
     str  xzr, [x0]
-    adrp x0, source_sp@page
-    add  x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     str  xzr, [x0]
     ret
 
@@ -2882,6 +2936,31 @@ XEMIT_END:
 
     BOOT_WORD "KEY", "KEY ( -- c ) wait for and return next character (skips K-* function-key events)", 0, XKEY, XKEY_END
 XKEY:
+0:
+    ; MULTI and another awake task: poll. A waiting KEY yields instead of
+    ; blocking the only Forth queue. No KEY? hook → keep the blocking read.
+    bl   _task_can_switch
+    cbz  x0, 1f
+    adrp x1, key_q_hook@page
+    add  x1, x1, key_q_hook@pageoff
+    ldr  x1, [x1]
+    cbz  x1, 1f                    // no KEY? hook: keep the blocking read
+    bl   _key_poll_ready
+    cbnz x0, 1f
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    str  x19, [x5, #TU_RESUME]
+    add  x19, x5, #TU_RETRY_LIST
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.eq 2f
+    NEXT
+2:
+    ldr  x19, [x5, #TU_RESUME]
 1:
     SAVE_VM
     bl   _getchar
@@ -2900,7 +2979,7 @@ XKEY:
     lsr  x2, x1, #24
     and  x2, x2, #0xFF
     cmp  x2, #2
-    b.eq 1b
+    b.eq 0b
     // Character event (1<<24): low 21 bits are the code point
     cmp  x2, #1
     b.ne 2f
@@ -2932,10 +3011,11 @@ XKEYQ:
 XKEYQ_END:
     NEXT
 
-// PAUSE ( -- )  Show output already emitted, then wait 1 ms.
+// (PAUSE-HOOK) ( -- )  Show output already emitted, then wait 1 ms.
+// High-level PAUSE in kernel2.fth is (YIELD) then this hook.
 // The host hook flushes the console buffer and sleeps. With no hook, sleep only.
 
-    BOOT_WORD "PAUSE", "PAUSE ( -- ) show pending console output, then wait 1 ms", 0, XPAUSE, XPAUSE_END
+    BOOT_WORD "(PAUSE-HOOK)", "(PAUSE-HOOK) ( -- ) show pending console output, then wait 1 ms", 0, XPAUSE, XPAUSE_END
 XPAUSE:
     SAVE_VM
     adrp x1, pause_hook@page
@@ -2959,6 +3039,499 @@ XPAUSE:
     RESTORE_VM
 XPAUSE_END:
     NEXT
+
+// ============================================================================
+// Cooperative tasks (phase 1). One VM, one queue. PAUSE yields when MULTI.
+// User area is TU_BYTES, then a 512-cell data stack, then a 512-cell return
+// stack. Offsets are the TU_* equates near RETURN_STACK_SIZE.
+// The console task lives in BSS and keeps the original stacks.
+// ============================================================================
+
+// x0 = 1 if some task other than the current one is awake.
+_task_other_awake:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cbz  x0, _toa_no
+    mov  x1, x0
+    ldr  x2, [x0, #TU_LINK]
+_toa_loop:
+    cbz  x2, _toa_no
+    cmp  x2, x1
+    b.eq _toa_no
+    ldr  x3, [x2, #TU_STATUS]
+    cbnz x3, _toa_yes
+    ldr  x2, [x2, #TU_LINK]
+    b    _toa_loop
+_toa_yes:
+    mov  x0, #1
+    ret
+_toa_no:
+    mov  x0, #0
+    ret
+
+// x0 = 1 when PAUSE / KEY should switch. Debugger and Break Now hold the VM.
+_task_can_switch:
+    stp  x29, x30, [sp, #-16]!
+    adrp x0, multi_var@page
+    add  x0, x0, multi_var@pageoff
+    ldr  x0, [x0]
+    cbz  x0, _tcs_no
+    adrp x0, debug_armed@page
+    add  x0, x0, debug_armed@pageoff
+    ldr  x0, [x0]
+    cbnz x0, _tcs_no
+    adrp x0, debug_busy@page
+    add  x0, x0, debug_busy@pageoff
+    ldr  x0, [x0]
+    cbnz x0, _tcs_no
+    adrp x0, debug_break_asap@page
+    add  x0, x0, debug_break_asap@pageoff
+    ldr  x0, [x0]
+    cbnz x0, _tcs_no
+    bl   _task_other_awake
+    ldp  x29, x30, [sp], #16
+    ret
+_tcs_no:
+    mov  x0, #0
+    ldp  x29, x30, [sp], #16
+    ret
+
+// x0 nonzero if key_q_hook says a key is waiting. 0 if the hook is absent.
+_key_poll_ready:
+    stp  x29, x30, [sp, #-16]!
+    adrp x1, key_q_hook@page
+    add  x1, x1, key_q_hook@pageoff
+    ldr  x1, [x1]
+    cbz  x1, _kpr_no
+    blr  x1
+    ldp  x29, x30, [sp], #16
+    ret
+_kpr_no:
+    mov  x0, #0
+    ldp  x29, x30, [sp], #16
+    ret
+
+// x0 = 1 if the running task is the console, else 0. Preserves x19–x24.
+_task_is_console:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x0, x1
+    cset x0, eq
+    ret
+
+// Save the current task and load the next awake task.
+// x19 is the IP to resume. On return, x19–x23 and BASE/STATE match the
+// task that should run. No switch reloads the saved copy (same values).
+// Temps are x9–x13 so callers may hold a user-area pointer in x5 and a
+// saved IP in x6 across the call.
+_task_yield:
+    stp  x29, x30, [sp, #-16]!
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cbz  x0, _ty_done
+    str  x19, [x0, #TU_IP]
+    str  x20, [x0, #TU_TOS]
+    str  x22, [x0, #TU_DSP]
+    str  x23, [x0, #TU_RSP]
+    adrp x9, base_var@page
+    add  x9, x9, base_var@pageoff
+    ldr  x10, [x9]
+    str  x10, [x0, #TU_BASE]
+    adrp x9, state_var@page
+    add  x9, x9, state_var@pageoff
+    ldr  x10, [x9]
+    str  x10, [x0, #TU_STATE]
+    mov  x11, x0
+    ldr  x12, [x0, #TU_LINK]
+_ty_loop:
+    cbz  x12, _ty_stay
+    cmp  x12, x11
+    b.eq _ty_stay
+    ldr  x13, [x12, #TU_STATUS]
+    cbnz x13, _ty_take
+    ldr  x12, [x12, #TU_LINK]
+    b    _ty_loop
+_ty_take:
+    ldr  x19, [x12, #TU_IP]
+    ldr  x20, [x12, #TU_TOS]
+    ldr  x22, [x12, #TU_DSP]
+    ldr  x23, [x12, #TU_RSP]
+    ldr  x10, [x12, #TU_BASE]
+    adrp x9, base_var@page
+    add  x9, x9, base_var@pageoff
+    str  x10, [x9]
+    ldr  x10, [x12, #TU_STATE]
+    adrp x9, state_var@page
+    add  x9, x9, state_var@pageoff
+    str  x10, [x9]
+    adrp x9, up_var@page
+    add  x9, x9, up_var@pageoff
+    str  x12, [x9]
+    b    _ty_done
+_ty_stay:
+    ldr  x19, [x11, #TU_IP]
+    ldr  x20, [x11, #TU_TOS]
+    ldr  x22, [x11, #TU_DSP]
+    ldr  x23, [x11, #TU_RSP]
+_ty_done:
+    ldp  x29, x30, [sp], #16
+    ret
+
+// KEY resumes here after a yield. x19 was left just past TU_RETRY_LIST.
+XKEY_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XKEY
+
+// Finished-task park. Entered from the stop sentinel. Sleeps until another
+// task is awake, then yields. A later WAKE comes back here.
+XPARK:
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    str  xzr, [x5, #TU_STATUS]
+    adrp x19, park_thread@page
+    add  x19, x19, park_thread@pageoff
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.eq _xpark_alone
+    NEXT
+_xpark_alone:
+    mov  x1, #-1
+    str  x1, [x5, #TU_STATUS]
+    mov  x2, #1000
+    mov  x3, #1000
+    mul  x2, x2, x3
+    sub  sp, sp, #16
+    str  xzr, [sp]
+    str  x2, [sp, #8]
+    mov  x0, sp
+    mov  x1, #0
+    bl   _nanosleep
+    add  sp, sp, #16
+    b    XPARK
+
+    BOOT_WORD "(YIELD)", "(YIELD) ( -- ) switch to the next awake task when MULTI", 0, XYIELD, XYIELD_END
+XYIELD:
+    bl   _task_can_switch
+    cbz  x0, XYIELD_END
+    bl   _task_yield
+XYIELD_END:
+    NEXT
+
+    BOOT_WORD "MULTI", "MULTI ( -- ) arm cooperative task switching", 0, XMULTI, XMULTI_END
+XMULTI:
+    adrp x0, multi_var@page
+    add  x0, x0, multi_var@pageoff
+    mov  x1, #-1
+    str  x1, [x0]
+XMULTI_END:
+    NEXT
+
+    BOOT_WORD "SINGLE", "SINGLE ( -- ) cooperative PAUSE does not switch", 0, XSINGLE, XSINGLE_END
+XSINGLE:
+    adrp x0, multi_var@page
+    add  x0, x0, multi_var@pageoff
+    str  xzr, [x0]
+XSINGLE_END:
+    NEXT
+
+    BOOT_WORD "(CONSOLE?)", "(CONSOLE?) ( -- flag ) true when the running task is the console", 0, XCONSOLE_Q, XCONSOLE_Q_END
+XCONSOLE_Q:
+    bl   _task_is_console
+    str  x20, [x22, #-8]!
+    mov  x20, #-1
+    cbnz x0, XCONSOLE_Q_END
+    mov  x20, #0
+XCONSOLE_Q_END:
+    NEXT
+
+    BOOT_WORD "STOP", "STOP ( -- ) sleep the running task and yield", 0, XSTOP, XSTOP_END
+XSTOP:
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x5, x1
+    b.eq _stop_console
+    mov  x6, x19
+    str  xzr, [x5, #TU_STATUS]
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.ne XSTOP_END
+    mov  x1, #-1
+    str  x1, [x5, #TU_STATUS]
+    mov  x19, x6
+    b    XSTOP_END
+_stop_console:
+    adrp x0, str_stop_console@page
+    add  x0, x0, str_stop_console@pageoff
+    bl   _print_string_svc
+XSTOP_END:
+    NEXT
+
+    BOOT_WORD "SLEEP", "SLEEP ( task -- ) mark a task asleep; yield if it is current", 0, XSLEEP, XSLEEP_END
+XSLEEP:
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    cmp  x20, x1
+    b.eq _sleep_self
+    mov  x5, x20
+    ldr  x20, [x22], #8
+    str  xzr, [x5, #TU_STATUS]
+    b    XSLEEP_END
+_sleep_self:
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x20, x1
+    b.ne _sleep_self_ok
+    bl   _task_other_awake
+    cbnz x0, _sleep_self_ok
+    ldr  x20, [x22], #8            // drop the task address
+    adrp x0, str_sleep_only@page
+    add  x0, x0, str_sleep_only@pageoff
+    bl   _print_string_svc
+    b    XSLEEP_END
+_sleep_self_ok:
+    mov  x5, x20
+    ldr  x20, [x22], #8
+    str  xzr, [x5, #TU_STATUS]
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.ne XSLEEP_END
+    mov  x1, #-1
+    str  x1, [x5, #TU_STATUS]
+XSLEEP_END:
+    NEXT
+
+    BOOT_WORD "WAKE", "WAKE ( task -- ) mark a task awake", 0, XWAKE, XWAKE_END
+XWAKE:
+    mov  x5, x20
+    ldr  x20, [x22], #8
+    mov  x1, #-1
+    str  x1, [x5, #TU_STATUS]
+XWAKE_END:
+    NEXT
+
+    BOOT_WORD "ACTIVATE", "ACTIVATE ( task -- ) run the following colon body as that task", 0, XACTIVATE, XACTIVATE_END
+XACTIVATE:
+    adrp x1, restart_cell@page
+    add  x1, x1, restart_cell@pageoff
+    cmp  x19, x1
+    b.eq _act_interp
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    cmp  x20, x1
+    b.eq _act_self
+    mov  x0, x20
+    ldr  x20, [x22], #8
+    str  x19, [x0, #TU_IP]
+    str  xzr, [x0, #TU_TOS]
+    ldr  x1, [x0, #TU_S0]
+    str  x1, [x0, #TU_DSP]
+    ldr  x1, [x0, #TU_R0]
+    sub  x2, x1, #8
+    adrp x3, task_stop_thread@page
+    add  x3, x3, task_stop_thread@pageoff
+    str  x3, [x2]
+    str  x2, [x0, #TU_RSP]
+    adrp x1, base_var@page
+    add  x1, x1, base_var@pageoff
+    ldr  x1, [x1]
+    str  x1, [x0, #TU_BASE]
+    str  xzr, [x0, #TU_STATE]
+    // Fresh SOURCE. Pointers stay; the body does not parse the console.
+    mov  x1, #TU_SRC_ADDR
+_act_clr_src:
+    str  xzr, [x0, x1]
+    add  x1, x1, #8
+    cmp  x1, #TU_WORD_PTR
+    b.lo _act_clr_src
+    mov  x1, #-1
+    str  x1, [x0, #TU_STATUS]
+    RPOP
+    b    XACTIVATE_END
+_act_interp:
+    adrp x0, str_act_interp@page
+    add  x0, x0, str_act_interp@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+_act_self:
+    adrp x0, str_act_self@page
+    add  x0, x0, str_act_self@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+XACTIVATE_END:
+    NEXT
+
+// (TASK-INIT) ( -- )  allot and link a task at HERE. Used by TASK: after CREATE.
+    BOOT_WORD "(TASK-INIT)", "(TASK-INIT) ( -- ) allot user area and stacks at HERE and link the task", 0, XTASK_INIT, XTASK_INIT_END
+XTASK_INIT:
+    adrp x1, here_ptr@page
+    add  x1, x1, here_ptr@pageoff
+    ldr  x0, [x1]
+    adrp x2, user_dict_area@page
+    add  x2, x2, user_dict_area@pageoff
+    adrp x3, user_dict_size_cell@page
+    add  x3, x3, user_dict_size_cell@pageoff
+    ldr  x3, [x3]
+    add  x2, x2, x3
+    mov  x6, #TASK_ALLOT           // 11712 does not fit in an add immediate
+    add  x4, x0, x6
+    cmp  x4, x2
+    b.hi _task_allot_fail
+    mov  x5, x0
+_task_zero:
+    str  xzr, [x5], #8
+    subs x6, x6, #8
+    b.ne _task_zero
+    str  x4, [x1]
+    add  x5, x0, #TU_BYTES
+    add  x5, x5, #TASK_STACK_BYTES
+    str  x5, [x0, #TU_S0]
+    str  x5, [x0, #TU_DSP]
+    add  x5, x5, #TASK_STACK_BYTES
+    str  x5, [x0, #TU_R0]
+    str  x5, [x0, #TU_RSP]
+    // Private scratch sits after the two stacks. x5 is that base (R0).
+    str  x5, [x0, #TU_WORD_PTR]
+    add  x5, x5, #TASK_WORD_BYTES
+    str  x5, [x0, #TU_PAD_PTR]
+    add  x5, x5, #TASK_PAD_BYTES
+    str  x5, [x0, #TU_INPUT_PTR]
+    add  x5, x5, #TASK_INPUT_BYTES
+    str  x5, [x0, #TU_SSTK_PTR]
+    add  x5, x5, #TASK_SRCSTK_BYTES
+    str  x5, [x0, #TU_EVALSTK_PTR]
+    adrp x5, base_var@page
+    add  x5, x5, base_var@pageoff
+    ldr  x5, [x5]
+    str  x5, [x0, #TU_BASE]
+    adrp x5, XKEY_RETRY@page
+    add  x5, x5, XKEY_RETRY@pageoff
+    str  x5, [x0, #TU_RETRY_XT]
+    add  x5, x0, #TU_RETRY_XT
+    str  x5, [x0, #TU_RETRY_LIST]
+    adrp x5, console_task@page
+    add  x5, x5, console_task@pageoff
+    ldr  x6, [x5, #TU_LINK]
+    cbnz x6, _task_link
+    mov  x6, x5
+_task_link:
+    str  x6, [x0, #TU_LINK]
+    str  x0, [x5, #TU_LINK]
+    b    XTASK_INIT_END
+_task_allot_fail:
+    adrp x0, str_allot_over@page
+    add  x0, x0, str_allot_over@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+XTASK_INIT_END:
+    NEXT
+
+// x1 unused. Cut is forget_cut. Unlink dictionary tasks at or above the cut.
+_task_forget_cut:
+    adrp x12, forget_cut@page
+    add  x12, x12, forget_cut@pageoff
+    ldr  x12, [x12]
+    adrp x10, console_task@page
+    add  x10, x10, console_task@pageoff
+    mov  x11, x10
+    ldr  x13, [x10, #TU_LINK]
+_tf_loop:
+    cbz  x13, _tf_done
+    cmp  x13, x10
+    b.eq _tf_done
+    ldr  x14, [x13, #TU_LINK]
+    cmp  x13, x12
+    b.lo _tf_keep
+    str  x14, [x11, #TU_LINK]
+    adrp x16, up_var@page
+    add  x16, x16, up_var@pageoff
+    ldr  x17, [x16]
+    cmp  x17, x13
+    b.ne _tf_next
+    str  x10, [x16]
+_tf_next:
+    mov  x13, x14
+    b    _tf_loop
+_tf_keep:
+    mov  x11, x13
+    mov  x13, x14
+    b    _tf_loop
+_tf_done:
+    ret
+
+// Fill the console task from the live stacks. Called from cold start.
+_task_cold_init:
+    adrp x0, console_task@page
+    add  x0, x0, console_task@pageoff
+    str  x0, [x0, #TU_LINK]
+    mov  x1, #-1
+    str  x1, [x0, #TU_STATUS]
+    str  xzr, [x0, #TU_IP]
+    str  xzr, [x0, #TU_TOS]
+    str  x22, [x0, #TU_DSP]
+    str  x23, [x0, #TU_RSP]
+    adrp x1, data_stack@page
+    add  x1, x1, data_stack@pageoff
+    add  x1, x1, #4096
+    str  x1, [x0, #TU_S0]
+    adrp x1, return_stack@page
+    add  x1, x1, return_stack@pageoff
+    add  x1, x1, #RETURN_STACK_SIZE
+    str  x1, [x0, #TU_R0]
+    mov  x1, #10
+    str  x1, [x0, #TU_BASE]
+    str  xzr, [x0, #TU_STATE]
+    str  xzr, [x0, #TU_RESUME]
+    adrp x1, XKEY_RETRY@page
+    add  x1, x1, XKEY_RETRY@pageoff
+    str  x1, [x0, #TU_RETRY_XT]
+    add  x1, x0, #TU_RETRY_XT
+    str  x1, [x0, #TU_RETRY_LIST]
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    str  x0, [x1]
+    adrp x1, multi_var@page
+    add  x1, x1, multi_var@pageoff
+    str  xzr, [x1]
+    // Console scratch is the existing BSS buffers. Same addresses as before.
+    adrp x1, word_scratch@page
+    add  x1, x1, word_scratch@pageoff
+    str  x1, [x0, #TU_WORD_PTR]
+    adrp x1, pad_buffer@page
+    add  x1, x1, pad_buffer@pageoff
+    str  x1, [x0, #TU_PAD_PTR]
+    adrp x1, input_buffer@page
+    add  x1, x1, input_buffer@pageoff
+    str  x1, [x0, #TU_INPUT_PTR]
+    adrp x1, source_stack@page
+    add  x1, x1, source_stack@pageoff
+    str  x1, [x0, #TU_SSTK_PTR]
+    adrp x1, eval_resume_stack@page
+    add  x1, x1, eval_resume_stack@pageoff
+    str  x1, [x0, #TU_EVALSTK_PTR]
+    ret
 
 // EKEY ( -- u )  Facility: next key event (implementation-defined encoding).
 // Same host KEY hook as KEY, but does not strip tags or skip function-key events.
@@ -3970,11 +4543,14 @@ XBranch_END:
 
     BOOT_WORD "0BRANCH", "0BRANCH ( -- ) internal: branch if zero", 0, X0Branch, X0Branch_END
 X0Branch:
-    // Pop under safely: if DSP is already at/above SP0, do not load from
-    // return_stack (SP0 == &return_stack[0] on this layout).
-    adrp x1, data_stack@page
-    add  x1, x1, data_stack@pageoff
-    add  x1, x1, #4096             // SP0
+    // Pop under safely: if DSP is already at/above this task's SP0, do not
+    // load past the empty stack. SP0 is TU_S0 (console: data_stack+4096,
+    // which is &return_stack[0]). A background DSP lives in the dictionary,
+    // so the console BSS bound would look like underflow and wipe the stack.
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    ldr  x1, [x1, #TU_S0]          // this task's empty DSP
     cbz  x20, _0br_true
     cmp  x22, x1
     b.hs 1f
@@ -4200,9 +4776,10 @@ _tick_fail:
     BOOT_WORD "EXECUTE", "EXECUTE ( xt -- ) execute the word with the given xt", 0, XEXECUTE, XEXECUTE_END
 XEXECUTE:
     mov x21, x20                   // W = CFA
-    adrp x0, data_stack@page
-    add  x0, x0, data_stack@pageoff
-    add  x0, x0, #4096             // SP0
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_S0]          // this task's empty DSP
     cmp  x22, x0
     b.hs 1f                        // empty under → no pop
     ldr  x20, [x22], #8
@@ -4464,8 +5041,10 @@ XBASE_END:
     BOOT_WORD "BLK", "BLK ( -- addr ) block number variable (0 = not from block)", 0, XBLK
 XBLK:
     DPUSH
-    adrp x0, blk_var@page
-    add x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     mov x20, x0
     NEXT
 
@@ -4695,8 +5274,10 @@ XCHDIR:
     cbz  x9, 1f
     mov  x1, x25                   // path len (0 = bare dialog)
     cbz  x1, 2f
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     b    3f
 2:
     mov  x0, #0                    // bare: no path (do not pass stale scratch)
@@ -4747,8 +5328,10 @@ XDIR:
     cbz  x9, 1f
     mov  x1, x25
     cbz  x1, 2f
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     b    3f
 2:
     mov  x0, #0
@@ -4774,8 +5357,10 @@ XTEXTEDIT:
     cbz  x9, 1f
     mov  x1, x25
     cbz  x1, 2f
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     b    3f
 2:
     mov  x0, #0
@@ -4940,8 +5525,10 @@ XRESOLVE_KEY:
     BOOT_WORD "PARSE-FILESPEC", "PARSE-FILESPEC ( -- c-addr u ) parse file name; quotes allow spaces", 0, XPARSE_FILESPEC, XPARSE_FILESPEC_END
 XPARSE_FILESPEC:
     bl   _next_filespec            // x25=len; word_scratch filled (0 = bare)
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     str  x20, [x22, #-8]!
     str  x0, [x22, #-8]!           // c-addr under
     mov  x20, x25                  // u TOS
@@ -4952,6 +5539,13 @@ XPARSE_FILESPEC_END:
 
     BOOT_WORD "(INCLUDE)", "(INCLUDE) ( -- ) name|dialog load and interpret file", 0, XPINCLUDE
 XPINCLUDE:
+    bl   _task_is_console
+    cbnz x0, _pinclude_go
+    adrp x0, str_inc_task@page
+    add  x0, x0, str_inc_task@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_pinclude_go:
     bl   _next_filespec            // x25=len; word_scratch filled (0 = bare)
     b    _include_with_len
 
@@ -4959,6 +5553,15 @@ XPINCLUDE:
 
     BOOT_WORD "(INCLUDED)", "(INCLUDED) ( c-addr u -- ) load and interpret named file (always)", 0, XPINCLUDED
 XPINCLUDED:
+    bl   _task_is_console
+    cbnz x0, _pincluded_go
+    ldr  x20, [x22], #8
+    ldr  x20, [x22], #8
+    adrp x0, str_inc_task@page
+    add  x0, x0, str_inc_task@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_pincluded_go:
     mov  x1, x20                   // u
     ldr  x0, [x22], #8             // c-addr
     ldr  x20, [x22], #8
@@ -4980,6 +5583,15 @@ XREG_INC_STR:
 
     BOOT_WORD "REQUIRED", "REQUIRED ( c-addr u -- ) INCLUDED if file-spec not yet loaded", 0, XREQUIRED
 XREQUIRED:
+    bl   _task_is_console
+    cbnz x0, _required_go
+    ldr  x20, [x22], #8
+    ldr  x20, [x22], #8
+    adrp x0, str_inc_task@page
+    add  x0, x0, str_inc_task@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_required_go:
     mov  x1, x20
     ldr  x0, [x22], #8
     ldr  x20, [x22], #8
@@ -5093,8 +5705,10 @@ _include_with_len:
 
     mov  x1, x26
     cbz  x1, 3f
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     b    4f
 3:
     mov  x0, #0
@@ -5117,8 +5731,10 @@ _include_with_len:
     mov  x1, x26
     bl   _arm_lines
     bl   _take_line
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     mov  x1, #1
     str  x1, [x0]
     // Prefer absolute last-load key for registry
@@ -5134,8 +5750,10 @@ _include_no_hook:
     b    _include_fail_restore
 
 _include_syscall:
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     mov  x1, #0
     mov  x2, #0
     mov  x16, #5
@@ -5175,8 +5793,10 @@ _include_done_restore:
 2:
     bl   _arm_lines
     bl   _take_line
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     mov  x1, #1
     str  x1, [x0]
     bl   _view_set_src_from_pending
@@ -5198,8 +5818,10 @@ _include_fail:
     add  x0, x0, str_cant_open@pageoff
     mov  x1, #12                   // "can't open: "
     bl   _write_stdout
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     bl   _print_string_svc
     mov  x0, #10
     bl   _putchar
@@ -5298,8 +5920,10 @@ _resolve_abs_key:
     cbz  x9, 9f
     // provisional: save typed into pending for lookup even if resolve fails
     bl   _include_save_name
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     mov  x1, x25
     adrp x2, include_name_pending@page
     add  x2, x2, include_name_pending@pageoff
@@ -5311,8 +5935,10 @@ _resolve_abs_key:
     // x0=path x1=len already; x2=out x3=max
     mov  x0, x0
     // reload path into x0
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     mov  x1, x25
     adrp x2, include_name_pending@page
     add  x2, x2, include_name_pending@pageoff
@@ -5389,8 +6015,10 @@ _copy_to_word_scratch:
     mov  x2, #511
     cmp  x25, x2
     csel x25, x2, x25, hi
-    adrp x2, word_scratch@page
-    add  x2, x2, word_scratch@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_WORD_PTR]
     mov  x3, #0
 2:
     cmp  x3, x25
@@ -5432,8 +6060,10 @@ _include_save_name:
     mov  x1, #INCL_NAME - 1
 1:
     str  x1, [x0]
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     adrp x2, include_name_pending@page
     add  x2, x2, include_name_pending@pageoff
     mov  x3, #0
@@ -5670,11 +6300,15 @@ _wordlist_register:
 // _source_line_now: → x0 = 1-based line in current SOURCE (always).
 // Counts LF (10) in [source_addr, source_addr + >IN). No VIEW / SOURCE-ID gates.
 _source_line_now:
-    adrp x1, source_addr@page
-    add  x1, x1, source_addr@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
     ldr  x1, [x1]
-    adrp x2, to_in_var@page
-    add  x2, x2, to_in_var@pageoff
+    add  x1, x1, #TU_SRC_ADDR
+    ldr  x1, [x1]
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_TO_IN
     ldr  x2, [x2]                  // >IN
     b    _source_line_from_window
 
@@ -5682,11 +6316,15 @@ _source_line_now:
 // whitespace (SPACE/TAB/CR/LF) first so an undefined token reports the line it
 // was on, not the following line after WORD advanced past it.
 _source_line_at_token:
-    adrp x1, source_addr@page
-    add  x1, x1, source_addr@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
     ldr  x1, [x1]
-    adrp x2, to_in_var@page
-    add  x2, x2, to_in_var@pageoff
+    add  x1, x1, #TU_SRC_ADDR
+    ldr  x1, [x1]
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_TO_IN
     ldr  x2, [x2]                  // >IN
 1:
     cbz  x2, _source_line_from_window
@@ -5707,12 +6345,16 @@ _source_line_at_token:
 
 // x1 = window base, x2 = offset in that window. File lines count from line_origin.
 _source_line_from_window:
-    adrp x4, line_mode@page
-    add  x4, x4, line_mode@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_LINE_MODE
     ldr  x4, [x4]
     cbz  x4, _source_line_at
-    adrp x3, line_origin@page
-    add  x3, x3, line_origin@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_ORIGIN
     ldr  x3, [x3]
     add  x4, x1, x2
     sub  x2, x4, x3
@@ -5743,8 +6385,10 @@ _view_line_now:
     add  x0, x0, view_src_id@pageoff
     ldr  x0, [x0]
     cbz  x0, 9f                    // no registered file
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x0, [x0]
     cbz  x0, 9f                    // console SOURCE
     b    _source_line_now
@@ -6417,6 +7061,7 @@ XFORGET:
     add  x1, x1, forget_cut@pageoff
     ldr  x1, [x1]
     bl   _forget_drop_stale
+    bl   _task_forget_cut
     RESTORE_VM
     NEXT
 7:
@@ -8612,10 +9257,26 @@ XDOES:
     BOOT_WORD "PAD", "PAD ( -- addr ) transient user scratch (1024 bytes); not used by system parsers", 0, XPAD, XPAD_END
 XPAD:
     str x20, [x22, #-8]!
-    adrp x0, pad_buffer@page
-    add x0, x0, pad_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_PAD_PTR]
     mov x20, x0
 XPAD_END:
+    NEXT
+
+// HLD ( -- addr )  per-task pictured pointer. Not a dictionary VARIABLE:
+// one shared cell would mix two tasks' <# ... #>.
+
+    BOOT_WORD "HLD", "HLD ( -- addr ) pictured numeric output pointer for this task", 0, XHLD, XHLD_END
+XHLD:
+    str  x20, [x22, #-8]!
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_HLD
+    mov  x20, x0
+XHLD_END:
     NEXT
 
 // MS@ ( -- u )  wall-clock milliseconds since Unix epoch
@@ -9417,11 +10078,24 @@ XUSER_DICT:
     NEXT
 
 // GROWMEMORYMB ( n -- )  TZForth extension: set logical dictionary size to n MiB.
-// Once per session; cannot shrink; 1 ≤ n ≤ 64. Base address never moves (CFA-stable).
+// Once per session; cannot shrink; 1 ≤ n ≤ 256. Base address never moves (CFA-stable).
+// Only the console task may call it. A background task is stopped, not abandoned.
 
     BOOT_WORD "GROWMEMORYMB", "GROWMEMORYMB ( n -- ) grow user dictionary to n MiB (once/session; no shrink; max 256)", 0, XGROWMEMORYMB
 XGROWMEMORYMB:
     DPOP                           // n (MB)
+    adrp x6, up_var@page
+    add  x6, x6, up_var@pageoff
+    ldr  x6, [x6]
+    adrp x7, console_task@page
+    add  x7, x7, console_task@pageoff
+    cmp  x6, x7
+    b.eq _gmm_console
+    adrp x0, str_gmm_task@page
+    add  x0, x0, str_gmm_task@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_gmm_console:
     // already used?
     adrp x1, grow_memory_used@page
     add  x1, x1, grow_memory_used@pageoff
@@ -9507,15 +10181,18 @@ _gmm_fail:
 //
 //   Algorithm: n = (SP0 - DSP) >> 3;  push old TOS;  TOS = n.
 //
-//   If DSP is outside [data_stack, SP0] (prior underflow/overflow), repair to
-//   empty first. Empty SP0 == &return_stack[0]; an underflewed DSP that DEPTH
+//   If DSP is outside [SP0-4096, SP0] (prior underflow/overflow), repair to
+//   empty first. SP0 is this task's TU_S0. On the console that is
+//   data_stack+4096, which is &return_stack[0]. An underflewed DSP that DEPTH
 //   pushed through would scribble on the return stack or fault.
 
     BOOT_WORD "DEPTH", "DEPTH ( -- +n ) data stack depth in cells", 0, XDEPTH, XDEPTH_END
 XDEPTH:
-    adrp x1, data_stack@page
-    add  x1, x1, data_stack@pageoff
-    add  x0, x1, #4096             // SP0
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x0, [x2, #TU_S0]          // SP0
+    sub  x1, x0, #4096             // base
     cmp  x22, x0
     b.hi 1f                        // DSP > SP0 → underflewed
     cmp  x22, x1
@@ -9538,9 +10215,10 @@ XDEPTH_END:
 
     BOOT_WORD "CLEARSTACK", "CLEARSTACK ( -- ) empty the data stack (safe reset)", 0, XCLEARSTACK, XCLEARSTACK_END
 XCLEARSTACK:
-    adrp x22, data_stack@page
-    add  x22, x22, data_stack@pageoff
-    add  x22, x22, #4096
+    adrp x22, up_var@page
+    add  x22, x22, up_var@pageoff
+    ldr  x22, [x22]
+    ldr  x22, [x22, #TU_S0]
     mov  x20, #0
 XCLEARSTACK_END:
     NEXT
@@ -9549,9 +10227,11 @@ XCLEARSTACK_END:
 
     BOOT_WORD "SP0", "SP0 ( -- addr ) empty data-stack DSP", 0, XSP0, XSP0_END
 XSP0:
-    adrp x1, data_stack@page
-    add  x1, x1, data_stack@pageoff
-    add  x0, x1, #4096             // SP0
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x0, [x2, #TU_S0]          // SP0
+    sub  x1, x0, #4096             // base
     cmp  x22, x0
     b.hi 1f
     cmp  x22, x1
@@ -10291,12 +10971,16 @@ XEVALUATE:
     bl _set_source
     // Whole string, not a file line window (_set_source clears line_mode).
     // SOURCE-ID = -1 (string). BLK 0: this is a string, not a block.
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     mov x1, #-1
     str x1, [x0]
-    adrp x0, blk_var@page
-    add  x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     str  xzr, [x0]
     // Resume the caller when the string ends. Not the Forth return
     // stack: the interpreter parks the current token there.
@@ -10312,8 +10996,10 @@ XLOAD_ENTER:
     stp x20, x30, [sp, #-16]!
     bl  _push_source
     ldp x20, x30, [sp], #16
-    adrp x0, blk_var@page
-    add  x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     str  x20, [x0]                 // BLK = u
     NEXT
 
@@ -10328,8 +11014,10 @@ XLOAD_RUN:
     ldr  x0, [x22], #8             // c-addr
     ldr  x20, [x22], #8
     bl   _set_source
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     mov  x1, #-1
     str  x1, [x0]
     bl   _eval_resume_push         // resume after (LOAD-RUN)
@@ -10349,6 +11037,15 @@ XLOAD_RUN:
 
     BOOT_WORD "(LINE-SOURCE)", "(LINE-SOURCE) ( c-addr u -- ) interpret file image one line per SOURCE", 0, XLINE_SOURCE
 XLINE_SOURCE:
+    bl   _task_is_console
+    cbnz x0, _line_source_go
+    ldr  x20, [x22], #8
+    ldr  x20, [x22], #8
+    adrp x0, str_inc_task@page
+    add  x0, x0, str_inc_task@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_line_source_go:
     mov x1, x20
     ldr x0, [x22], #8
     ldr x20, [x22], #8
@@ -10361,8 +11058,10 @@ XLINE_SOURCE:
     RESTORE_VM
     ldp x0, x1, [sp], #16
     bl _arm_lines
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     mov  x1, #-2                   // file text; see _interpret_empty
     str  x1, [x0]
     bl   _eval_resume_push         // resume after (LINE-SOURCE)
@@ -10381,15 +11080,19 @@ XCATCH:
     adrp x7, throw_handler@page
     add x7, x7, throw_handler@pageoff
     ldr x2, [x7]
-    adrp x3, eval_resume_sp@page
-    add  x3, x3, eval_resume_sp@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_EVAL_SP
     ldr  x3, [x3]
     str  x3, [x23, #-8]!           // eval_resume_sp at xt entry
     str x2, [x23, #-8]!            // prev_handler
     str x20, [x23, #-8]!           // saved_TOS
     str x22, [x23, #-8]!           // saved_DSP
-    adrp x2, source_sp@page
-    add x2, x2, source_sp@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_SP
     ldr x2, [x2]
     str x2, [x23, #-8]!            // saved_source_sp
     str x19, [x23, #-8]!           // saved_IP (resume after CATCH)
@@ -10473,8 +11176,10 @@ XTHROW:
     ldr x0, [x23], #8              // prev_handler
     str x0, [x7]
     ldr x0, [x23], #8              // eval_resume_sp at xt entry
-    adrp x3, eval_resume_sp@page
-    add  x3, x3, eval_resume_sp@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_EVAL_SP
     str  x0, [x3]
     // Pop SOURCE nests entered during the xt (e.g. EVALUATE) back to
     // CATCH's saved_source_sp. Leaving an exhausted EVALUATE frame makes
@@ -10519,13 +11224,17 @@ _throw_unwind_to_sp:
     stp  x19, x20, [sp, #-16]!
     mov  x19, x0                   // target source_sp
 1:
-    adrp x0, source_sp@page
-    add  x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     ldr  x1, [x0]
     cmp  x1, x19
     b.ls 2f
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x20, [x0]                 // ending SOURCE-ID
     cmp  x20, #0
     b.le 3f
@@ -10792,8 +11501,10 @@ _word_store:
     b.ls _word_len_ok
     mov x5, #63
 _word_len_ok:
-    adrp x6, word_scratch@page
-    add x6, x6, word_scratch@pageoff
+    adrp x6, up_var@page
+    add  x6, x6, up_var@pageoff
+    ldr  x6, [x6]
+    ldr  x6, [x6, #TU_WORD_PTR]
     strb w5, [x6]
     mov x1, #0
 _word_copy:
@@ -10810,8 +11521,10 @@ _word_done:
 _word_empty:
     mov x0, x2
     bl _cursor_store
-    adrp x6, word_scratch@page
-    add x6, x6, word_scratch@pageoff
+    adrp x6, up_var@page
+    add  x6, x6, up_var@pageoff
+    ldr  x6, [x6]
+    ldr  x6, [x6, #TU_WORD_PTR]
     strb wzr, [x6]
     mov x20, x6
 XWORD_END:
@@ -10825,8 +11538,10 @@ XWORD_END:
 
     BOOT_WORD "\\", "\\ ( -- ) comment to end of line (immediate)", FLAG_IMM, XBACKSLASH
 XBACKSLASH:
-    adrp x0, blk_var@page
-    add  x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     ldr  x0, [x0]
     cbnz x0, _bs_block
     bl _cursor_load
@@ -10855,11 +11570,15 @@ _bs_done:
     NEXT
 _bs_block:
     // >IN := min( source_len, ((>IN / 64) + 1) * 64 )
-    adrp x0, to_in_var@page
-    add  x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     ldr  x1, [x0]                   // >IN
-    adrp x2, source_len@page
-    add  x2, x2, source_len@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_LEN
     ldr  x2, [x2]                   // len
     // line end offset
     mov  x3, #64
@@ -10869,12 +11588,16 @@ _bs_block:
     cmp  x4, x2
     csel x4, x2, x4, hi
     str  x4, [x0]
-    adrp x0, source_addr@page
-    add  x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr  x0, [x0]
     add  x0, x0, x4
-    adrp x1, word_cursor@page
-    add  x1, x1, word_cursor@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_WORD_CURSOR
     str  x0, [x1]
     NEXT
 
@@ -10890,34 +11613,50 @@ _bs_block:
     BOOT_WORD "\\S", "\\S ( -- ) stop rest of FLOAD/INCLUDE file or multi-line console paste (immediate; also \\s)", FLAG_IMM, XBACKSLASH_S
 XBACKSLASH_S:
     // A file line-window: no further lines after this one.
-    adrp x0, line_mode@page
-    add  x0, x0, line_mode@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_MODE
     ldr  x0, [x0]
     cbz  x0, 2f
-    adrp x0, line_limit@page
-    add  x0, x0, line_limit@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_LIMIT
     ldr  x1, [x0]
-    adrp x0, line_next@page
-    add  x0, x0, line_next@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_NEXT
     str  x1, [x0]
 2:
     // Pin >IN and word_cursor at end of current SOURCE (rest of this line / string)
-    adrp x0, source_len@page
-    add  x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr  x1, [x0]                   // u
-    adrp x0, to_in_var@page
-    add  x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     str  x1, [x0]
-    adrp x0, source_addr@page
-    add  x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr  x0, [x0]
     add  x0, x0, x1
-    adrp x2, word_cursor@page
-    add  x2, x2, word_cursor@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_WORD_CURSOR
     str  x0, [x2]
     // Console (SOURCE-ID 0): request host to stop multi-line paste batch
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x0, [x0]
     cbnz x0, 1f                     // file or EVALUATE: only end this SOURCE
     adrp x0, repl_batch_stop@page
@@ -10949,8 +11688,10 @@ _par_found:
     b _par_store
 _par_eol:
     // No ')' on this line. A file keeps scanning the following lines.
-    adrp x0, line_mode@page
-    add x0, x0, line_mode@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_MODE
     ldr x0, [x0]
     cbz x0, _par_store
     bl _take_line
@@ -10973,13 +11714,29 @@ _par_store:
     BOOT_WORD "SOURCE", "SOURCE ( -- c-addr u ) current input source buffer and length", 0, XSOURCE
 XSOURCE:
     str x20, [x22, #-8]!
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x20, [x0]
     str x20, [x22, #-8]!
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x20, [x0]
+    NEXT
+
+// (SOURCE!) ( c-addr u -- )  point this task's SOURCE at a string. >IN = 0.
+// A compiled body uses this before WORD. EVALUATE stays on the interpreter.
+
+    BOOT_WORD "(SOURCE!)", "(SOURCE!) ( c-addr u -- ) set this task's SOURCE and zero >IN", 0, XSOURCE_STORE, XSOURCE_STORE_END
+XSOURCE_STORE:
+    mov  x1, x20
+    ldr  x0, [x22], #8
+    ldr  x20, [x22], #8
+    bl   _set_source
+XSOURCE_STORE_END:
     NEXT
 
 // SOURCE-ID ( -- 0 | -1 | fileid )  ANS
@@ -10988,8 +11745,10 @@ XSOURCE:
     BOOT_WORD "SOURCE-ID", "SOURCE-ID ( -- id ) input source id (-1 terminal, 0 evaluate, 1 file)", 0, XSOURCE_ID
 XSOURCE_ID:
     str x20, [x22, #-8]!
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr x20, [x0]
     NEXT
 
@@ -11001,12 +11760,16 @@ XSOURCE_ID:
 
     BOOT_WORD "REFILL", "REFILL ( -- flag ) attempt to refill the input buffer; flag true if successful", 0, XREFILL
 XREFILL:
-    adrp x0, blk_var@page
-    add  x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     ldr  x0, [x0]
     cbnz x0, _refill_block
-    adrp x0, line_mode@page
-    add  x0, x0, line_mode@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_MODE
     ldr  x0, [x0]
     cbz  x0, _refill_terminal
     bl   _take_line
@@ -11015,20 +11778,26 @@ XREFILL:
     csetm x20, ne                  // -1 true, 0 false
     NEXT
 _refill_terminal:
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr x0, [x0]
     cmp x0, #0
     b.ne _refill_false
-    adrp x0, input_buffer@page
-    add x0, x0, input_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_INPUT_PTR]
     mov x1, #1023
     SAVE_VM
     bl _read_line
     RESTORE_VM
     cbz x0, _refill_eof
-    adrp x0, input_buffer@page
-    add x0, x0, input_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_INPUT_PTR]
     mov x1, #0
 1:
     ldrb w2, [x0, x1]
@@ -11037,16 +11806,20 @@ _refill_terminal:
     b 1b
 2:
     bl _set_source
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str xzr, [x0]
     str x20, [x22, #-8]!
     mov x20, #-1
     NEXT
 _refill_block:
     // BLK++ ; (BLOCK-LOAD) that block into block_buf; SOURCE = block_buf 1024; >IN=0
-    adrp x0, blk_var@page
-    add  x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     ldr  x1, [x0]
     add  x1, x1, #1
     str  x1, [x0]
@@ -11267,8 +12040,10 @@ _env_no:
     BOOT_WORD ">IN", ">IN ( -- addr ) current input pointer variable ( >IN @ for offset)", 0, XTOIN
 XTOIN:
     str x20, [x22, #-8]!
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     mov x20, x0
     NEXT
 
@@ -11297,15 +12072,21 @@ XSLIT_END:
     BOOT_WORD "S\"", "S\" ( -- c-addr u ) compile/interpret \"-delimited string (leaves addr u)", FLAG_IMM, XSQUOTE
 XSQUOTE:
     // --- parse to " (no leading-blank skip) ---
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x9, [x0]                    // SOURCE base
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     mov x10, x0                     // & >IN
     ldr x11, [x10]                  // >IN
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x12, [x0]                   // SOURCE len
     add x1, x9, x11                 // cursor
     add x6, x9, x12                 // end
@@ -11328,8 +12109,10 @@ _sq_eos:
 _sq_commit:
     sub x11, x1, x9
     str x11, [x10]                  // >IN
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     str x1, [x0]
     // x2=c-addr, x5=u  (x9-x12 free again except we keep x2,x5)
     adrp x0, state_var@page
@@ -11399,15 +12182,21 @@ XCSTR_END:
     BOOT_WORD "C\"", "C\" ( -- c-addr ) compile \"-delimited counted string (run-time: addr of length byte)", FLAG_IMM, XCQUOTE
 XCQUOTE:
     // Parse to " (same style as S")
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x9, [x0]
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     mov x10, x0
     ldr x11, [x10]
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x12, [x0]
     add x1, x9, x11
     add x6, x9, x12
@@ -11430,8 +12219,10 @@ _cq_eos:
 _cq_commit:
     sub x11, x1, x9
     str x11, [x10]
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     str x1, [x0]
     cmp x5, #255
     b.ls _cq_lenok
@@ -11442,8 +12233,10 @@ _cq_lenok:
     ldr x0, [x0]
     cbnz x0, _cq_comp
     // interpret → PAD counted string
-    adrp x0, pad_buffer@page
-    add x0, x0, pad_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_PAD_PTR]
     strb w5, [x0]
     mov x3, #0
 1:
@@ -11497,15 +12290,21 @@ _cq_comp:
 
     BOOT_WORD "S\\\"", "S\\\" ( -- ) compile escaped \"-delimited string (leaves c-addr u at run-time)", FLAG_IMM, XSESCAPE
 XSESCAPE:
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x9, [x0]
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     mov x10, x0
     ldr x11, [x10]
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x12, [x0]
     add x1, x9, x11                // cursor (include leading spaces)
     add x6, x9, x12                // end
@@ -11662,8 +12461,10 @@ _se_put1:
 _se_done:
     sub x11, x1, x9
     str x11, [x10]
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     str x1, [x0]
     adrp x0, state_var@page
     add x0, x0, state_var@pageoff
@@ -11715,24 +12516,34 @@ _se_comp:
     BOOT_WORD "SAVE-INPUT", "SAVE-INPUT ( -- x1 ... xn n ) save current input source state for RESTORE-INPUT", 0, XSAVE_INPUT
 XSAVE_INPUT:
     str x20, [x22, #-8]!
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x20, [x0]
     str x20, [x22, #-8]!
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x20, [x0]
     str x20, [x22, #-8]!
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     ldr x20, [x0]
     str x20, [x22, #-8]!
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr x20, [x0]
     str x20, [x22, #-8]!
-    adrp x0, blk_var@page
-    add x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     ldr x20, [x0]
     str x20, [x22, #-8]!
     mov x20, #5
@@ -11767,8 +12578,10 @@ _ri_common:
     str x3, [x22, #-8]!            // addr
     str x5, [x22, #-8]!            // blk
     // Restore BLK
-    adrp x4, blk_var@page
-    add  x4, x4, blk_var@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_BLK
     str  x5, [x4]
     cbz  x5, _ri_apply
     mov  x0, x5
@@ -11789,36 +12602,54 @@ _ri_apply:
     ldr x1, [x22], #8              // >IN
     ldr x0, [x22], #8              // id
     ldr x20, [x22], #8             // prior
-    adrp x4, source_addr@page
-    add x4, x4, source_addr@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_SRC_ADDR
     str x3, [x4]
-    adrp x4, source_len@page
-    add x4, x4, source_len@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_SRC_LEN
     str x2, [x4]
-    adrp x4, to_in_var@page
-    add x4, x4, to_in_var@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_TO_IN
     str x1, [x4]
-    adrp x4, source_id_var@page
-    add x4, x4, source_id_var@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_SRC_ID
     str x0, [x4]
     add x3, x3, x1
-    adrp x4, word_cursor@page
-    add x4, x4, word_cursor@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_WORD_CURSOR
     str x3, [x4]
     // File line window: the next REFILL starts after this restored line.
-    adrp x4, line_mode@page
-    add x4, x4, line_mode@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_LINE_MODE
     ldr x4, [x4]
     cbz x4, _ri_done
-    adrp x4, source_addr@page
-    add x4, x4, source_addr@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_SRC_ADDR
     ldr x3, [x4]
-    adrp x4, source_len@page
-    add x4, x4, source_len@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_SRC_LEN
     ldr x4, [x4]
     add x3, x3, x4
-    adrp x5, line_limit@page
-    add x5, x5, line_limit@pageoff
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    add  x5, x5, #TU_LINE_LIMIT
     ldr x5, [x5]
     cmp x3, x5
     b.hs _ri_next
@@ -11838,8 +12669,10 @@ _ri_apply:
 _ri_nl:
     add x3, x3, #1
 _ri_next:
-    adrp x4, line_next@page
-    add x4, x4, line_next@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_LINE_NEXT
     str x3, [x4]
 _ri_done:
     str x20, [x22, #-8]!
@@ -11865,15 +12698,21 @@ XDOTQ:
     // Reuse S" logic by calling the same parse, then TYPE or compile TYPE
     // Implement by branching into shared structure via stack trick:
     // For simplicity, duplicate parse (same as S") then diverge.
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x9, [x0]
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     mov x10, x0
     ldr x11, [x10]
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     ldr x12, [x0]
     add x1, x9, x11
     add x6, x9, x12
@@ -11896,8 +12735,10 @@ _dq_eos:
 _dq_commit:
     sub x11, x1, x9
     str x11, [x10]
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     str x1, [x0]
     adrp x0, state_var@page
     add x0, x0, state_var@pageoff
@@ -12069,15 +12910,21 @@ _do_quit:
     add  x0, x0, state_var@pageoff
     str  xzr, [x0]
     // Pop any nested SOURCE (EVALUATE / INCLUDE) back to base
-    adrp x0, source_sp@page
-    add  x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     str  xzr, [x0]
-    adrp x0, eval_resume_sp@page
-    add  x0, x0, eval_resume_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_EVAL_SP
     str  xzr, [x0]
     // Terminal is the input source
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str  xzr, [x0]
     // Drop all locals frames
     adrp x0, local_frame_depth@page
@@ -12128,14 +12975,20 @@ _quit_loop:
     adrp x0, state_var@page
     add x0, x0, state_var@pageoff
     str xzr, [x0]
-    adrp x0, source_sp@page
-    add x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     str xzr, [x0]
-    adrp x0, eval_resume_sp@page
-    add x0, x0, eval_resume_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_EVAL_SP
     str xzr, [x0]
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str xzr, [x0]
     adrp x0, local_frame_depth@page
     add x0, x0, local_frame_depth@pageoff
@@ -12148,15 +13001,19 @@ _quit_loop:
     bl   _emit_depth_prompt
 
     // Read line (line editor; maxlen leaves room for NUL)
-    adrp x0, input_buffer@page
-    add  x0, x0, input_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_INPUT_PTR]
     mov  x1, #1023
     bl   _read_line
     cbz  x0, _quit_exit
 
     // SOURCE = input_buffer, length = strlen, >IN = 0
-    adrp x0, input_buffer@page
-    add  x0, x0, input_buffer@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_INPUT_PTR]
     mov x1, #0
 1:
     ldrb w2, [x0, x1]
@@ -12166,8 +13023,10 @@ _quit_loop:
 2:
     bl _set_source
     // User input device
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str xzr, [x0]
 
 _interpret_loop:
@@ -12491,8 +13350,10 @@ _report_undefined:
     b    2f
 1:
     // Fallback: C-string in word_scratch (legacy paths)
-    adrp x0, word_scratch@page
-    add  x0, x0, word_scratch@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x0, [x0, #TU_WORD_PTR]
     bl   _print_string_svc
 2:
     bl   _report_undef_loc
@@ -12505,8 +13366,10 @@ _report_undefined:
 _report_undef_loc:
     stp  x29, x30, [sp, #-16]!
     // SOURCE-ID > 0 → CODE INCLUDE
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x0, [x0]
     cmp  x0, #0
     b.gt 1f
@@ -12592,8 +13455,10 @@ _error_abandon:
     // Also pop VIEW for levels that pushed it (same rule as _interpret_empty),
     // or a soft fault mid-REQUIRE leaves view_src_id on the abandoned file.
 _ea_unwind:
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x10, [x0]                 // ending SOURCE-ID (preserve across hook)
     str  x10, [sp, #-16]!
     cmp  x10, #0
@@ -12617,24 +13482,36 @@ _ea_unwind:
     b    _ea_unwind
 2:
     // Base SOURCE only: pin >IN to end so no further tokens this evaluate.
-    adrp x0, source_len@page
-    add  x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
-    adrp x1, to_in_var@page
-    add  x1, x1, to_in_var@pageoff
+    add  x0, x0, #TU_SRC_LEN
+    ldr  x0, [x0]
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_TO_IN
     str  x0, [x1]
-    adrp x0, source_addr@page
-    add  x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
-    adrp x1, source_len@page
-    add  x1, x1, source_len@pageoff
+    add  x0, x0, #TU_SRC_ADDR
+    ldr  x0, [x0]
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_SRC_LEN
     ldr  x1, [x1]
     add  x0, x0, x1
-    adrp x1, word_cursor@page
-    add  x1, x1, word_cursor@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_WORD_CURSOR
     str  x0, [x1]
-    adrp x0, eval_resume_sp@page
-    add  x0, x0, eval_resume_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_EVAL_SP
     str  xzr, [x0]
     // Finish this evaluate (print ok / return to host). Do *not* re-enter
     // the interpret loop on a restored outer line.
@@ -12642,8 +13519,10 @@ _ea_unwind:
 
 // End of current SOURCE: next file line, else pop nested source or finish
 _interpret_empty:
-    adrp x0, line_mode@page
-    add  x0, x0, line_mode@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_MODE
     ldr  x0, [x0]
     cbz  x0, 3f
     bl   _take_line
@@ -12655,8 +13534,10 @@ _interpret_empty:
     // runs _view_pop_src_id. Without that, nested REQUIRE leaves view_src_id
     // on the included file, fills view_id_stack, and Hyper's FLOAD hyper-index
     // push fails — VIEW/DBG/LOCATE then stamp as Emitter/… .
-    adrp x0, source_id_var@page
-    add  x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr  x10, [x0]                 // x10 = ending SOURCE-ID
     str  x10, [sp, #-16]!          // preserve across hook + _pop_source
     // If ending a file INCLUDE/FLOAD (SOURCE-ID > 0), restore host load cwd
@@ -12759,46 +13640,68 @@ _quit_exit:
 
 // _set_source: x0=c-addr, x1=u  — establish SOURCE / >IN=0
 _set_source:
-    adrp x2, source_addr@page
-    add x2, x2, source_addr@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_ADDR
     str x0, [x2]
-    adrp x2, source_len@page
-    add x2, x2, source_len@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_LEN
     str x1, [x2]
-    adrp x2, to_in_var@page
-    add x2, x2, to_in_var@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_TO_IN
     str xzr, [x2]
-    adrp x2, word_cursor@page
-    add x2, x2, word_cursor@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_WORD_CURSOR
     str x0, [x2]
     // Reset FILE-ECHO scan so the new SOURCE echoes from its start
-    adrp x2, file_echo_pos@page
-    add x2, x2, file_echo_pos@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_ECHO_POS
     str x0, [x2]
-    adrp x2, line_mode@page
-    add x2, x2, line_mode@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_MODE
     str xzr, [x2]
     ret
 
 // _arm_lines: x0=buffer, x1=length. Current SOURCE becomes a line window
 // over this image. Does not install the first line (caller or _interpret_empty).
 _arm_lines:
-    adrp x2, line_origin@page
-    add x2, x2, line_origin@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_ORIGIN
     str x0, [x2]
     add x3, x0, x1
-    adrp x2, line_limit@page
-    add x2, x2, line_limit@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_LIMIT
     str x3, [x2]
-    adrp x2, line_next@page
-    add x2, x2, line_next@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_NEXT
     str x0, [x2]
     mov x3, #1
-    adrp x2, line_mode@page
-    add x2, x2, line_mode@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_MODE
     str x3, [x2]
-    adrp x2, file_echo_pos@page
-    add x2, x2, file_echo_pos@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_ECHO_POS
     str x0, [x2]
     ret
 
@@ -12806,11 +13709,15 @@ _arm_lines:
 // Newline is not part of SOURCE. line_next moves past CR, LF, or CRLF.
 _take_line:
     stp x29, x30, [sp, #-16]!
-    adrp x2, line_next@page
-    add x2, x2, line_next@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_NEXT
     ldr x0, [x2]
-    adrp x3, line_limit@page
-    add x3, x3, line_limit@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_LIMIT
     ldr x3, [x3]
     cmp x0, x3
     b.hs _tl_eof
@@ -12843,20 +13750,30 @@ _tl_eos:
     mov x5, x1
 _tl_set:
     sub x6, x5, x0
-    adrp x2, line_next@page
-    add x2, x2, line_next@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_NEXT
     str x1, [x2]
-    adrp x2, source_addr@page
-    add x2, x2, source_addr@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_ADDR
     str x0, [x2]
-    adrp x2, source_len@page
-    add x2, x2, source_len@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_LEN
     str x6, [x2]
-    adrp x2, to_in_var@page
-    add x2, x2, to_in_var@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_TO_IN
     str xzr, [x2]
-    adrp x2, word_cursor@page
-    add x2, x2, word_cursor@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_WORD_CURSOR
     str x0, [x2]
     mov x0, #1
     ldp x29, x30, [sp], #16
@@ -12887,8 +13804,10 @@ _file_echo_upto_cursor:
     ldr x0, [x0]
     cbz x0, _fe_done
     // SOURCE-ID > 0 → classic file INCLUDE
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     ldr x0, [x0]
     cmp x0, #0
     b.gt 0f
@@ -12907,31 +13826,43 @@ _file_echo_upto_cursor:
     sub sp, sp, #32
     // source base / end. A file line window echoes against the whole image
     // so line numbers stay file-relative.
-    adrp x4, line_mode@page
-    add x4, x4, line_mode@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_LINE_MODE
     ldr x4, [x4]
     cbz x4, 0f
-    adrp x1, line_origin@page
-    add x1, x1, line_origin@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_LINE_ORIGIN
     ldr x1, [x1]
-    adrp x2, line_limit@page
-    add x2, x2, line_limit@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_LINE_LIMIT
     ldr x2, [x2]
     b 7f
 0:
-    adrp x1, source_addr@page
-    add x1, x1, source_addr@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_SRC_ADDR
     ldr x1, [x1]                   // x1 = source base
-    adrp x2, source_len@page
-    add x2, x2, source_len@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    add  x2, x2, #TU_SRC_LEN
     ldr x2, [x2]
     add x2, x1, x2                 // x2 = source end
 7:
     str x1, [sp]
     str x2, [sp, #8]
     // cursor = word_cursor, clamped
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     ldr x0, [x0]
     cmp x0, x1
     csel x0, x1, x0, lo
@@ -12973,8 +13904,10 @@ _file_echo_upto_cursor:
 5:
     str x3, [sp, #16]              // target_eol
     // pos = file_echo_pos, clamped into SOURCE
-    adrp x4, file_echo_pos@page
-    add x4, x4, file_echo_pos@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_ECHO_POS
     ldr x0, [x4]
     ldr x1, [sp]                   // base
     cmp x0, x1
@@ -13071,8 +14004,10 @@ _fe_line_loop:
     add x1, x3, #1
 18:
     str x1, [sp, #24]              // pos
-    adrp x4, file_echo_pos@page
-    add x4, x4, file_echo_pos@pageoff
+    adrp x4, up_var@page
+    add  x4, x4, up_var@pageoff
+    ldr  x4, [x4]
+    add  x4, x4, #TU_ECHO_POS
     str x1, [x4]
     mov x0, #10
     bl  _putchar
@@ -13127,27 +14062,35 @@ _fe_emit_lineno:
 // (LINE-SOURCE) / (LOAD-RUN). _eval_resume_pop returns that IP in x0, or 0.
 // Separate from the Forth return stack, which holds the token being parsed.
 _eval_resume_push:
-    adrp x0, eval_resume_sp@page
-    add  x0, x0, eval_resume_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_EVAL_SP
     ldr  x1, [x0]
     cmp  x1, #8
     b.hs 1f
-    adrp x2, eval_resume_stack@page
-    add  x2, x2, eval_resume_stack@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_EVALSTK_PTR]
     str  x19, [x2, x1, lsl #3]
     add  x1, x1, #1
     str  x1, [x0]
 1:  ret
 
 _eval_resume_pop:
-    adrp x0, eval_resume_sp@page
-    add  x0, x0, eval_resume_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_EVAL_SP
     ldr  x1, [x0]
     cbz  x1, 1f
     sub  x1, x1, #1
     str  x1, [x0]
-    adrp x2, eval_resume_stack@page
-    add  x2, x2, eval_resume_stack@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_EVALSTK_PTR]
     ldr  x0, [x2, x1, lsl #3]
     ret
 1:  mov  x0, #0
@@ -13159,55 +14102,79 @@ _eval_resume_pop:
 // nested EVALUATE/LOAD source ends (EVALUATE does not return into colon defs).
 // Returns x0=1 ok, x0=0 overflow.
 _push_source:
-    adrp x0, source_sp@page
-    add x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     ldr x1, [x0]
     cmp x1, #8
     b.hs 1f
     mov x2, #80                    // 10*8 per frame
     mul x3, x1, x2
-    adrp x2, source_stack@page
-    add x2, x2, source_stack@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_SSTK_PTR]
     add x2, x2, x3
     // store addr, len, to_in, source_id, file_echo_pos, BLK
-    adrp x3, source_addr@page
-    add x3, x3, source_addr@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_SRC_ADDR
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, source_len@page
-    add x3, x3, source_len@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_SRC_LEN
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, to_in_var@page
-    add x3, x3, to_in_var@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_TO_IN
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, source_id_var@page
-    add x3, x3, source_id_var@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_SRC_ID
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, file_echo_pos@page
-    add x3, x3, file_echo_pos@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_ECHO_POS
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, blk_var@page
-    add x3, x3, blk_var@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_BLK
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, line_mode@page
-    add x3, x3, line_mode@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_MODE
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, line_origin@page
-    add x3, x3, line_origin@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_ORIGIN
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, line_limit@page
-    add x3, x3, line_limit@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_LIMIT
     ldr x3, [x3]
     str x3, [x2], #8
-    adrp x3, line_next@page
-    add x3, x3, line_next@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_LINE_NEXT
     ldr x3, [x3]
     str x3, [x2]
     add x1, x1, #1
@@ -13220,61 +14187,87 @@ _push_source:
 
 // _pop_source: restore SOURCE window plus file line state. x0=1 ok, x0=0 underflow.
 _pop_source:
-    adrp x0, source_sp@page
-    add x0, x0, source_sp@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_SP
     ldr x1, [x0]
     cbz x1, 1f
     sub x1, x1, #1
     str x1, [x0]
     mov x2, #80
     mul x3, x1, x2
-    adrp x2, source_stack@page
-    add x2, x2, source_stack@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_SSTK_PTR]
     add x2, x2, x3
     ldr x3, [x2], #8
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     str x3, [x0]
     mov x4, x3                     // base for cursor
     ldr x3, [x2], #8
-    adrp x0, source_len@page
-    add x0, x0, source_len@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_LEN
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, to_in_var@page
-    add x0, x0, to_in_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_TO_IN
     str x3, [x0]
     add x4, x4, x3
-    adrp x0, word_cursor@page
-    add x0, x0, word_cursor@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_WORD_CURSOR
     str x4, [x0]
     ldr x3, [x2], #8
-    adrp x0, source_id_var@page
-    add x0, x0, source_id_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ID
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, file_echo_pos@page
-    add x0, x0, file_echo_pos@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_ECHO_POS
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, blk_var@page
-    add x0, x0, blk_var@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_BLK
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, line_mode@page
-    add x0, x0, line_mode@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_MODE
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, line_origin@page
-    add x0, x0, line_origin@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_ORIGIN
     str x3, [x0]
     ldr x3, [x2], #8
-    adrp x0, line_limit@page
-    add x0, x0, line_limit@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_LIMIT
     str x3, [x0]
     ldr x3, [x2]
-    adrp x0, line_next@page
-    add x0, x0, line_next@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_LINE_NEXT
     str x3, [x0]
     mov x0, #1
     ret
@@ -13286,11 +14279,15 @@ _pop_source:
     BOOT_WORD "(CURSOR-LOAD)", "(CURSOR-LOAD) ( -- ) absolute parse cursor from SOURCE/>IN", FLAG_EMM, XCURSOR_LOAD, XCURSOR_LOAD_END
 XCURSOR_LOAD:
 _cursor_load:
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x0, [x0]
-    adrp x1, to_in_var@page
-    add x1, x1, to_in_var@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_TO_IN
     ldr x1, [x1]
     add x0, x0, x1
     ret
@@ -13300,30 +14297,40 @@ XCURSOR_LOAD_END:
     BOOT_WORD "(CURSOR-STORE)", "(CURSOR-STORE) ( -- ) store absolute parse cursor into >IN", FLAG_EMM, XCURSOR_STORE, XCURSOR_STORE_END
 XCURSOR_STORE:
 _cursor_store:
-    adrp x1, source_addr@page
-    add x1, x1, source_addr@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_SRC_ADDR
     ldr x1, [x1]
     sub x2, x0, x1                 // offset
     cmp x2, #0
     b.ge 1f
     mov x2, #0
 1:
-    adrp x3, source_len@page
-    add x3, x3, source_len@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_SRC_LEN
     ldr x3, [x3]
     cmp x2, x3
     b.ls 2f
     mov x2, x3
 2:
-    adrp x1, to_in_var@page
-    add x1, x1, to_in_var@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_TO_IN
     str x2, [x1]
-    adrp x1, source_addr@page
-    add x1, x1, source_addr@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_SRC_ADDR
     ldr x1, [x1]
     add x1, x1, x2
-    adrp x3, word_cursor@page
-    add x3, x3, word_cursor@pageoff
+    adrp x3, up_var@page
+    add  x3, x3, up_var@pageoff
+    ldr  x3, [x3]
+    add  x3, x3, #TU_WORD_CURSOR
     str x1, [x3]
     ret
 XCURSOR_STORE_END:
@@ -13332,11 +14339,15 @@ XCURSOR_STORE_END:
     BOOT_WORD "(SOURCE-END)", "(SOURCE-END) ( -- ) address one past last SOURCE char", FLAG_EMM, XSOURCE_END, XSOURCE_END_END
 XSOURCE_END:
 _source_end:
-    adrp x0, source_addr@page
-    add x0, x0, source_addr@pageoff
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    add  x0, x0, #TU_SRC_ADDR
     ldr x0, [x0]
-    adrp x1, source_len@page
-    add x1, x1, source_len@pageoff
+    adrp x1, up_var@page
+    add  x1, x1, up_var@pageoff
+    ldr  x1, [x1]
+    add  x1, x1, #TU_SRC_LEN
     ldr x1, [x1]
     add x0, x0, x1
     ret
@@ -14338,8 +15349,10 @@ _nw_cons:
 _nw_copy_prep:
 
     // Copy to word_scratch (cap WORD_SCRATCH_MAX-1; leave room for NUL)
-    adrp x2, word_scratch@page
-    add x2, x2, word_scratch@pageoff
+    adrp x2, up_var@page
+    add  x2, x2, up_var@pageoff
+    ldr  x2, [x2]
+    ldr  x2, [x2, #TU_WORD_PTR]
     mov x5, #511                   // max chars
     cmp x1, x5
     csel x1, x5, x1, hi
@@ -18997,6 +20010,8 @@ XRESTART:
 
 data_stack:     .skip 4096
 return_stack:   .skip RETURN_STACK_SIZE
+// Console task scratch. Background tasks allot their own copies.
+// The scalar cells below are unused; the live cells are in the user area.
 input_buffer:   .skip 1024
 // INCLUDE/FLOAD whole-file buffer. Must hold largest library test (paranoia.4th ~70K).
 .equ FILE_BUFFER_MAX, 262144       // 256 KiB
@@ -19029,6 +20044,16 @@ hist_draft_len:   .quad 0
 
 state_var:      .quad 0
 base_var:       .quad 10
+// Cooperative tasker. Console record is filled by _task_cold_init.
+// Threads: a cell holds an xt; NEXT loads that xt's code field.
+.align 8
+console_task:   .skip TU_BYTES
+up_var:         .quad 0            // user area of the running task
+multi_var:      .quad 0            // 0 = SINGLE, -1 = MULTI
+stop_retry_xt:  .quad XSTOP        // code field for the fall-off sentinel
+park_retry_xt:  .quad XPARK
+task_stop_thread: .quad stop_retry_xt
+park_thread:    .quad park_retry_xt
 blk_var:        .quad 0            // BLK body (0 = not interpreting a block)
 scr_var:        .quad 0            // SCR body
 block_file_var: .quad 0            // current volume fileid (0 = none)
@@ -19217,6 +20242,13 @@ str_gmm_already:.asciz "? GROWMEMORYMB already used (once per session)\n"
 str_gmm_small:  .asciz "? GROWMEMORYMB needs at least 1 MB\n"
 str_gmm_big:    .asciz "? GROWMEMORYMB exceeds maximum (256 MB)\n"
 str_gmm_shrink: .asciz "? GROWMEMORYMB cannot shrink memory\n"
+str_gmm_task:   .asciz "? GROWMEMORYMB only from the console task\n"
+str_inc_task:   .asciz "? INCLUDE only from the console task\n"
+str_blk_task:   .asciz "? block load only from the console task\n"
+str_stop_console: .asciz "STOP: the console task stays awake\n"
+str_sleep_only: .asciz "SLEEP: the console is the only awake task\n"
+str_act_interp: .asciz "ACTIVATE is only valid inside a colon definition\n"
+str_act_self:   .asciz "ACTIVATE: a task cannot activate itself\n"
 str_redef:  .asciz " is redefined\n"
 .align 8
 quit_jmpbuf:        .skip 256      // sigjmp_buf for fault recovery

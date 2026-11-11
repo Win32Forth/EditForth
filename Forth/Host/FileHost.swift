@@ -1307,7 +1307,8 @@ final class FileHost {
     /// Copy shipped Library / System / Docs files into Documents when the
     /// shipped file is missing or newer. A Documents file that is newer than
     /// the app is left alone. Called from `installUserTree` (launch and
-    /// Update User Data). Restore Shipped Files still replaces the whole tree.
+    /// Update User Data) and from autoload, including a companion Restart.
+    /// Restore Shipped Files still replaces the whole tree.
     func syncNewerShippedFiles() {
         guard let res = Bundle.main.resourceURL else { return }
         guard let destRoot = userTreeURL else { return }

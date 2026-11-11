@@ -1,8 +1,7 @@
 \ kernel2.fth
 .( Loading: kernel2.fth) CR
 \ --- 4b. Pictured numeric output ---
-DOC" HLD ( -- addr ) pictured output pointer variable"
-VARIABLE HLD
+\ HLD is a boot word. It returns this task's cell, not a shared VARIABLE.
 DOC" <# ( -- ) begin pictured numeric output"
 : <# PAD 256 + HLD ! ;
 DOC" HOLD ( char -- ) insert char into pictured output"
@@ -163,6 +162,21 @@ DOC" ABORT quote ( x -- ) if x nonzero type message and THROW -2 (immediate)"
     -2 POSTPONE LITERAL POSTPONE THROW POSTPONE THEN
   ELSE 34 PARSE ROT IF TYPE CR -2 THROW THEN 2DROP THEN ; IMMEDIATE
 
+DOC" PAUSE ( -- ) yield if MULTI, then show pending output and wait 1 ms"
+: PAUSE (YIELD) (PAUSE-HOOK) ;
+DOC" TASK: ( 'name' -- ) create a background task (user area and private stacks)"
+: TASK:
+  >IN @ >R
+  BL WORD FIND IF
+    DROP R> DROP
+    ." TASK: name already exists" CR
+    ABORT
+  THEN
+  DROP
+  R> >IN !
+  CREATE (TASK-INIT)
+  DOES> ;
+
 DOC" ON ( addr -- ) store 1 at addr"
 : ON 1 SWAP ! ;
 DOC" OFF ( addr -- ) store 0 at addr"
@@ -298,6 +312,11 @@ DOC" INCLUDED ( c-addr u -- ) resolve (FROMLIB), load-cwd, one line per SOURCE, 
 \ On THROW from the body, CATCH restores the path (c-addr u) under ior — drop
 \ it before rethrow so a failed FLOAD does not leak two stack cells.
 : INCLUDED  ( c-addr u -- )
+    (CONSOLE?) 0= IF
+        2DROP
+        S" ? INCLUDE only from the console task" TYPE CR
+        STOP EXIT
+    THEN
     RESOLVE-KEY                      \ c-addr' u' in include_name_pending
     DUP 0= IF 2DROP EXIT THEN
     2DUP  255 MIN  INC-KEY SWAP  DUP INC-LEN ! MOVE
@@ -538,6 +557,11 @@ DOC" FLUSH ( -- ) SAVE-BUFFERS then EMPTY-BUFFERS"
 : FLUSH SAVE-BUFFERS EMPTY-BUFFERS ;
 DOC" BLOCK ( u -- a-addr ) a-addr is the address of the block buffer for block u"
 : BLOCK
+  (CONSOLE?) 0= IF
+      DROP
+      S" ? block load only from the console task" TYPE CR
+      STOP EXIT
+  THEN
   DUP (BLOCK-NR) @ = IF DROP (BLOCK-BUF) EXIT THEN
   (BLOCK-UPD) @ IF (BLOCK-NR) @ DUP 0< 0= IF (BLOCK-WRITE) DROP THEN 0 (BLOCK-UPD) ! THEN
   DUP (BLOCK-NR) ! DUP (BLOCK-READ) DROP DROP (BLOCK-BUF) ;
@@ -555,7 +579,13 @@ DOC" USE-BLOCK-FILE ( fileid -- ) select volume as current; flush previous"
 DOC" CLOSE-BLOCK-FILE ( fileid -- ior ) flush if current, then CLOSE-FILE"
 : CLOSE-BLOCK-FILE DUP BLOCK-FILE @ = IF FLUSH 0 BLOCK-FILE ! THEN CLOSE-FILE ;
 DOC" LOAD ( i*x u -- j*x ) interpret block u"
-: LOAD (LOAD-ENTER) BLOCK 1024 (LOAD-RUN) ;
+: LOAD
+  (CONSOLE?) 0= IF
+      DROP
+      S" ? block load only from the console task" TYPE CR
+      STOP EXIT
+  THEN
+  (LOAD-ENTER) BLOCK 1024 (LOAD-RUN) ;
 DOC" THRU ( i*x u1 u2 -- j*x ) LOAD u1..u2 inclusive"
 : THRU 1+ SWAP ?DO I LOAD LOOP ;
 DOC" LIST ( u -- ) display block u as 16 lines of 64 chars"

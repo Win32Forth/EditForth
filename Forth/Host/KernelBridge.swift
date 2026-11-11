@@ -3362,6 +3362,11 @@ final class KernelBridge {
         host.logicalCurrentDirectory = bootRoot.path
         _ = FileManager.default.changeCurrentDirectoryPath(bootRoot.path)
 
+        // Restart relaunches only this process. The editor copies newer
+        // System/Sources at its own launch, not on Restart, so HYPER-REINDEX
+        // would stamp VIEW from a stale Documents tree. Sync first.
+        host.syncNewerShippedFiles()
+
         // Module-load and HYPER-REINDEX lines go to bootTranscript, not the console.
         // The flag is snapshotted with each emit chunk, so a drain that runs
         // after this function returns still files the line in the boot log.

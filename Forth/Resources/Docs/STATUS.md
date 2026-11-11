@@ -1,8 +1,32 @@
 # 64Forth development status
 
-**Current:** **2.6.4** (build **31**) — kernel float stack, image writer, search-order save. Disk image `Releases/EditForth-2.6.4-macOS.dmg`.
+**Current:** **2.7.0** (build **32**) — cooperative tasks and per-task scratch. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
 
-**Last updated:** 2026-11-07
+**Last updated:** 2026-11-11
+
+---
+
+## v2.7.0 — Cooperative tasks
+
+**Version strings:** marketing **2.7.0**, build **32**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`. Console stamp `Nov 11, 2026 4:40 PM`. `scripts/release.sh` was not run. A headless ANS-VALIDATE on the Debug kernel, with `MULTI` left off, reported 395 passed, 0 failed.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.7.0 === Nov 11, 2026 4:40 PM ===
+```
+
+### Highlights since 2.6.4
+
+- **Tasks.** `TASK:` allots a 256-byte user area, two 512-cell stacks, and 3264 bytes of private scratch from the shared dictionary (11712 bytes). The task stays asleep until `ACTIVATE`. `SLEEP`, `WAKE`, and `STOP` change that status. `STOP` of the console is refused. `MULTI` arms the yield. Cold start is `SINGLE`, and the yield is then a no-op. `PAUSE` is `(YIELD)` then `(PAUSE-HOOK)`: when `MULTI` is on it switches first, then still flushes the console and waits 1 ms. `KEY` yields while it waits, a key hook is installed, and another task is awake. The debugger suppresses the yield.
+- **Scratch.** Each task has its own `WORD` buffer, `PAD`, `HLD`, input buffer, source stack, and `SOURCE` / `>IN` / `SOURCE-ID`. The console pointers still aim at the existing buffers. The 256 KiB file buffer and the block buffer stay shared. `(SOURCE!)` sets the running task's `SOURCE`.
+- **Console only.** A background `INCLUDE`, `REQUIRED`, `LOAD`, or `BLOCK` prints a refuse line and `STOP`s that task. `GROWMEMORYMB` from a background task prints `? GROWMEMORYMB only from the console task` and `STOP`s. The once-per-session flag is not consumed.
+- **Forget.** `FORGET` and `ANEW` unlink every task whose user area is at or above the cut. The console record is not in the dictionary.
+- **Samples.** `Library/Sample/TASKCLOCK.fth` and `Library/Sample/TASKSCRATCH.fth`.
+- **Design.** `MULTI-TASKING.md`, also copied under `Docs/`. Semaphores, mailboxes, the multi-core scheduler, and a private dictionary slice are not in this version.
+- **VIEW on Restart.** Autoload copies newer shipped Library, System, and Docs before `HYPER-REINDEX`. A companion Restart does that copy too, so VIEW does not stamp a stale `System/Sources`.
+
+**Release:** no disk image yet.
 
 ---
 
