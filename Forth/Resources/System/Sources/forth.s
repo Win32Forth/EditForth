@@ -3246,6 +3246,110 @@ XSINGLE:
 XSINGLE_END:
     NEXT
 
+// Binary semaphore cell: 1 is free, 0 is taken. CLAIM stores 0 only while
+// this core still holds the exclusive reservation. A 0 is left unchanged.
+// RELEASE stores 1 with a release store. WAIT parks by yielding. SIGNAL
+// releases, then yields so a parked waiter can claim.
+
+    BOOT_WORD "CLAIM", "CLAIM ( addr -- flag ) take a free semaphore; true if this task stored 0", 0, XCLAIM, XCLAIM_END
+XCLAIM:
+    mov  x0, x20
+_claim_try:
+    ldaxr x1, [x0]
+    cbz  x1, _claim_busy
+    stlxr w2, xzr, [x0]
+    cbnz w2, _claim_try
+    mov  x20, #-1
+    b    XCLAIM_END
+_claim_busy:
+    clrex
+    mov  x20, #0
+XCLAIM_END:
+    NEXT
+
+    BOOT_WORD "RELEASE", "RELEASE ( addr -- ) store 1 into a semaphore with a release store", 0, XRELEASE, XRELEASE_END
+XRELEASE:
+    mov  x1, #1
+    stlr x1, [x20]
+    ldr  x20, [x22], #8
+XRELEASE_END:
+    NEXT
+
+    BOOT_WORD "WAIT", "WAIT ( addr -- ) CLAIM until it succeeds, yielding while the semaphore is taken", 0, XWAIT, XWAIT_END
+// Parked WAIT resumes here. NEXT has already stepped past wait_thread,
+// so reload the colon continuation saved in TU_RESUME and claim again.
+XWAIT_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XWAIT
+XWAIT:
+    mov  x0, x20
+_wait_try:
+    ldaxr x1, [x0]
+    cbz  x1, _wait_busy
+    stlxr w2, xzr, [x0]
+    cbnz w2, _wait_try
+    ldr  x20, [x22], #8
+    b    XWAIT_END
+_wait_busy:
+    clrex
+    bl   _task_can_switch
+    cbz  x0, _wait_stuck
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    str  x19, [x5, #TU_RESUME]
+    adrp x19, wait_thread@page
+    add  x19, x19, wait_thread@pageoff
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.ne XWAIT_END
+    ldr  x19, [x5, #TU_RESUME]
+_wait_stuck:
+    ldr  x20, [x22], #8
+    adrp x0, str_wait_stuck@page
+    add  x0, x0, str_wait_stuck@pageoff
+    bl   _print_string_svc
+XWAIT_END:
+    NEXT
+
+    BOOT_WORD "SIGNAL", "SIGNAL ( addr -- ) RELEASE, then yield so a waiting task can CLAIM", 0, XSIGNAL, XSIGNAL_END
+XSIGNAL:
+    mov  x1, #1
+    stlr x1, [x20]
+    ldr  x20, [x22], #8
+    bl   _task_can_switch
+    cbz  x0, XSIGNAL_END
+    bl   _task_yield
+XSIGNAL_END:
+    NEXT
+
+    BOOT_WORD "GRAPHICS-SEM", "GRAPHICS-SEM ( -- addr ) semaphore for the graphics map (1 = free)", 0, XGRAPHICS_SEM
+XGRAPHICS_SEM:
+    str  x20, [x22, #-8]!
+    adrp x20, sem_graphics@page
+    add  x20, x20, sem_graphics@pageoff
+    NEXT
+
+    BOOT_WORD "CONSOLE-SEM", "CONSOLE-SEM ( -- addr ) semaphore for the console emit buffer (1 = free)", 0, XCONSOLE_SEM
+XCONSOLE_SEM:
+    str  x20, [x22, #-8]!
+    adrp x20, sem_console@page
+    add  x20, x20, sem_console@pageoff
+    NEXT
+
+    BOOT_WORD "DICT-SEM", "DICT-SEM ( -- addr ) semaphore for dictionary mutation (1 = free)", 0, XDICT_SEM
+XDICT_SEM:
+    str  x20, [x22, #-8]!
+    adrp x20, sem_dict@page
+    add  x20, x20, sem_dict@pageoff
+    NEXT
+
     BOOT_WORD "(CONSOLE?)", "(CONSOLE?) ( -- flag ) true when the running task is the console", 0, XCONSOLE_Q, XCONSOLE_Q_END
 XCONSOLE_Q:
     bl   _task_is_console
@@ -3531,6 +3635,16 @@ _task_cold_init:
     adrp x1, eval_resume_stack@page
     add  x1, x1, eval_resume_stack@pageoff
     str  x1, [x0, #TU_EVALSTK_PTR]
+    mov  x1, #1
+    adrp x2, sem_graphics@page
+    add  x2, x2, sem_graphics@pageoff
+    str  x1, [x2]
+    adrp x2, sem_console@page
+    add  x2, x2, sem_console@pageoff
+    str  x1, [x2]
+    adrp x2, sem_dict@page
+    add  x2, x2, sem_dict@pageoff
+    str  x1, [x2]
     ret
 
 // EKEY ( -- u )  Facility: next key event (implementation-defined encoding).
@@ -20054,6 +20168,13 @@ stop_retry_xt:  .quad XSTOP        // code field for the fall-off sentinel
 park_retry_xt:  .quad XPARK
 task_stop_thread: .quad stop_retry_xt
 park_thread:    .quad park_retry_xt
+// WAIT resumes through this thread so the address stays in TOS.
+wait_retry_xt:  .quad XWAIT_RETRY
+wait_thread:    .quad wait_retry_xt
+// Device semaphores. 1 = free. Not taken inside EMIT, blit, or header linking.
+sem_graphics:   .quad 1
+sem_console:    .quad 1
+sem_dict:       .quad 1
 blk_var:        .quad 0            // BLK body (0 = not interpreting a block)
 scr_var:        .quad 0            // SCR body
 block_file_var: .quad 0            // current volume fileid (0 = none)
@@ -20247,6 +20368,7 @@ str_inc_task:   .asciz "? INCLUDE only from the console task\n"
 str_blk_task:   .asciz "? block load only from the console task\n"
 str_stop_console: .asciz "STOP: the console task stays awake\n"
 str_sleep_only: .asciz "SLEEP: the console is the only awake task\n"
+str_wait_stuck: .asciz "? WAIT: no other task can SIGNAL\n"
 str_act_interp: .asciz "ACTIVATE is only valid inside a colon definition\n"
 str_act_self:   .asciz "ACTIVATE: a task cannot activate itself\n"
 str_redef:  .asciz " is redefined\n"

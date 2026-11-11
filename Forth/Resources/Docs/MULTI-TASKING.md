@@ -1,6 +1,6 @@
 # Multi-tasking
 
-**Status:** steps 1 and 2 are in the Mac kernel. Steps 3–6 are not implemented. Cold start is `SINGLE`.
+**Status:** steps 1–3 are in the Mac kernel. Steps 4–6 are not implemented. Cold start is `SINGLE`.
 **Scope:** Mac EditForth (`Forth/Kernel/forth.s`, `Forth/Kernel/kernel2.fth`, `Forth/Host/KernelBridge.swift`). EditForthPWA stays one thread.
 **Source:** Brad Rodriguez, [Forth Multitasking in a Nutshell](https://www.bradrodriguez.com/papers/mtasking.html) (September 1992).
 
@@ -41,6 +41,18 @@ The console pointers aim at the existing BSS buffers, so a single-task session u
 `INCLUDE`, `INCLUDED`, `REQUIRED`, `(INCLUDE)`, and `(LINE-SOURCE)` from a background task print `? INCLUDE only from the console task` and `STOP`. `LOAD` and `BLOCK` print `? block load only from the console task` and `STOP`. The console line continues.
 
 The sample is `Forth/Resources/Library/Sample/TASKSCRATCH.fth`. Two tasks each parsed a different name and pictured a different number. A `PAUSE` sat between `WORD` and the copy, and inside `<#` … `#>`. The run printed `alpha-one`, `beta-two`, `111`, `222`, and `scratch-ok`, then both refuse lines, `refuse-returned`, `single-ok`, and `depth=0`.
+
+## Step 3 as built
+
+A semaphore is one aligned cell. `1` is free and `0` is taken. `CLAIM` does an exclusive load. It stores `0` only while this core still holds the reservation, and returns true (`-1`). A cell that is already `0` returns false and is not written. `RELEASE` stores `1` with a release store. `SIGNAL` is `RELEASE`, then the same yield `PAUSE` uses. `WAIT` repeats `CLAIM`. While the cell is `0` and another task can run, it yields and resumes on a retry, with the following word saved in the same user-area cell `KEY` uses. A task does not `WAIT` from inside `KEY`.
+
+If `MULTI` is off, or no other task is awake, `WAIT` prints `? WAIT: no other task can SIGNAL`, drops the address, and does not take the semaphore.
+
+A second `SIGNAL` before the matching `WAIT` stores `1` again. The cell does not count. The sample hands off one signal at a time, so each `SIGNAL` is claimed once.
+
+`GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. The kernel does not take them inside `EMIT`, a blit, or header linking. A task that claims one releases it before `WAIT`.
+
+The sample is `Forth/Resources/Library/Sample/TASKSEM.fth`. Console `CLAIM` printed `-1`, `0`, `-1`. The device cells printed `1`, `0`, `1`, `1`, then the stuck-wait line and `wait-stuck-ok`. Two tasks then printed `hits1=1`, `hits2=1`, `hits3=2`, `hits4=2`, `hits5=2`, `hits6=3`, `sem-ok`, and `depth=0`. `TASKCLOCK.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
 ## What a task is
 
@@ -92,7 +104,7 @@ The size rules do not change. There is no per-task heap and no per-core reserve.
 
 ## Scratch buffers
 
-These follow the running task. The multi-core scheduler stays off until the semaphore step.
+These follow the running task. The multi-core scheduler stays off.
 
 - `word_scratch` (512 bytes). `BL WORD` stores the counted name here and clamps the name to 63 characters. The address lasts until that same task's next `WORD`.
 - `PAD` (1024 bytes) and `HLD`. `<#` `#` `HOLD` `#>` use them.
@@ -116,7 +128,10 @@ The 256 KiB `file_buffer` and the block buffer stay shared. Only the console tas
 | `CLAIM` | `CODE`. Exclusive load/store. Store zero only if this core still holds the reservation. A busy flag returns false and is not written. |
 | `RELEASE` | `CODE`. Store one with a release store. |
 | `WAIT` | Repeat `CLAIM`. Park while it fails. |
-| `SIGNAL` | `RELEASE`, then wake the parked task. |
+| `SIGNAL` | `RELEASE`, then yield so a waiting task can `CLAIM`. |
+| `GRAPHICS-SEM` | Address of the graphics-map semaphore. `1` is free. |
+| `CONSOLE-SEM` | Address of the console-emit semaphore. `1` is free. |
+| `DICT-SEM` | Address of the dictionary-mutation semaphore. `1` is free. |
 
 `KEY`, while it waits and another task is awake, yields instead of sleeping the whole machine.
 
@@ -154,7 +169,7 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 
 1. **Cooperative round robin.** Landed. `TASK:` `ACTIVATE` `SLEEP` `WAKE` `STOP` `MULTI` `SINGLE`, the yield inside `PAUSE` and `KEY`, and the `FORGET` / `ANEW` unlink. `GROWMEMORYMB` refuses a caller that is not the console task. Background tasks only run an already-compiled body. See "Step 1 as built".
 2. **Per-task scratch.** Landed. `WORD`, `PAD`, pictured numbers, and `SOURCE` / `>IN` follow the running task. `INCLUDE` and block load stay on the console. See "Step 2 as built".
-3. **Semaphores.** `CLAIM` `RELEASE` `WAIT` `SIGNAL`, plus the three device semaphores.
+3. **Semaphores.** Landed. `CLAIM` `RELEASE` `WAIT` `SIGNAL`, plus `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM`. See "Step 3 as built".
 4. **Mailbox and queue.** Fixed rings in the shared dictionary.
 5. **Multi-core scheduler.** Off by default. Console queue unchanged. Compute tasks on their own queues, capped at four.
 6. **Private dictionary slice.** Only if a background task must compile. Not part of the first working tasker.
@@ -165,7 +180,7 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 - A counter task advances while the console accepts a line. `SINGLE` freezes it. `STOP` removes it from the rotation. Passed (20 pauses → 20, then the count held, then `WAKE` added one per pause).
 - `ANEW` of a file that created a task unlinks it, and the circle still reaches the console. Passed (`clock-gone`, `gmm-gone`, then pauses after the old blocks were overwritten).
 - Two tasks can each `BL WORD` and `<# #S #>` without seeing the other's text. Passed (`TASKSCRATCH.fth`: `alpha-one` / `beta-two`, `111` / `222`, `scratch-ok`). A background `INCLUDE` and `LOAD` printed the refuse lines and returned to the console.
-- A flag passed between two tasks delivers every `SIGNAL` once.
+- A flag passed between two tasks delivers every `SIGNAL` once. Passed (`TASKSEM.fth`: hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`). A pause with no new `SIGNAL` left the count unchanged.
 - A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth.
 - ANS-VALIDATE stays a single-task run. Repeat it after steps 1 and 2, and again before the multi-core mode is left available.
 - With the multi-core mode on, two counting loops overlap, exchange counts through the queue, and the console still accepts a line. Cooperative mode still passes the earlier checks.

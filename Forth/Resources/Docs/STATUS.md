@@ -1,12 +1,12 @@
 # 64Forth development status
 
-**Current:** **2.7.0** (build **32**) — cooperative tasks and per-task scratch. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
+**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, and semaphores. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
 
 **Last updated:** 2026-11-11
 
 ---
 
-## v2.7.0 — Cooperative tasks
+## v2.7.0 — Cooperative tasks and semaphores
 
 **Version strings:** marketing **2.7.0**, build **32**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`. Console stamp `Nov 11, 2026 4:40 PM`. `scripts/release.sh` was not run. A headless ANS-VALIDATE on the Debug kernel, with `MULTI` left off, reported 395 passed, 0 failed.
 
@@ -22,8 +22,9 @@
 - **Scratch.** Each task has its own `WORD` buffer, `PAD`, `HLD`, input buffer, source stack, and `SOURCE` / `>IN` / `SOURCE-ID`. The console pointers still aim at the existing buffers. The 256 KiB file buffer and the block buffer stay shared. `(SOURCE!)` sets the running task's `SOURCE`.
 - **Console only.** A background `INCLUDE`, `REQUIRED`, `LOAD`, or `BLOCK` prints a refuse line and `STOP`s that task. `GROWMEMORYMB` from a background task prints `? GROWMEMORYMB only from the console task` and `STOP`s. The once-per-session flag is not consumed.
 - **Forget.** `FORGET` and `ANEW` unlink every task whose user area is at or above the cut. The console record is not in the dictionary.
-- **Samples.** `Library/Sample/TASKCLOCK.fth` and `Library/Sample/TASKSCRATCH.fth`.
-- **Design.** `MULTI-TASKING.md`, also copied under `Docs/`. Semaphores, mailboxes, the multi-core scheduler, and a private dictionary slice are not in this version.
+- **Semaphores.** `CLAIM` `RELEASE` `WAIT` `SIGNAL`. The cell is free at `1` and taken at `0`. `CLAIM` stores `0` only while this core still holds the reservation. `WAIT` yields while the cell is taken. `SIGNAL` stores `1` and yields. A second `SIGNAL` before `WAIT` does not queue. If `MULTI` is off, or no other task is awake, `WAIT` prints `? WAIT: no other task can SIGNAL` and does not take the cell. `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` start free. The kernel does not take them inside `EMIT`, a blit, or header linking.
+- **Samples.** `Library/Sample/TASKCLOCK.fth`, `Library/Sample/TASKSCRATCH.fth`, and `Library/Sample/TASKSEM.fth`. `TASKSEM.fth` printed hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`.
+- **Design.** `MULTI-TASKING.md`, also copied under `Docs/`. Mailboxes, the multi-core scheduler, and a private dictionary slice are not in this version.
 - **VIEW on Restart.** Autoload copies newer shipped Library, System, and Docs before `HYPER-REINDEX`. A companion Restart does that copy too, so VIEW does not stamp a stale `System/Sources`.
 
 **Release:** no disk image yet.
