@@ -1,12 +1,12 @@
 # 64Forth development status
 
-**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, and semaphores. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
+**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, semaphores, and a mailbox and fixed ring. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
 
 **Last updated:** 2026-11-11
 
 ---
 
-## v2.7.0 — Cooperative tasks and semaphores
+## v2.7.0 — Cooperative tasks, semaphores, and queues
 
 **Version strings:** marketing **2.7.0**, build **32**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`. Console stamp `Nov 11, 2026 4:40 PM`. `scripts/release.sh` was not run. A headless ANS-VALIDATE on the Debug kernel, with `MULTI` left off, reported 395 passed, 0 failed.
 
@@ -23,8 +23,9 @@
 - **Console only.** A background `INCLUDE`, `REQUIRED`, `LOAD`, or `BLOCK` prints a refuse line and `STOP`s that task. `GROWMEMORYMB` from a background task prints `? GROWMEMORYMB only from the console task` and `STOP`s. The once-per-session flag is not consumed.
 - **Forget.** `FORGET` and `ANEW` unlink every task whose user area is at or above the cut. The console record is not in the dictionary.
 - **Semaphores.** `CLAIM` `RELEASE` `WAIT` `SIGNAL`. The cell is free at `1` and taken at `0`. `CLAIM` stores `0` only while this core still holds the reservation. `WAIT` yields while the cell is taken. `SIGNAL` stores `1` and yields. A second `SIGNAL` before `WAIT` does not queue. If `MULTI` is off, or no other task is awake, `WAIT` prints `? WAIT: no other task can SIGNAL` and does not take the cell. `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` start free. The kernel does not take them inside `EMIT`, a blit, or header linking.
-- **Samples.** `Library/Sample/TASKCLOCK.fth`, `Library/Sample/TASKSCRATCH.fth`, and `Library/Sample/TASKSEM.fth`. `TASKSEM.fth` printed hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`.
-- **Design.** `MULTI-TASKING.md`, also copied under `Docs/`. Mailboxes, the multi-core scheduler, and a private dictionary slice are not in this version.
+- **Samples.** `Library/Sample/TASKCLOCK.fth`, `Library/Sample/TASKSCRATCH.fth`, `Library/Sample/TASKSEM.fth`, and `Library/Sample/TASKQUEUE.fth`. `TASKSEM.fth` printed hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`. `TASKQUEUE.fth` printed `mbox-ok`, then 4096 ring cells with `q-bad=0`, high-water depth `15` of 16, and `queue-ok`.
+- **Mailbox and ring.** `MAILBOX` allots a value, a full flag that starts at `0`, and an empty flag that starts at `1`. `>MBOX` stores the value, then signals full. `MBOX>` reads, then signals empty. `QUEUE` allots a fixed ring. `>Q` writes a slot, then release-stores the tail. `Q>` acquire-loads the tail, reads the slot, then release-stores the head. `Q-DEPTH` reports the cells waiting. One producer and one consumer share a ring. Traffic does not move `HERE`.
+- **Design.** `MULTI-TASKING.md`, also copied under `Docs/`. The multi-core scheduler and a private dictionary slice are not in this version.
 - **VIEW on Restart.** Autoload copies newer shipped Library, System, and Docs before `HYPER-REINDEX`. A companion Restart does that copy too, so VIEW does not stamp a stale `System/Sources`.
 
 **Release:** no disk image yet.

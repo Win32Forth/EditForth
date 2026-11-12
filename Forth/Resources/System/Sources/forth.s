@@ -99,6 +99,16 @@
 .equ TASK_EVALSTK_BYTES, 64
 .equ TASK_SCRATCH_BYTES, TASK_WORD_BYTES + TASK_PAD_BYTES + TASK_INPUT_BYTES + TASK_SRCSTK_BYTES + TASK_EVALSTK_BYTES
 .equ TASK_ALLOT, TU_BYTES + TASK_STACK_BYTES + TASK_STACK_BYTES + TASK_SCRATCH_BYTES
+// Mailbox: one value cell plus a full/empty pair. Empty starts free.
+.equ MB_VALUE, 0
+.equ MB_FULL,  8
+.equ MB_EMPTY, 16
+.equ MB_BYTES, 24
+// One-producer, one-consumer ring. Head == tail is empty. One slot stays unused.
+.equ Q_CAP,   0
+.equ Q_HEAD,  8
+.equ Q_TAIL,  16
+.equ Q_SLOTS, 24
 .equ DEBUG_CALL_MAX, 4                // reentrant _debug_call_xt depth
 .equ DEBUG_VMSAVE_SIZE, 72            // x19-x24, x29-x30, x28 per depth
 //
@@ -3348,6 +3358,281 @@ XDICT_SEM:
     str  x20, [x22, #-8]!
     adrp x20, sem_dict@page
     add  x20, x20, sem_dict@pageoff
+    NEXT
+
+// Allot x0 bytes (a multiple of 8) at an aligned HERE, zeroed.
+// Returns the address in x0. A full dictionary prints and does not return.
+// Clobbers x1–x7. Preserves x19–x28.
+_dict_allot:
+    stp  x29, x30, [sp, #-16]!
+    mov  x6, x0
+    adrp x1, here_ptr@page
+    add  x1, x1, here_ptr@pageoff
+    ldr  x0, [x1]
+    add  x0, x0, #7
+    bic  x0, x0, #7
+    adrp x2, user_dict_area@page
+    add  x2, x2, user_dict_area@pageoff
+    adrp x3, user_dict_size_cell@page
+    add  x3, x3, user_dict_size_cell@pageoff
+    ldr  x3, [x3]
+    add  x2, x2, x3
+    add  x4, x0, x6
+    cmp  x4, x0
+    b.lo _da_fail
+    cmp  x4, x2
+    b.hi _da_fail
+    mov  x5, x0
+    mov  x7, x6
+_da_zero:
+    str  xzr, [x5], #8
+    subs x7, x7, #8
+    b.ne _da_zero
+    str  x4, [x1]
+    ldp  x29, x30, [sp], #16
+    ret
+_da_fail:
+    adrp x0, str_allot_over@page
+    add  x0, x0, str_allot_over@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+
+// Park on the thread in x6, the same way WAIT does.
+// Returns only when this task stays. x19 is kept (or restored). A switch
+// NEXTs from here and does not return. Clobbers x0, x1, x5, x21.
+_task_park_fail:
+    stp  x29, x30, [sp, #-16]!
+    mov  x21, x6
+    bl   _task_can_switch
+    cbz  x0, _tpf_noswitch
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+    str  x19, [x5, #TU_RESUME]
+    mov  x19, x21
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.eq _tpf_stayed
+    ldp  x29, x30, [sp], #16
+    NEXT
+_tpf_stayed:
+    ldr  x19, [x5, #TU_RESUME]
+_tpf_noswitch:
+    mov  x0, #0
+    ldp  x29, x30, [sp], #16
+    ret
+
+// Mailbox and one-producer, one-consumer ring. Allotted once. Later sends
+// do not move HERE. The value (or slot) store happens before the release
+// store. >Q / Q> are single-producer and single-consumer: a second producer
+// or consumer takes a semaphore around reserving the slot. Parking uses
+// TU_RESUME, the same cell KEY and WAIT use. A task does not call these
+// from inside KEY or WAIT.
+
+    BOOT_WORD "MAILBOX", "MAILBOX ( -- addr ) allot a value and a full/empty pair", 0, XMAILBOX, XMAILBOX_END
+XMAILBOX:
+    str  x20, [x22, #-8]!
+    mov  x0, #MB_BYTES
+    bl   _dict_allot
+    mov  x1, #1
+    str  x1, [x0, #MB_EMPTY]
+    mov  x20, x0
+XMAILBOX_END:
+    NEXT
+
+    BOOT_WORD ">MBOX", ">MBOX ( n addr -- ) store n when the mailbox is empty, then signal full", 0, XMBOX_PUT, XMBOX_PUT_END
+XMBOX_PUT_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XMBOX_PUT
+XMBOX_PUT:
+    add  x0, x20, #MB_EMPTY
+_mb_put_try:
+    ldaxr x1, [x0]
+    cbz  x1, _mb_put_busy
+    stlxr w2, xzr, [x0]
+    cbnz w2, _mb_put_try
+    ldr  x1, [x22]
+    str  x1, [x20, #MB_VALUE]
+    mov  x1, #1
+    add  x0, x20, #MB_FULL
+    stlr x1, [x0]
+    add  x22, x22, #8
+    ldr  x20, [x22], #8
+    b    XMBOX_PUT_END
+_mb_put_busy:
+    clrex
+    adrp x6, mbox_put_thread@page
+    add  x6, x6, mbox_put_thread@pageoff
+    bl   _task_park_fail
+    add  x22, x22, #8
+    ldr  x20, [x22], #8
+    adrp x0, str_mbox_put_stuck@page
+    add  x0, x0, str_mbox_put_stuck@pageoff
+    bl   _print_string_svc
+XMBOX_PUT_END:
+    NEXT
+
+    BOOT_WORD "MBOX>", "MBOX> ( addr -- n ) wait until full, read n, then signal empty", 0, XMBOX_GET, XMBOX_GET_END
+XMBOX_GET_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XMBOX_GET
+XMBOX_GET:
+    add  x0, x20, #MB_FULL
+_mb_get_try:
+    ldaxr x1, [x0]
+    cbz  x1, _mb_get_busy
+    stlxr w2, xzr, [x0]
+    cbnz w2, _mb_get_try
+    ldr  x1, [x20, #MB_VALUE]
+    mov  x3, #1
+    add  x0, x20, #MB_EMPTY
+    stlr x3, [x0]
+    mov  x20, x1
+    b    XMBOX_GET_END
+_mb_get_busy:
+    clrex
+    adrp x6, mbox_get_thread@page
+    add  x6, x6, mbox_get_thread@pageoff
+    bl   _task_park_fail
+    mov  x20, #0
+    adrp x0, str_mbox_get_stuck@page
+    add  x0, x0, str_mbox_get_stuck@pageoff
+    bl   _print_string_svc
+XMBOX_GET_END:
+    NEXT
+
+    BOOT_WORD "QUEUE", "QUEUE ( n -- addr ) allot a fixed ring of n slots (n >= 2)", 0, XQUEUE, XQUEUE_END
+XQUEUE:
+    cmp  x20, #2
+    b.lt _queue_bad_n
+    lsr  x1, x20, #61
+    cbnz x1, _queue_overflow
+    lsl  x0, x20, #3
+    adds x0, x0, #Q_SLOTS
+    b.cs _queue_overflow
+    mov  x21, x20
+    bl   _dict_allot
+    str  x21, [x0, #Q_CAP]
+    mov  x20, x0
+    b    XQUEUE_END
+_queue_bad_n:
+    ldr  x20, [x22], #8
+    adrp x0, str_queue_n@page
+    add  x0, x0, str_queue_n@pageoff
+    bl   _print_string_svc
+    b    XQUEUE_END
+_queue_overflow:
+    adrp x0, str_allot_over@page
+    add  x0, x0, str_allot_over@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+XQUEUE_END:
+    NEXT
+
+    BOOT_WORD ">Q", ">Q ( n addr -- ) write n into the ring, then publish the tail", 0, XQPUT, XQPUT_END
+XQPUT_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XQPUT
+XQPUT:
+    ldr  x1, [x20, #Q_CAP]
+    ldr  x3, [x20, #Q_TAIL]
+    add  x0, x20, #Q_HEAD
+    ldar x4, [x0]
+    add  x5, x3, #1
+    cmp  x5, x1
+    b.lo _qput_nowrap
+    mov  x5, #0
+_qput_nowrap:
+    cmp  x5, x4
+    b.eq _qput_full
+    add  x0, x20, #Q_SLOTS
+    lsl  x4, x3, #3
+    ldr  x1, [x22]
+    str  x1, [x0, x4]
+    add  x0, x20, #Q_TAIL
+    stlr x5, [x0]
+    add  x22, x22, #8
+    ldr  x20, [x22], #8
+    b    XQPUT_END
+_qput_full:
+    adrp x6, qput_thread@page
+    add  x6, x6, qput_thread@pageoff
+    bl   _task_park_fail
+    add  x22, x22, #8
+    ldr  x20, [x22], #8
+    adrp x0, str_qput_stuck@page
+    add  x0, x0, str_qput_stuck@pageoff
+    bl   _print_string_svc
+XQPUT_END:
+    NEXT
+
+    BOOT_WORD "Q>", "Q> ( addr -- n ) acquire the tail, read n, then publish the head", 0, XQGET, XQGET_END
+XQGET_RETRY:
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    ldr  x19, [x0, #TU_RESUME]
+    b    XQGET
+XQGET:
+    ldr  x1, [x20, #Q_CAP]
+    ldr  x3, [x20, #Q_HEAD]
+    add  x0, x20, #Q_TAIL
+    ldar x4, [x0]
+    cmp  x3, x4
+    b.eq _qget_empty
+    add  x0, x20, #Q_SLOTS
+    lsl  x5, x3, #3
+    ldr  x6, [x0, x5]
+    add  x5, x3, #1
+    cmp  x5, x1
+    b.lo _qget_nowrap
+    mov  x5, #0
+_qget_nowrap:
+    add  x0, x20, #Q_HEAD
+    stlr x5, [x0]
+    mov  x20, x6
+    b    XQGET_END
+_qget_empty:
+    adrp x6, qget_thread@page
+    add  x6, x6, qget_thread@pageoff
+    bl   _task_park_fail
+    mov  x20, #0
+    adrp x0, str_qget_stuck@page
+    add  x0, x0, str_qget_stuck@pageoff
+    bl   _print_string_svc
+XQGET_END:
+    NEXT
+
+    BOOT_WORD "Q-DEPTH", "Q-DEPTH ( addr -- n ) cells waiting in a ring", 0, XQDEPTH, XQDEPTH_END
+XQDEPTH:
+    ldr  x1, [x20, #Q_CAP]
+    cbz  x1, _qd_zero
+    add  x0, x20, #Q_HEAD
+    ldar x3, [x0]
+    add  x0, x20, #Q_TAIL
+    ldar x4, [x0]
+    sub  x0, x4, x3
+    cmp  x0, #0
+    b.ge _qd_pos
+    add  x0, x0, x1
+_qd_pos:
+    mov  x20, x0
+    b    XQDEPTH_END
+_qd_zero:
+    mov  x20, #0
+XQDEPTH_END:
     NEXT
 
     BOOT_WORD "(CONSOLE?)", "(CONSOLE?) ( -- flag ) true when the running task is the console", 0, XCONSOLE_Q, XCONSOLE_Q_END
@@ -20175,6 +20460,15 @@ wait_thread:    .quad wait_retry_xt
 sem_graphics:   .quad 1
 sem_console:    .quad 1
 sem_dict:       .quad 1
+// Mailbox and ring parks. NEXT has already stepped past the thread cell.
+mbox_put_retry_xt: .quad XMBOX_PUT_RETRY
+mbox_put_thread:   .quad mbox_put_retry_xt
+mbox_get_retry_xt: .quad XMBOX_GET_RETRY
+mbox_get_thread:   .quad mbox_get_retry_xt
+qput_retry_xt:     .quad XQPUT_RETRY
+qput_thread:       .quad qput_retry_xt
+qget_retry_xt:     .quad XQGET_RETRY
+qget_thread:       .quad qget_retry_xt
 blk_var:        .quad 0            // BLK body (0 = not interpreting a block)
 scr_var:        .quad 0            // SCR body
 block_file_var: .quad 0            // current volume fileid (0 = none)
@@ -20369,6 +20663,11 @@ str_blk_task:   .asciz "? block load only from the console task\n"
 str_stop_console: .asciz "STOP: the console task stays awake\n"
 str_sleep_only: .asciz "SLEEP: the console is the only awake task\n"
 str_wait_stuck: .asciz "? WAIT: no other task can SIGNAL\n"
+str_mbox_put_stuck: .asciz "? >MBOX: no other task can receive\n"
+str_mbox_get_stuck: .asciz "? MBOX>: no other task can send\n"
+str_queue_n:    .asciz "? QUEUE: need at least 2 slots\n"
+str_qput_stuck: .asciz "? >Q: no other task can receive\n"
+str_qget_stuck: .asciz "? Q>: no other task can send\n"
 str_act_interp: .asciz "ACTIVATE is only valid inside a colon definition\n"
 str_act_self:   .asciz "ACTIVATE: a task cannot activate itself\n"
 str_redef:  .asciz " is redefined\n"

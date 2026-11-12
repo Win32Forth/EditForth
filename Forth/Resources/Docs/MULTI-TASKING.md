@@ -1,6 +1,6 @@
 # Multi-tasking
 
-**Status:** steps 1–3 are in the Mac kernel. Steps 4–6 are not implemented. Cold start is `SINGLE`.
+**Status:** steps 1–4 are in the Mac kernel. Steps 5–6 are not implemented. Cold start is `SINGLE`.
 **Scope:** Mac EditForth (`Forth/Kernel/forth.s`, `Forth/Kernel/kernel2.fth`, `Forth/Host/KernelBridge.swift`). EditForthPWA stays one thread.
 **Source:** Brad Rodriguez, [Forth Multitasking in a Nutshell](https://www.bradrodriguez.com/papers/mtasking.html) (September 1992).
 
@@ -53,6 +53,16 @@ A second `SIGNAL` before the matching `WAIT` stores `1` again. The cell does not
 `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. The kernel does not take them inside `EMIT`, a blit, or header linking. A task that claims one releases it before `WAIT`.
 
 The sample is `Forth/Resources/Library/Sample/TASKSEM.fth`. Console `CLAIM` printed `-1`, `0`, `-1`. The device cells printed `1`, `0`, `1`, `1`, then the stuck-wait line and `wait-stuck-ok`. Two tasks then printed `hits1=1`, `hits2=1`, `hits3=2`, `hits4=2`, `hits5=2`, `hits6=3`, `sem-ok`, and `depth=0`. `TASKCLOCK.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
+
+## Step 4 as built
+
+`MAILBOX` allots three aligned cells and returns the address. Cell 0 is the value. Cell 1 is the full flag and starts at `0`. Cell 2 is the empty flag and starts at `1`. `>MBOX` claims the empty flag, stores the value, then release-stores `1` into the full flag. `MBOX>` claims the full flag, reads the value, then release-stores `1` into the empty flag. The value store happens before that release store. Traffic does not move `HERE`.
+
+`QUEUE` `( n -- addr )` allots a ring of n slots, n at least 2. The header is the capacity, the head, and the tail, then n cells. Head equal to tail means empty. One slot stays unused, so a full ring and an empty ring are different. `>Q` writes the slot, then release-stores the new tail. `Q>` acquire-loads the tail, reads the slot, then release-stores the new head. `Q-DEPTH` acquire-loads both indexes. One producer and one consumer share the ring. A second producer or a second consumer takes a semaphore around reserving the slot. `>Q` and `Q>` do not take that semaphore.
+
+While the cell is busy and another task can run, the word yields and resumes on a retry. The following word is saved in the same user-area cell `KEY` and `WAIT` use. A task does not call `>MBOX`, `MBOX>`, `>Q`, or `Q>` from inside `KEY` or `WAIT`. If `MULTI` is off, or no other task is awake, the word prints a stuck line, drops its inputs, and does not take the cell. `MBOX>` and `Q>` then push `0`. The lines are `? >MBOX: no other task can receive`, `? MBOX>: no other task can send`, `? >Q: no other task can receive`, and `? Q>: no other task can send`. `QUEUE` of fewer than 2 slots prints `? QUEUE: need at least 2 slots` and does not allot.
+
+The sample is `Forth/Resources/Library/Sample/TASKQUEUE.fth`. With `MULTI` off, a second `>MBOX` and a second `>Q` printed the stuck lines. The held mailbox value was `0`, and the two-slot ring depth was `0`. Two tasks then moved 8 mailbox cells (`mbox-got=8`, `mbox-bad=0`, `mbox-ok`) and 4096 ring cells (`q-got=4096`, `q-bad=0`, high-water depth `15` on a 16-slot ring, `q-depth=0`, `queue-ok`, `depth=0`). `TASKCLOCK.fth` and `TASKSEM.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
 ## What a task is
 
@@ -132,6 +142,13 @@ The 256 KiB `file_buffer` and the block buffer stay shared. Only the console tas
 | `GRAPHICS-SEM` | Address of the graphics-map semaphore. `1` is free. |
 | `CONSOLE-SEM` | Address of the console-emit semaphore. `1` is free. |
 | `DICT-SEM` | Address of the dictionary-mutation semaphore. `1` is free. |
+| `MAILBOX` | Allot a value and a full/empty pair. Return the address. |
+| `>MBOX` | `( n addr -- )` Store n when the mailbox is empty, then signal full. |
+| `MBOX>` | `( addr -- n )` Wait until full, read n, then signal empty. |
+| `QUEUE` | `( n -- addr )` Allot a fixed ring of n slots. n is at least 2. |
+| `>Q` | `( n addr -- )` Write n, then publish the tail with a release store. |
+| `Q>` | `( addr -- n )` Acquire-load the tail, read n, then publish the head. |
+| `Q-DEPTH` | `( addr -- n )` Cells waiting in the ring. |
 
 `KEY`, while it waits and another task is awake, yields instead of sleeping the whole machine.
 
@@ -170,7 +187,7 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 1. **Cooperative round robin.** Landed. `TASK:` `ACTIVATE` `SLEEP` `WAKE` `STOP` `MULTI` `SINGLE`, the yield inside `PAUSE` and `KEY`, and the `FORGET` / `ANEW` unlink. `GROWMEMORYMB` refuses a caller that is not the console task. Background tasks only run an already-compiled body. See "Step 1 as built".
 2. **Per-task scratch.** Landed. `WORD`, `PAD`, pictured numbers, and `SOURCE` / `>IN` follow the running task. `INCLUDE` and block load stay on the console. See "Step 2 as built".
 3. **Semaphores.** Landed. `CLAIM` `RELEASE` `WAIT` `SIGNAL`, plus `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM`. See "Step 3 as built".
-4. **Mailbox and queue.** Fixed rings in the shared dictionary.
+4. **Mailbox and queue.** Landed. `MAILBOX` `>MBOX` `MBOX>` and `QUEUE` `>Q` `Q>` `Q-DEPTH`. Fixed rings in the shared dictionary. See "Step 4 as built".
 5. **Multi-core scheduler.** Off by default. Console queue unchanged. Compute tasks on their own queues, capped at four.
 6. **Private dictionary slice.** Only if a background task must compile. Not part of the first working tasker.
 
@@ -181,7 +198,7 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 - `ANEW` of a file that created a task unlinks it, and the circle still reaches the console. Passed (`clock-gone`, `gmm-gone`, then pauses after the old blocks were overwritten).
 - Two tasks can each `BL WORD` and `<# #S #>` without seeing the other's text. Passed (`TASKSCRATCH.fth`: `alpha-one` / `beta-two`, `111` / `222`, `scratch-ok`). A background `INCLUDE` and `LOAD` printed the refuse lines and returned to the console.
 - A flag passed between two tasks delivers every `SIGNAL` once. Passed (`TASKSEM.fth`: hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`). A pause with no new `SIGNAL` left the count unchanged.
-- A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth.
+- A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth. Passed (`TASKQUEUE.fth`: 4096 cells, `q-bad=0`, high-water depth `15` of 16 slots, then `queue-ok`).
 - ANS-VALIDATE stays a single-task run. Repeat it after steps 1 and 2, and again before the multi-core mode is left available.
 - With the multi-core mode on, two counting loops overlap, exchange counts through the queue, and the console still accepts a line. Cooperative mode still passes the earlier checks.
 - `GROWMEMORYMB` from a background task is refused, and the console line continues. Passed. From the console it still grows once, refuses a shrink, and refuses a second call. Those console size checks were already in the kernel and were not re-run as part of this step.
