@@ -6,7 +6,7 @@
 // BOOT_WORD_COUNT is documentation / sanity only.
 
 // Must equal the number of BOOT_WORD rows in forth.s.
-.equ BOOT_WORD_COUNT, 428
+.equ BOOT_WORD_COUNT, 431
 
 // Empty help used by : / CREATE / :NONAME
 .section __TEXT,__cstring,cstring_literals

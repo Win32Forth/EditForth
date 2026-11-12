@@ -113,6 +113,18 @@ void kernel_set_key_q(int (*fn)(void));
 /// PAUSE — flush pending console output, then wait 1 ms so the host can paint it.
 void kernel_set_pause(void (*fn)(void));
 
+/// CORES scheduler. schedule returns immediately. wait parks until wake.
+/// wake wakes every parked task. join blocks until worker runs have finished.
+/// PAUSE requeues a worker and does not finish the run.
+void kernel_set_core_schedule(void (*fn)(uint64_t task));
+void kernel_set_core_wait(void (*fn)(uint64_t task));
+void kernel_set_core_wake(void (*fn)(void));
+void kernel_set_core_join(void (*fn)(void));
+
+/// Run one compute task on the calling thread until STOP (0), PAUSE (1),
+/// or a fault (-1). slot is 0..3. Bad arguments return -2.
+int kernel_task_run(uint64_t task, int slot);
+
 /// TIME&DATE — fill out[6] with sec, min, hour, day, month, year (local time).
 void kernel_set_time_date(void (*fn)(int64_t out[6]));
 

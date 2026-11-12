@@ -148,6 +148,21 @@ private func kernel_set_key_q(_ fn: (@convention(c) () -> Int32)?)
 @_silgen_name("kernel_set_pause")
 private func kernel_set_pause(_ fn: (@convention(c) () -> Void)?)
 
+@_silgen_name("kernel_set_core_schedule")
+private func kernel_set_core_schedule(_ fn: (@convention(c) (UInt64) -> Void)?)
+
+@_silgen_name("kernel_set_core_wait")
+private func kernel_set_core_wait(_ fn: (@convention(c) (UInt64) -> Void)?)
+
+@_silgen_name("kernel_set_core_wake")
+private func kernel_set_core_wake(_ fn: (@convention(c) () -> Void)?)
+
+@_silgen_name("kernel_set_core_join")
+private func kernel_set_core_join(_ fn: (@convention(c) () -> Void)?)
+
+@_silgen_name("kernel_task_run")
+private func kernel_task_run(_ task: UInt64, _ slot: Int32) -> Int32
+
 @_silgen_name("kernel_set_time_date")
 private func kernel_set_time_date(
     _ fn: (@convention(c) (UnsafeMutablePointer<Int64>?) -> Void)?
@@ -296,6 +311,152 @@ private func kernel_set_float_op(
     ) -> Int64)?
 )
 
+// MARK: - CORES workers
+
+/// Four serial queues at user-initiated QoS. No core is pinned.
+/// A fifth awake task shares the queue with the fewest unfinished tasks.
+/// WAIT blocks that queue on a dispatch semaphore. A signal that arrives
+/// first is remembered, so the waiter does not sleep forever.
+private final class CoreRuntime {
+    static let slotCount = 4
+
+    private let lock = NSLock()
+    private var queues: [DispatchQueue] = []
+    private var sems: [DispatchSemaphore] = []
+    private var waiting: [Bool]
+    private var pendingWake: [Bool]
+    private let consoleSem = DispatchSemaphore(value: 0)
+    private var consoleWaiting = false
+    private var consolePending = false
+    private var taskSlot: [UInt64: Int] = [:]
+    private var depth: [Int]
+    private var inflight = 0
+    private var joinWaiters = 0
+    private let joinSem = DispatchSemaphore(value: 0)
+
+    init() {
+        waiting = Array(repeating: false, count: Self.slotCount)
+        pendingWake = Array(repeating: false, count: Self.slotCount)
+        depth = Array(repeating: 0, count: Self.slotCount)
+    }
+
+    private func ensureQueuesLocked() {
+        guard queues.isEmpty else { return }
+        for i in 0..<Self.slotCount {
+            queues.append(DispatchQueue(label: "64Forth.core.\(i)", qos: .userInitiated))
+            sems.append(DispatchSemaphore(value: 0))
+        }
+    }
+
+    func schedule(task: UInt64) {
+        lock.lock()
+        ensureQueuesLocked()
+        var idx = 0
+        for i in 1..<Self.slotCount where depth[i] < depth[idx] {
+            idx = i
+        }
+        depth[idx] += 1
+        inflight += 1
+        taskSlot[task] = idx
+        let queue = queues[idx]
+        lock.unlock()
+        queue.async { [self] in
+            self.run(task: task, idx: idx, queue: queue)
+        }
+    }
+
+    private func run(task: UInt64, idx: Int, queue: DispatchQueue) {
+        let rc = kernel_task_run(task, Int32(idx))
+        if rc == 1 {
+            // PAUSE returns without dropping inflight, so a sibling already
+            // queued on this serial queue runs before this task continues.
+            queue.async { [self] in
+                self.run(task: task, idx: idx, queue: queue)
+            }
+            return
+        }
+        if rc < 0 {
+            FileHandle.standardError.write(Data("core task fault\n".utf8))
+        }
+        finish(task: task, idx: idx)
+    }
+
+    private func finish(task: UInt64, idx: Int) {
+        lock.lock()
+        if depth[idx] > 0 { depth[idx] -= 1 }
+        if inflight > 0 { inflight -= 1 }
+        taskSlot[task] = nil
+        let signalJoin = inflight == 0 && joinWaiters > 0
+        if signalJoin { joinWaiters -= 1 }
+        lock.unlock()
+        if signalJoin { joinSem.signal() }
+    }
+
+    func join() {
+        lock.lock()
+        if inflight == 0 {
+            lock.unlock()
+            return
+        }
+        joinWaiters += 1
+        lock.unlock()
+        joinSem.wait()
+    }
+
+    func wait(task: UInt64) {
+        lock.lock()
+        ensureQueuesLocked()
+        if let idx = taskSlot[task] {
+            if pendingWake[idx] {
+                pendingWake[idx] = false
+                lock.unlock()
+                return
+            }
+            waiting[idx] = true
+            let sem = sems[idx]
+            lock.unlock()
+            sem.wait()
+            lock.lock()
+            waiting[idx] = false
+            pendingWake[idx] = false
+            lock.unlock()
+            return
+        }
+        if consolePending {
+            consolePending = false
+            lock.unlock()
+            return
+        }
+        consoleWaiting = true
+        lock.unlock()
+        consoleSem.wait()
+        lock.lock()
+        consoleWaiting = false
+        consolePending = false
+        lock.unlock()
+    }
+
+    func wakeAll() {
+        lock.lock()
+        ensureQueuesLocked()
+        var fire: [DispatchSemaphore] = []
+        for i in 0..<Self.slotCount {
+            if waiting[i] {
+                fire.append(sems[i])
+            } else {
+                pendingWake[i] = true
+            }
+        }
+        let fireConsole = consoleWaiting
+        if !fireConsole { consolePending = true }
+        lock.unlock()
+        for sem in fire {
+            sem.signal()
+        }
+        if fireConsole { consoleSem.signal() }
+    }
+}
+
 // MARK: - C hook target (must not touch KernelBridge.shared)
 
 private var kernelHookTarget: KernelBridge?
@@ -331,6 +492,22 @@ private let kernelKeyQTrampoline: @convention(c) () -> Int32 = {
 
 private let kernelPauseTrampoline: @convention(c) () -> Void = {
     kernelHookTarget?.handlePauseFromKernel()
+}
+
+private let kernelCoreScheduleTrampoline: @convention(c) (UInt64) -> Void = { task in
+    kernelHookTarget?.coreSchedule(task)
+}
+
+private let kernelCoreWaitTrampoline: @convention(c) (UInt64) -> Void = { task in
+    kernelHookTarget?.coreWait(task)
+}
+
+private let kernelCoreWakeTrampoline: @convention(c) () -> Void = {
+    kernelHookTarget?.coreWake()
+}
+
+private let kernelCoreJoinTrampoline: @convention(c) () -> Void = {
+    kernelHookTarget?.coreJoin()
 }
 
 private let kernelTimeDateTrampoline: @convention(c) (UnsafeMutablePointer<Int64>?) -> Void = { out in
@@ -1862,6 +2039,8 @@ final class KernelBridge {
         label: "64Forth.kernel",
         qos: .userInitiated
     )
+    /// Compute tasks while CORES is on. The console evaluate stays on forthQueue.
+    private let cores = CoreRuntime()
     /// Set from the Forth queue while `EKEY` is blocked. The main thread pumps
     /// `nextEvent` only then; a compute word leaves the main thread asleep.
     private var kernelAwaitingKey = false
@@ -1904,6 +2083,10 @@ final class KernelBridge {
         kernel_set_key(kernelKeyTrampoline)
         kernel_set_key_q(kernelKeyQTrampoline)
         kernel_set_pause(kernelPauseTrampoline)
+        kernel_set_core_schedule(kernelCoreScheduleTrampoline)
+        kernel_set_core_wait(kernelCoreWaitTrampoline)
+        kernel_set_core_wake(kernelCoreWakeTrampoline)
+        kernel_set_core_join(kernelCoreJoinTrampoline)
         kernel_set_time_date(kernelTimeDateTrampoline)
         kernel_set_file_op(kernelFileOpTrampoline)
         kernel_set_fromlib(kernelFromlibTrampoline)
@@ -3544,6 +3727,22 @@ final class KernelBridge {
     /// Do not wait on the main queue. `executeCommand` already holds main inside
     /// evaluate's pump, so a nested main block sits until PAUSE returns and
     /// waiting for it deadlocks.
+    fileprivate func coreSchedule(_ task: UInt64) {
+        cores.schedule(task: task)
+    }
+
+    fileprivate func coreWait(_ task: UInt64) {
+        cores.wait(task: task)
+    }
+
+    fileprivate func coreWake() {
+        cores.wakeAll()
+    }
+
+    fileprivate func coreJoin() {
+        cores.join()
+    }
+
     fileprivate func handlePauseFromKernel() {
         forceFlushEmitSync()
         if Thread.isMainThread {

@@ -8,10 +8,14 @@
 //   x22 = DSP  (Data Stack, grows down)
 //   x23 = RSP  (Return Stack, grows down)
 //   x24 = &latest (pointer to variable holding newest dict entry)
+//   x27 = UP   (user area of the task running on THIS thread)
 //   x28 = DBG  (mirror of BSS debug_armed; NEXT is `cbnz x28, next_debug`)
 //
 // Register discipline (important):
-//   VM state lives in x19-x24 and x28 (DBG), which are AAPCS64 callee-saved.
+//   VM state lives in x19-x24, x27 (UP), and x28 (DBG), which are AAPCS64
+//   callee-saved. x27 tracks up_var on the console thread. A CORES worker
+//   sets x27 to its own task and does not store up_var. Do not use x27
+//   as scratch.
 //   Helpers that use x19-x24 MUST save/restore (see SAVE_VM / RESTORE_VM).
 //   Do not use x28 as scratch — only DBG-ON / DBG-OFF / go / break-asap /
 //   _vm_load / cold start may change it. Memory debug_armed stays authoritative
@@ -278,6 +282,16 @@
 // Stepping NEXT: pause before each threaded xt (colon body + primitives).
 // debug_busy skips re-entry while we print / wait for a key.
 next_debug:
+    // Workers are never the debugger. x27 == 0 is early boot (console).
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x27, x1
+    b.eq _nd_console
+    cbz  x27, _nd_console
+    ldr  x21, [x19], #8
+    ldr  x1, [x21]
+    br   x1
+_nd_console:
     adrp x1, debug_busy@page
     add  x1, x1, debug_busy@pageoff
     ldr  x2, [x1]
@@ -610,6 +624,38 @@ _kernel_set_key_q:
 _kernel_set_pause:
     adrp x1, pause_hook@page
     add  x1, x1, pause_hook@pageoff
+    str  x0, [x1]
+    ret
+
+// void kernel_set_core_schedule(void (*fn)(uint64_t task))
+.globl _kernel_set_core_schedule
+_kernel_set_core_schedule:
+    adrp x1, core_schedule_hook@page
+    add  x1, x1, core_schedule_hook@pageoff
+    str  x0, [x1]
+    ret
+
+// void kernel_set_core_wait(void (*fn)(uint64_t task))
+.globl _kernel_set_core_wait
+_kernel_set_core_wait:
+    adrp x1, core_wait_hook@page
+    add  x1, x1, core_wait_hook@pageoff
+    str  x0, [x1]
+    ret
+
+// void kernel_set_core_wake(void (*fn)(void))
+.globl _kernel_set_core_wake
+_kernel_set_core_wake:
+    adrp x1, core_wake_hook@page
+    add  x1, x1, core_wake_hook@pageoff
+    str  x0, [x1]
+    ret
+
+// void kernel_set_core_join(void (*fn)(void))
+.globl _kernel_set_core_join
+_kernel_set_core_join:
+    adrp x1, core_join_hook@page
+    add  x1, x1, core_join_hook@pageoff
     str  x0, [x1]
     ret
 
@@ -1007,9 +1053,17 @@ XAPP_BLIT:
     ldr  x0, [x22], #8             // c-addr
     ldr  x20, [x22], #8
     stp  x29, x30, [sp, #-16]!
+    stp  x0, x1, [sp, #-16]!
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_claim_worker
+    ldp  x0, x1, [sp], #16
     SAVE_VM
     bl   _host_app_blit
     RESTORE_VM
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_release_worker
     ldp  x29, x30, [sp], #16
 XAPP_BLIT_END:
     NEXT
@@ -1021,9 +1075,17 @@ XAPP_PBLIT:
     ldr  x0, [x22], #8             // c-addr
     ldr  x20, [x22], #8
     stp  x29, x30, [sp, #-16]!
+    stp  x0, x1, [sp, #-16]!
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_claim_worker
+    ldp  x0, x1, [sp], #16
     SAVE_VM
     bl   _host_app_pblit
     RESTORE_VM
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_release_worker
     ldp  x29, x30, [sp], #16
 XAPP_PBLIT_END:
     NEXT
@@ -1036,9 +1098,19 @@ XAPP_CBLIT:
     ldr  x0, [x22], #8             // c-addr
     ldr  x20, [x22], #8
     stp  x29, x30, [sp, #-16]!
+    stp  x0, x1, [sp, #-32]!
+    str  x2, [sp, #16]
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_claim_worker
+    ldr  x2, [sp, #16]
+    ldp  x0, x1, [sp], #32
     SAVE_VM
     bl   _host_app_cblit
     RESTORE_VM
+    adrp x0, sem_graphics@page
+    add  x0, x0, sem_graphics@pageoff
+    bl   _core_release_worker
     ldp  x29, x30, [sp], #16
 XAPP_CBLIT_END:
     NEXT
@@ -1415,6 +1487,26 @@ _kernel_take_repl_batch_stop:
 // (kernel_eval / QUIT). Async-signal-safe (no emit_hook here).
 .globl _kernel_on_memory_fault
 _kernel_on_memory_fault:
+    // A worker fault must not land on the console sigjmp_buf.
+    // x12-x15 only, until the console path (it reuses x0/x1).
+    mrs  x12, tpidrro_el0
+    adrp x13, console_pthread@page
+    add  x13, x13, console_pthread@pageoff
+    ldr  x13, [x13]
+    cbz  x13, _kof_console
+    cmp  x12, x13
+    b.eq _kof_console
+    adrp x13, core_pthread@page
+    add  x13, x13, core_pthread@pageoff
+    mov  x14, #0
+_kof_scan:
+    ldr  x15, [x13, x14, lsl #3]
+    cmp  x15, x12
+    b.eq _kof_worker
+    add  x14, x14, #1
+    cmp  x14, #4
+    b.lo _kof_scan
+_kof_console:
     // Sticky note for host after recovery (read via kernel_take_fault_flag)
     adrp x0, fault_pending@page
     add  x0, x0, fault_pending@pageoff
@@ -1429,6 +1521,17 @@ _kernel_on_memory_fault:
     svc  #0x80
     adrp x0, quit_jmpbuf@page
     add  x0, x0, quit_jmpbuf@pageoff
+    mov  x1, #1
+    bl   _siglongjmp               // does not return
+_kof_worker:
+    adrp x0, fault_pending@page
+    add  x0, x0, fault_pending@pageoff
+    mov  x1, #1
+    str  x1, [x0]
+    adrp x0, core_jmp@page
+    add  x0, x0, core_jmp@pageoff
+    lsl  x14, x14, #8
+    add  x0, x0, x14
     mov  x1, #1
     bl   _siglongjmp               // does not return
 
@@ -1452,6 +1555,12 @@ _kernel_init:
     stp x23, x24, [sp, #48]
     stp x25, x26, [sp, #64]
     stp x27, x28, [sp, #80]
+
+    // Faults on this thread recover through quit_jmpbuf, not a worker buffer.
+    mrs  x0, tpidrro_el0
+    adrp x1, console_pthread@page
+    add  x1, x1, console_pthread@pageoff
+    str  x0, [x1]
 
     // C frame for return from interpreter (must be set before any early exit)
     mov  x0, sp
@@ -1587,6 +1696,12 @@ _kernel_eval:
     add  x2, x2, eval_arg_len@pageoff
     str  x1, [x2]
 
+    // This evaluate owns the console fault buffer.
+    mrs  x2, tpidrro_el0
+    adrp x3, console_pthread@page
+    add  x3, x3, console_pthread@pageoff
+    str  x2, [x3]
+
     // Require kernel_init
     adrp x2, kernel_inited@page
     add  x2, x2, kernel_inited@pageoff
@@ -1691,6 +1806,10 @@ _vm_save:
     ret
 
 _vm_load:
+    // Before sigsetjmp, so a console fault restores this task in x27.
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x27, [x0]
     adrp x24, latest_var@page
     add  x24, x24, latest_var@pageoff
     adrp x0, vm_tos@page
@@ -1983,6 +2102,9 @@ _header_build:
     mov x22, x3                    // hlen
     mov x23, x4                    // code
     str x5, [sp, #-16]!            // flags (FLAG_*)
+    adrp x0, sem_dict@page
+    add  x0, x0, sem_dict@pageoff
+    bl   _core_claim_any
 
     // CURRENT wordlist base (wid); fallback to latest_var
     adrp x24, current_var@page
@@ -2101,6 +2223,11 @@ _header_build:
     adrp x2, last_cfa@page
     add  x2, x2, last_cfa@pageoff
     str  x0, [x2]                  // most recent define (IMMEDIATE/DOES>)
+    str  x0, [sp, #-16]!
+    adrp x0, sem_dict@page
+    add  x0, x0, sem_dict@pageoff
+    bl   _core_release_any
+    ldr  x0, [sp], #16
     ldp x23, x24, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
@@ -3047,6 +3174,11 @@ XPAUSE:
     add  sp, sp, #16
 2:
     RESTORE_VM
+    // A worker PAUSE returns so the host can run a sibling on this queue.
+    bl   _core_is_worker
+    cbz  x0, XPAUSE_END
+    mov  x0, #1
+    b    _core_leave
 XPAUSE_END:
     NEXT
 
@@ -3083,6 +3215,12 @@ _toa_no:
 // x0 = 1 when PAUSE / KEY should switch. Debugger and Break Now hold the VM.
 _task_can_switch:
     stp  x29, x30, [sp, #-16]!
+    // CORES parks on the host semaphore. Do not inline-switch a worker
+    // onto the console thread.
+    adrp x0, cores_var@page
+    add  x0, x0, cores_var@pageoff
+    ldr  x0, [x0]
+    cbnz x0, _tcs_no
     adrp x0, multi_var@page
     add  x0, x0, multi_var@pageoff
     ldr  x0, [x0]
@@ -3124,9 +3262,12 @@ _kpr_no:
 
 // x0 = 1 if the running task is the console, else 0. Preserves x19–x24.
 _task_is_console:
+    mov  x0, x27
+    cbnz x0, _tic_cmp
     adrp x0, up_var@page
     add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
+_tic_cmp:
     adrp x1, console_task@page
     add  x1, x1, console_task@pageoff
     cmp  x0, x1
@@ -3182,6 +3323,7 @@ _ty_take:
     adrp x9, up_var@page
     add  x9, x9, up_var@pageoff
     str  x12, [x9]
+    mov  x27, x12
     b    _ty_done
 _ty_stay:
     ldr  x19, [x11, #TU_IP]
@@ -3256,6 +3398,57 @@ XSINGLE:
 XSINGLE_END:
     NEXT
 
+    BOOT_WORD "CORES", "CORES ( -- ) run tasks on up to four worker queues", 0, XCORES, XCORES_END
+XCORES:
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x27, x1
+    b.eq _xcores_ok
+    adrp x0, str_cores_console@page
+    add  x0, x0, str_cores_console@pageoff
+    bl   _print_string_svc
+    NEXT
+_xcores_ok:
+    adrp x0, cores_var@page
+    add  x0, x0, cores_var@pageoff
+    mov  x1, #-1
+    str  x1, [x0]
+XCORES_END:
+    NEXT
+
+    BOOT_WORD "COOP", "COOP ( -- ) wait for worker tasks, then use the cooperative scheduler", 0, XCOOP, XCOOP_END
+XCOOP:
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x27, x1
+    b.eq _xcoop_ok
+    adrp x0, str_cores_console@page
+    add  x0, x0, str_cores_console@pageoff
+    bl   _print_string_svc
+    NEXT
+_xcoop_ok:
+    bl   _core_join_call
+    adrp x0, cores_var@page
+    add  x0, x0, cores_var@pageoff
+    str  xzr, [x0]
+XCOOP_END:
+    NEXT
+
+    BOOT_WORD "CORES-JOIN", "CORES-JOIN ( -- ) wait until worker tasks have stopped", 0, XCORES_JOIN, XCORES_JOIN_END
+XCORES_JOIN:
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x27, x1
+    b.eq _xjoin_ok
+    adrp x0, str_cores_console@page
+    add  x0, x0, str_cores_console@pageoff
+    bl   _print_string_svc
+    NEXT
+_xjoin_ok:
+    bl   _core_join_call
+XCORES_JOIN_END:
+    NEXT
+
 // Binary semaphore cell: 1 is free, 0 is taken. CLAIM stores 0 only while
 // this core still holds the exclusive reservation. A 0 is left unchanged.
 // RELEASE stores 1 with a release store. WAIT parks by yielding. SIGNAL
@@ -3282,6 +3475,7 @@ XRELEASE:
     mov  x1, #1
     stlr x1, [x20]
     ldr  x20, [x22], #8
+    bl   _core_wake
 XRELEASE_END:
     NEXT
 
@@ -3305,6 +3499,10 @@ _wait_try:
     b    XWAIT_END
 _wait_busy:
     clrex
+    bl   _core_wait_self
+    cbz  x0, _wait_coop
+    b    XWAIT
+_wait_coop:
     bl   _task_can_switch
     cbz  x0, _wait_stuck
     adrp x5, up_var@page
@@ -3333,6 +3531,7 @@ XSIGNAL:
     mov  x1, #1
     stlr x1, [x20]
     ldr  x20, [x22], #8
+    bl   _core_wake
     bl   _task_can_switch
     cbz  x0, XSIGNAL_END
     bl   _task_yield
@@ -3365,7 +3564,11 @@ XDICT_SEM:
 // Clobbers x1–x7. Preserves x19–x28.
 _dict_allot:
     stp  x29, x30, [sp, #-16]!
-    mov  x6, x0
+    str  x0, [sp, #-16]!
+    adrp x0, sem_dict@page
+    add  x0, x0, sem_dict@pageoff
+    bl   _core_claim_any
+    ldr  x6, [sp], #16
     adrp x1, here_ptr@page
     add  x1, x1, here_ptr@pageoff
     ldr  x0, [x1]
@@ -3389,9 +3592,11 @@ _da_zero:
     subs x7, x7, #8
     b.ne _da_zero
     str  x4, [x1]
+    bl   _core_release_dict
     ldp  x29, x30, [sp], #16
     ret
 _da_fail:
+    bl   _core_release_dict
     adrp x0, str_allot_over@page
     add  x0, x0, str_allot_over@pageoff
     bl   _print_string_svc
@@ -3403,6 +3608,12 @@ _da_fail:
 _task_park_fail:
     stp  x29, x30, [sp, #-16]!
     mov  x21, x6
+    bl   _core_wait_self
+    cbz  x0, _tpf_coop
+    mov  x0, #1
+    ldp  x29, x30, [sp], #16
+    ret
+_tpf_coop:
     bl   _task_can_switch
     cbz  x0, _tpf_noswitch
     adrp x5, up_var@page
@@ -3464,12 +3675,14 @@ _mb_put_try:
     stlr x1, [x0]
     add  x22, x22, #8
     ldr  x20, [x22], #8
+    bl   _core_wake
     b    XMBOX_PUT_END
 _mb_put_busy:
     clrex
     adrp x6, mbox_put_thread@page
     add  x6, x6, mbox_put_thread@pageoff
     bl   _task_park_fail
+    cbnz x0, XMBOX_PUT
     add  x22, x22, #8
     ldr  x20, [x22], #8
     adrp x0, str_mbox_put_stuck@page
@@ -3497,12 +3710,14 @@ _mb_get_try:
     add  x0, x20, #MB_EMPTY
     stlr x3, [x0]
     mov  x20, x1
+    bl   _core_wake
     b    XMBOX_GET_END
 _mb_get_busy:
     clrex
     adrp x6, mbox_get_thread@page
     add  x6, x6, mbox_get_thread@pageoff
     bl   _task_park_fail
+    cbnz x0, XMBOX_GET
     mov  x20, #0
     adrp x0, str_mbox_get_stuck@page
     add  x0, x0, str_mbox_get_stuck@pageoff
@@ -3565,11 +3780,13 @@ _qput_nowrap:
     stlr x5, [x0]
     add  x22, x22, #8
     ldr  x20, [x22], #8
+    bl   _core_wake
     b    XQPUT_END
 _qput_full:
     adrp x6, qput_thread@page
     add  x6, x6, qput_thread@pageoff
     bl   _task_park_fail
+    cbnz x0, XQPUT
     add  x22, x22, #8
     ldr  x20, [x22], #8
     adrp x0, str_qput_stuck@page
@@ -3603,11 +3820,13 @@ _qget_nowrap:
     add  x0, x20, #Q_HEAD
     stlr x5, [x0]
     mov  x20, x6
+    bl   _core_wake
     b    XQGET_END
 _qget_empty:
     adrp x6, qget_thread@page
     add  x6, x6, qget_thread@pageoff
     bl   _task_park_fail
+    cbnz x0, XQGET
     mov  x20, #0
     adrp x0, str_qget_stuck@page
     add  x0, x0, str_qget_stuck@pageoff
@@ -3647,6 +3866,12 @@ XCONSOLE_Q_END:
 
     BOOT_WORD "STOP", "STOP ( -- ) sleep the running task and yield", 0, XSTOP, XSTOP_END
 XSTOP:
+    bl   _core_is_worker
+    cbz  x0, _stop_coop
+    str  xzr, [x27, #TU_STATUS]
+    mov  x0, #0
+    b    _core_leave
+_stop_coop:
     adrp x5, up_var@page
     add  x5, x5, up_var@pageoff
     ldr  x5, [x5]
@@ -3758,6 +3983,15 @@ _act_clr_src:
     mov  x1, #-1
     str  x1, [x0, #TU_STATUS]
     RPOP
+    adrp x1, cores_var@page
+    add  x1, x1, cores_var@pageoff
+    ldr  x1, [x1]
+    cbz  x1, XACTIVATE_END
+    adrp x1, core_schedule_hook@page
+    add  x1, x1, core_schedule_hook@pageoff
+    ldr  x1, [x1]
+    cbz  x1, XACTIVATE_END
+    blr  x1
     b    XACTIVATE_END
 _act_interp:
     adrp x0, str_act_interp@page
@@ -3860,6 +4094,7 @@ _tf_loop:
     cmp  x17, x13
     b.ne _tf_next
     str  x10, [x16]
+    mov  x27, x10
 _tf_next:
     mov  x13, x14
     b    _tf_loop
@@ -3930,7 +4165,338 @@ _task_cold_init:
     adrp x2, sem_dict@page
     add  x2, x2, sem_dict@pageoff
     str  x1, [x2]
+    adrp x1, cores_var@page
+    add  x1, x1, cores_var@pageoff
+    str  xzr, [x1]
+    adrp x1, core_task@page
+    add  x1, x1, core_task@pageoff
+    str  xzr, [x1]
+    str  xzr, [x1, #8]
+    str  xzr, [x1, #16]
+    str  xzr, [x1, #24]
+    adrp x1, core_pthread@page
+    add  x1, x1, core_pthread@pageoff
+    str  xzr, [x1]
+    str  xzr, [x1, #8]
+    str  xzr, [x1, #16]
+    str  xzr, [x1, #24]
+    mov  x27, x0
     ret
+
+// CORES workers. x27 is this thread's user area. up_var stays the console's
+// record so a worker never writes the shared task pointer. The host runs
+// kernel_task_run on a worker queue. PAUSE returns 1, STOP returns 0, a
+// fault returns -1. Queue and WAIT parks block inside the wait hook.
+
+.globl _kernel_task_run
+_kernel_task_run:
+    cbz  x0, _ktr_bad
+    cmp  w1, #3
+    b.hi _ktr_bad
+    uxtw x1, w1
+    stp  x29, x30, [sp, #-112]!
+    mov  x29, sp
+    stp  x19, x20, [sp, #16]
+    stp  x21, x22, [sp, #32]
+    stp  x23, x24, [sp, #48]
+    stp  x25, x26, [sp, #64]
+    stp  x27, x28, [sp, #80]
+    str  x0, [sp, #96]
+    str  x1, [sp, #104]
+    mov  x19, x0
+    mov  x20, x1
+    adrp x2, core_sp@page
+    add  x2, x2, core_sp@pageoff
+    mov  x3, sp
+    str  x3, [x2, x20, lsl #3]
+    adrp x2, core_task@page
+    add  x2, x2, core_task@pageoff
+    str  x19, [x2, x20, lsl #3]
+    mrs  x3, tpidrro_el0
+    adrp x2, core_pthread@page
+    add  x2, x2, core_pthread@pageoff
+    str  x3, [x2, x20, lsl #3]
+    mov  x27, x19
+    mov  x28, #0
+    mov  x0, #0
+    bl   _pthread_jit_write_protect_np
+    adrp x0, core_jmp@page
+    add  x0, x0, core_jmp@pageoff
+    lsl  x2, x20, #8
+    add  x0, x0, x2
+    mov  x1, #1
+    bl   _sigsetjmp
+    cbnz x0, _ktr_fault
+    ldr  x27, [sp, #96]
+    ldr  x19, [x27, #TU_IP]
+    ldr  x20, [x27, #TU_TOS]
+    ldr  x22, [x27, #TU_DSP]
+    ldr  x23, [x27, #TU_RSP]
+    adrp x24, latest_var@page
+    add  x24, x24, latest_var@pageoff
+    ldr  x21, [x19], #8
+    ldr  x1, [x21]
+    br   x1
+_ktr_fault:
+    ldr  x27, [sp, #96]
+    ldr  x1, [sp, #104]
+    cbz  x27, _ktr_fault_clear
+    str  xzr, [x27, #TU_STATUS]
+_ktr_fault_clear:
+    adrp x2, core_task@page
+    add  x2, x2, core_task@pageoff
+    str  xzr, [x2, x1, lsl #3]
+    adrp x2, core_pthread@page
+    add  x2, x2, core_pthread@pageoff
+    str  xzr, [x2, x1, lsl #3]
+    mov  x0, #-1
+    b    _ktr_epilogue
+_ktr_epilogue:
+    ldp  x19, x20, [sp, #16]
+    ldp  x21, x22, [sp, #32]
+    ldp  x23, x24, [sp, #48]
+    ldp  x25, x26, [sp, #64]
+    ldp  x27, x28, [sp, #80]
+    ldp  x29, x30, [sp], #112
+    ret
+_ktr_bad:
+    mov  x0, #-2
+    ret
+
+// x0 = status. Finds the slot whose core_task matches x27, saves the VM,
+// clears the slot, and returns on that entry frame. No match continues NEXT.
+_core_leave:
+    mov  x21, x0
+    cbz  x27, _cl_noslot
+    mov  x10, #0
+    adrp x9, core_task@page
+    add  x9, x9, core_task@pageoff
+_cl_scan:
+    ldr  x11, [x9, x10, lsl #3]
+    cmp  x11, x27
+    b.eq _cl_hit
+    add  x10, x10, #1
+    cmp  x10, #4
+    b.lo _cl_scan
+_cl_noslot:
+    NEXT
+_cl_hit:
+    str  x19, [x27, #TU_IP]
+    str  x20, [x27, #TU_TOS]
+    str  x22, [x27, #TU_DSP]
+    str  x23, [x27, #TU_RSP]
+    str  xzr, [x9, x10, lsl #3]
+    adrp x11, core_pthread@page
+    add  x11, x11, core_pthread@pageoff
+    str  xzr, [x11, x10, lsl #3]
+    adrp x11, core_sp@page
+    add  x11, x11, core_sp@pageoff
+    ldr  x11, [x11, x10, lsl #3]
+    mov  sp, x11
+    mov  x0, x21
+    b    _ktr_epilogue
+
+// x0 = 1 when x27 is a live worker slot. Preserves x9 and x19-x28.
+_core_is_worker:
+    cbz  x27, _ciw_no
+    adrp x1, core_task@page
+    add  x1, x1, core_task@pageoff
+    mov  x2, #0
+_ciw_loop:
+    ldr  x3, [x1, x2, lsl #3]
+    cmp  x3, x27
+    b.eq _ciw_yes
+    add  x2, x2, #1
+    cmp  x2, #4
+    b.lo _ciw_loop
+_ciw_no:
+    mov  x0, #0
+    ret
+_ciw_yes:
+    mov  x0, #1
+    ret
+
+// Park this task. Returns 1 after the wait hook. Returns 0 when CORES is
+// off or the hook is missing. Preserves x9 and x19-x28.
+_core_wait_self:
+    stp  x29, x30, [sp, #-16]!
+    stp  x9, x10, [sp, #-16]!
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cws_none
+    adrp x10, core_wait_hook@page
+    add  x10, x10, core_wait_hook@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cws_none
+    mov  x0, x27
+    blr  x10
+    mov  x0, #1
+    b    _cws_out
+_cws_none:
+    mov  x0, #0
+_cws_out:
+    ldp  x9, x10, [sp], #16
+    ldp  x29, x30, [sp], #16
+    ret
+
+// Wake every parked CORES task. No-op while CORES is off.
+_core_wake:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cw_fast
+    adrp x10, core_wake_hook@page
+    add  x10, x10, core_wake_hook@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cw_fast
+    stp  x29, x30, [sp, #-16]!
+    blr  x10
+    ldp  x29, x30, [sp], #16
+_cw_fast:
+    ret
+
+_core_join_call:
+    stp  x29, x30, [sp, #-16]!
+    adrp x0, core_join_hook@page
+    add  x0, x0, core_join_hook@pageoff
+    ldr  x0, [x0]
+    cbz  x0, _cjn_none
+    blr  x0
+_cjn_none:
+    ldp  x29, x30, [sp], #16
+    ret
+
+// x0 = semaphore. No-op while CORES is off. Includes the console.
+_core_claim_any:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cca_fast
+    stp  x29, x30, [sp, #-16]!
+    mov  x9, x0
+_cca_try:
+    ldaxr x1, [x9]
+    cbz  x1, _cca_busy
+    stlxr w2, xzr, [x9]
+    cbnz w2, _cca_try
+    ldp  x29, x30, [sp], #16
+_cca_fast:
+    ret
+_cca_busy:
+    clrex
+    bl   _core_wait_self
+    cbnz x0, _cca_try
+    bl   _core_is_worker
+    cbz  x0, _cca_abandon
+    ldp  x29, x30, [sp], #16
+    str  xzr, [x27, #TU_STATUS]
+    mov  x0, #0
+    b    _core_leave
+_cca_abandon:
+    b    _error_abandon
+
+// x0 = semaphore. Workers only. The console does not take it.
+_core_claim_worker:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _ccw_fast
+    stp  x29, x30, [sp, #-16]!
+    stp  x9, x8, [sp, #-16]!
+    mov  x9, x0
+    bl   _core_is_worker
+    cbz  x0, _ccw_pop
+_ccw_try:
+    ldaxr x1, [x9]
+    cbz  x1, _ccw_busy
+    stlxr w2, xzr, [x9]
+    cbnz w2, _ccw_try
+_ccw_pop:
+    ldp  x9, x8, [sp], #16
+    ldp  x29, x30, [sp], #16
+_ccw_fast:
+    ret
+_ccw_busy:
+    clrex
+    bl   _core_wait_self
+    cbnz x0, _ccw_try
+    ldp  x9, x8, [sp], #16
+    ldp  x29, x30, [sp], #16
+    str  xzr, [x27, #TU_STATUS]
+    mov  x0, #0
+    b    _core_leave
+
+// x0 = semaphore. No-op while CORES is off.
+_core_release_any:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cra_fast
+    mov  x9, x0
+    mov  x1, #1
+    stlr x1, [x9]
+    b    _core_wake
+_cra_fast:
+    ret
+
+_core_release_dict:
+    // Callers such as _dict_allot return the allotted address in x0.
+    stp  x29, x30, [sp, #-16]!
+    str  x0, [sp, #-16]!
+    adrp x0, sem_dict@page
+    add  x0, x0, sem_dict@pageoff
+    bl   _core_release_any
+    ldr  x0, [sp], #16
+    ldp  x29, x30, [sp], #16
+    ret
+
+// x0 = semaphore. Workers only.
+_core_release_worker:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _crw_fast
+    stp  x29, x30, [sp, #-16]!
+    mov  x9, x0
+    bl   _core_is_worker
+    cbz  x0, _crw_pop
+    mov  x1, #1
+    stlr x1, [x9]
+    bl   _core_wake
+_crw_pop:
+    ldp  x29, x30, [sp], #16
+_crw_fast:
+    ret
+
+// Refuse compile and parse words on a live worker while CORES is on.
+// Cooperative sessions return without printing. A worker does not return.
+_core_console_only:
+    adrp x10, cores_var@page
+    add  x10, x10, cores_var@pageoff
+    ldr  x10, [x10]
+    cbz  x10, _cco_fast
+    adrp x10, console_task@page
+    add  x10, x10, console_task@pageoff
+    cmp  x27, x10
+    b.eq _cco_fast
+    cbz  x27, _cco_fast
+    stp  x29, x30, [sp, #-16]!
+    bl   _core_is_worker
+    cbz  x0, _cco_pop
+    adrp x0, str_cores_word@page
+    add  x0, x0, str_cores_word@pageoff
+    bl   _print_string_svc
+    ldp  x29, x30, [sp], #16
+    str  xzr, [x27, #TU_STATUS]
+    mov  x0, #0
+    b    _core_leave
+_cco_pop:
+    ldp  x29, x30, [sp], #16
+_cco_fast:
+    ret
+
+// --- end CORES helpers ---
 
 // EKEY ( -- u )  Facility: next key event (implementation-defined encoding).
 // Same host KEY hook as KEY, but does not strip tags or skip function-key events.
@@ -4946,9 +5512,15 @@ X0Branch:
     // load past the empty stack. SP0 is TU_S0 (console: data_stack+4096,
     // which is &return_stack[0]). A background DSP lives in the dictionary,
     // so the console BSS bound would look like underflow and wipe the stack.
+    // x27 is this thread's user area. Fall back while it is still 0.
+    cbnz x27, _0br_up
     adrp x1, up_var@page
     add  x1, x1, up_var@pageoff
     ldr  x1, [x1]
+    b    _0br_s0
+_0br_up:
+    mov  x1, x27
+_0br_s0:
     ldr  x1, [x1, #TU_S0]          // this task's empty DSP
     cbz  x20, _0br_true
     cmp  x22, x1
@@ -5009,6 +5581,7 @@ XHERE_END:
 
     BOOT_WORD "ALLOT", "ALLOT ( n -- ) allocate n bytes in dictionary", 0, XALLOT, XALLOT_END
 XALLOT:
+    bl   _core_console_only
     DPOP                           // n
     adrp x1, here_ptr@page
     add x1, x1, here_ptr@pageoff
@@ -5045,6 +5618,7 @@ XALLOT_END:
 
     BOOT_WORD ",", ", ( n -- ) compile a cell", 0, XCOMMA
 XCOMMA:
+    bl   _core_console_only
     DPOP
     bl _compile_cell
     NEXT
@@ -5262,6 +5836,7 @@ XCOLON:
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
+    bl   _core_console_only
     bl _next_word
     cbz x1, _colon_fail
     mov x19, x0
@@ -5378,6 +5953,7 @@ XCREATE:
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
+    bl   _core_console_only
     bl _next_word
     cbz x1, _create_fail
     mov x19, x0
@@ -9656,9 +10232,12 @@ XDOES:
     BOOT_WORD "PAD", "PAD ( -- addr ) transient user scratch (1024 bytes); not used by system parsers", 0, XPAD, XPAD_END
 XPAD:
     str x20, [x22, #-8]!
+    mov  x0, x27
+    cbnz x0, _xpad_up
     adrp x0, up_var@page
     add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
+_xpad_up:
     ldr  x0, [x0, #TU_PAD_PTR]
     mov x20, x0
 XPAD_END:
@@ -9670,9 +10249,12 @@ XPAD_END:
     BOOT_WORD "HLD", "HLD ( -- addr ) pictured numeric output pointer for this task", 0, XHLD, XHLD_END
 XHLD:
     str  x20, [x22, #-8]!
+    mov  x0, x27
+    cbnz x0, _xhld_up
     adrp x0, up_var@page
     add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
+_xhld_up:
     add  x0, x0, #TU_HLD
     mov  x20, x0
 XHLD_END:
@@ -11361,6 +11943,7 @@ XCONTAINS_END:
 
     BOOT_WORD "EVALUATE", "EVALUATE ( i*x c-addr u -- j*x ) interpret the string as Forth source", 0, XEVALUATE
 XEVALUATE:
+    bl   _core_console_only
     mov x1, x20                    // u
     ldr x0, [x22], #8              // c-addr
     ldr x20, [x22], #8
@@ -11819,6 +12402,7 @@ XPARSE_END:
 
     BOOT_WORD "WORD", "WORD ( char -- addr ) parse input up to delimiter char, return addr of counted string (trailing NUL)", 0, XWORD, XWORD_END
 XWORD:
+    bl   _core_console_only
     mov w7, w20                     // delimiter
     bl _cursor_load
     mov x2, x0
@@ -14817,10 +15401,23 @@ _putchar:
     ldr  x1, [x1]
     cbz  x1, _putchar_svc
     // w0 already has char; AAPCS: int in w0
+    stp  x0, x1, [sp, #-16]!
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
+    ldp  x0, x1, [sp], #16
     blr  x1
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_release_worker
     ldp x29, x30, [sp], #16
     ret
 _putchar_svc:
+    stp  x0, xzr, [sp, #-16]!
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
+    ldp  x0, xzr, [sp], #16
     sub sp, sp, #16
     strb w0, [sp]
     mov x0, #1              // fd = stdout
@@ -14829,6 +15426,9 @@ _putchar_svc:
     mov x16, #4             // write
     svc #0x80               // Darwin: preserves x19-x28; result in x0
     add sp, sp, #16
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_release_worker
     ldp x29, x30, [sp], #16
     ret
 XPUTCHAR_END:
@@ -14877,12 +15477,18 @@ _write_stdout:
     mov  x0, x19
     mov  x1, x20
     bl   _debug_note_buf
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
     mov  x1, x20                   // n
     adrp x0, emit_buf_hook@page
     add  x0, x0, emit_buf_hook@pageoff
     ldr  x2, [x0]                  // hook
     mov  x0, x19                   // buf
     blr  x2
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_release_worker
     b    _ws_done
 _ws_try_byte:
     adrp x0, emit_hook@page
@@ -14904,11 +15510,17 @@ _ws_try_byte:
     mov  x0, x19
     mov  x1, x20
     bl   _debug_note_buf
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
     mov  x0, #1
     mov  x1, x19
     mov  x2, x20
     mov  x16, #4
     svc  #0x80
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_release_worker
     b    _ws_done
 _ws_hook:
     cbz  x20, _ws_done
@@ -14948,11 +15560,18 @@ _getchar:
     add  x1, x1, key_hook@pageoff
     ldr  x1, [x1]
     cbz  x1, _getchar_svc
+    stp  x1, xzr, [sp, #-16]!
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
+    ldp  x1, xzr, [sp], #16
     blr  x1                        // int (*)(void) → w0
     // sign-extend byte-ish; keep full int (hook may return -1)
-    ldp x29, x30, [sp], #16
-    ret
+    b    _gc_release
 _getchar_svc:
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_claim_worker
     sub sp, sp, #16
     mov x0, #0              // fd = stdin
     mov x1, sp
@@ -14962,13 +15581,18 @@ _getchar_svc:
     cbz x0, _gc_eof
     ldrb w0, [sp]
     add sp, sp, #16
+_gc_release:
+    stp  x0, xzr, [sp, #-16]!
+    adrp x0, sem_console@page
+    add  x0, x0, sem_console@pageoff
+    bl   _core_release_worker
+    ldp  x0, xzr, [sp], #16
     ldp x29, x30, [sp], #16
     ret
 _gc_eof:
     mov w0, #-1
     add sp, sp, #16
-    ldp x29, x30, [sp], #16
-    ret
+    b    _gc_release
 XGETCHAR_END:
 
 // _print_string_svc lives in SA-PRINT (below) — closed emit via _sa_write.
@@ -20449,6 +21073,8 @@ base_var:       .quad 10
 console_task:   .skip TU_BYTES
 up_var:         .quad 0            // user area of the running task
 multi_var:      .quad 0            // 0 = SINGLE, -1 = MULTI
+cores_var:      .quad 0            // 0 = cooperative, -1 = CORES
+console_pthread: .quad 0           // tpidrro_el0 of the console evaluate
 stop_retry_xt:  .quad XSTOP        // code field for the fall-off sentinel
 park_retry_xt:  .quad XPARK
 task_stop_thread: .quad stop_retry_xt
@@ -20456,7 +21082,10 @@ park_thread:    .quad park_retry_xt
 // WAIT resumes through this thread so the address stays in TOS.
 wait_retry_xt:  .quad XWAIT_RETRY
 wait_thread:    .quad wait_retry_xt
-// Device semaphores. 1 = free. Not taken inside EMIT, blit, or header linking.
+// Device semaphores. 1 = free.
+// While CORES is on, workers take sem_console around emit and sem_graphics
+// around blit. _dict_allot and _header_build take sem_dict, including the
+// console. The cooperative path leaves all three untouched.
 sem_graphics:   .quad 1
 sem_console:    .quad 1
 sem_dict:       .quad 1
@@ -20469,6 +21098,12 @@ qput_retry_xt:     .quad XQPUT_RETRY
 qput_thread:       .quad qput_retry_xt
 qget_retry_xt:     .quad XQGET_RETRY
 qget_thread:       .quad qget_retry_xt
+.align 8
+core_sp:        .quad 0, 0, 0, 0
+core_task:      .quad 0, 0, 0, 0
+core_pthread:   .quad 0, 0, 0, 0
+.align 8
+core_jmp:       .skip 1024         // 4 * 256 sigjmp_buf
 blk_var:        .quad 0            // BLK body (0 = not interpreting a block)
 scr_var:        .quad 0            // SCR body
 block_file_var: .quad 0            // current volume fileid (0 = none)
@@ -20670,6 +21305,8 @@ str_qput_stuck: .asciz "? >Q: no other task can receive\n"
 str_qget_stuck: .asciz "? Q>: no other task can send\n"
 str_act_interp: .asciz "ACTIVATE is only valid inside a colon definition\n"
 str_act_self:   .asciz "ACTIVATE: a task cannot activate itself\n"
+str_cores_console: .asciz "? CORES only from the console task\n"
+str_cores_word: .asciz "? CORES: console only\n"
 str_redef:  .asciz " is redefined\n"
 .align 8
 quit_jmpbuf:        .skip 256      // sigjmp_buf for fault recovery
@@ -20748,6 +21385,10 @@ debug_nest_rstack: .skip DEBUG_CALL_MAX * RETURN_STACK_SIZE
 key_hook:       .quad 0            // int (*)(void) — KEY (blocking)
 key_q_hook:     .quad 0            // int (*)(void) — KEY? (non-zero if ready)
 pause_hook:     .quad 0            // void (*)(void) — PAUSE flush + 1 ms
+core_schedule_hook: .quad 0        // void (*)(uint64_t task) — return immediately
+core_wait_hook: .quad 0            // void (*)(uint64_t task) — park until wake
+core_wake_hook: .quad 0            // void (*)(void) — wake every parked task
+core_join_hook: .quad 0            // void (*)(void) — wait until workers finish
 time_date_hook: .quad 0            // void (*)(int64_t out[6]) — TIME&DATE
 file_op_hook:   .quad 0            // file_op multiplex
 fromlib_hook:   .quad 0            // void (*)(void) — FROMLIB arm

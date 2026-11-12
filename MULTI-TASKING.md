@@ -1,6 +1,6 @@
 # Multi-tasking
 
-**Status:** steps 1–4 are in the Mac kernel. Steps 5–6 are not implemented. Cold start is `SINGLE`.
+**Status:** steps 1–5 are in the Mac kernel. Step 6 is not implemented. Cold start is `SINGLE`, and `CORES` is off.
 **Scope:** Mac EditForth (`Forth/Kernel/forth.s`, `Forth/Kernel/kernel2.fth`, `Forth/Host/KernelBridge.swift`). EditForthPWA stays one thread.
 **Source:** Brad Rodriguez, [Forth Multitasking in a Nutshell](https://www.bradrodriguez.com/papers/mtasking.html) (September 1992).
 
@@ -50,7 +50,7 @@ If `MULTI` is off, or no other task is awake, `WAIT` prints `? WAIT: no other ta
 
 A second `SIGNAL` before the matching `WAIT` stores `1` again. The cell does not count. The sample hands off one signal at a time, so each `SIGNAL` is claimed once.
 
-`GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. The kernel does not take them inside `EMIT`, a blit, or header linking. A task that claims one releases it before `WAIT`.
+`GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. On the cooperative path the kernel does not take them inside `EMIT`, a blit, or header linking. While `CORES` is on, a worker takes the console cell around emit and the graphics cell around a blit, and allot and header linking take the dictionary cell. A task that claims one releases it before `WAIT`.
 
 The sample is `Forth/Resources/Library/Sample/TASKSEM.fth`. Console `CLAIM` printed `-1`, `0`, `-1`. The device cells printed `1`, `0`, `1`, `1`, then the stuck-wait line and `wait-stuck-ok`. Two tasks then printed `hits1=1`, `hits2=1`, `hits3=2`, `hits4=2`, `hits5=2`, `hits6=3`, `sem-ok`, and `depth=0`. `TASKCLOCK.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
@@ -64,11 +64,29 @@ While the cell is busy and another task can run, the word yields and resumes on 
 
 The sample is `Forth/Resources/Library/Sample/TASKQUEUE.fth`. With `MULTI` off, a second `>MBOX` and a second `>Q` printed the stuck lines. The held mailbox value was `0`, and the two-slot ring depth was `0`. Two tasks then moved 8 mailbox cells (`mbox-got=8`, `mbox-bad=0`, `mbox-ok`) and 4096 ring cells (`q-got=4096`, `q-bad=0`, high-water depth `15` on a 16-slot ring, `q-depth=0`, `queue-ok`, `depth=0`). `TASKCLOCK.fth` and `TASKSEM.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
+## Step 5 as built
+
+`CORES`, `COOP`, and `CORES-JOIN` select the scheduler. Cooperative stays the default. `MULTI` and `SINGLE` still arm only the cooperative yield. `CORES` from a worker prints `? CORES only from the console task`. The same line is used for `COOP` and `CORES-JOIN`.
+
+`CORES` places each later `ACTIVATE` on a serial queue named `64Forth.core.0` through `64Forth.core.3`, at user-initiated quality of service. That prefers a performance core and does not pin one. A fifth awake compute task shares the queue with the fewest unfinished tasks. The console stays on `64Forth.kernel`. A task activated before `CORES` stays on the cooperative circle.
+
+A worker runs until `PAUSE`, `STOP`, or a park inside `WAIT`, `>MBOX`, `MBOX>`, `>Q`, or `Q>`. `PAUSE` returns to the host, which queues that task again so a sibling on the same queue can run. `STOP` finishes the run. A park blocks that queue on a dispatch semaphore. Publishing a cell wakes every parked task. A wake that arrives before the park is remembered. A failed claim does not spin.
+
+`CORES-JOIN` waits until those worker runs have finished. `COOP` does that wait, then clears `CORES`. A join with nothing in flight returns at once.
+
+`x27` is the user area of the task on this thread. The console thread keeps `x27` equal to `up_var`. A worker sets `x27` to its own record and leaves `up_var` on the console. `x28` stays 0 on a worker, so the debugger stays on the console. `BASE` and `STATE` stay the shared cells. The sample loops do not read or write them.
+
+`EMIT` and `KEY` from a worker take `CONSOLE-SEM` around the existing emit buffer and key queue. The host drains that buffer on the main queue. A blit copies the graphics buffer, then posts the redraw to the main queue, and the worker holds `GRAPHICS-SEM` around the copy. A worker does not hop onto `64Forth.kernel`. The console evaluate, including `CORES-JOIN`, already holds that queue. While `CORES` is on, dictionary allot and header linking take `DICT-SEM`, including the console, and release it before a park. `evalLock` is unchanged.
+
+A live worker that executes `:`, `CREATE`, `ALLOT`, `,`, `WORD`, or `EVALUATE` prints `? CORES: console only` and stops. Background tasks still run an already-compiled body.
+
+The sample is `Forth/Resources/Library/Sample/TASKCORES.fth`. Two workers moved 100000 cells through a 16-slot ring. The console printed `console-ok 1 1 1` while both live cells were still set, then after the join `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, and `depth=0`. With `CORES` left off, `TASKCLOCK.fth`, `TASKQUEUE.fth`, and `TASKSEM.fth` still passed, and ANS-VALIDATE reported 395 passed, 0 failed.
+
 ## What a task is
 
 A task is one Forth program with its own data stack, return stack, and user area. The programs share one dictionary. The console is a task. Extra tasks are background work: a clock, a counter, a producer, a consumer.
 
-The running task is `up_var` in BSS. There is no new virtual-machine register. A `USER` word loads `up_var` and adds an offset.
+On the cooperative path the running task is `up_var` in BSS, and the console thread keeps `x27` equal to that address. A `USER` word loads the running task and adds an offset. A CORES worker keeps its user area in `x27` and does not store `up_var`.
 
 The yield saves four registers into the user area and loads the next awake task:
 
@@ -114,7 +132,7 @@ The size rules do not change. There is no per-task heap and no per-core reserve.
 
 ## Scratch buffers
 
-These follow the running task. The multi-core scheduler stays off.
+These follow the running task. A CORES worker uses the pointers in its own user area. `CORES` stays off until the console turns it on.
 
 - `word_scratch` (512 bytes). `BL WORD` stores the counted name here and clamps the name to 63 characters. The address lasts until that same task's next `WORD`.
 - `PAD` (1024 bytes) and `HLD`. `<#` `#` `HOLD` `#>` use them.
@@ -134,6 +152,9 @@ The 256 KiB `file_buffer` and the block buffer stay shared. Only the console tas
 | `STOP` | Sleep the running task and yield. |
 | `MULTI` | Arm the yield. |
 | `SINGLE` | Make the yield a no-op. The task that executes it keeps the core until `MULTI`. |
+| `CORES` | Run each later `ACTIVATE` on up to four worker queues. |
+| `COOP` | Wait for worker tasks, then use the cooperative scheduler. |
+| `CORES-JOIN` | Wait until worker tasks have stopped. |
 | `PAUSE` | Unchanged meaning: flush the console, then wait 1 ms. When `MULTI` is on, yield first. `DBG-PAUSE` is untouched. |
 | `CLAIM` | `CODE`. Exclusive load/store. Store zero only if this core still holds the reservation. A busy flag returns false and is not written. |
 | `RELEASE` | `CODE`. Store one with a release store. |
@@ -158,11 +179,11 @@ On the cooperative scheduler the park inside `WAIT` is the yield. On the multi-c
 
 **Cooperative.** One virtual machine, one queue (`64Forth.kernel`). This is the default. A sample can activate a loop that increments a counter and calls `PAUSE`, and the console still accepts the next line.
 
-**Multi-core.** The same records and the same mailbox words. A mode word selects it. The console stays on `64Forth.kernel`. Each awake compute task gets its own serial queue at user-initiated quality of service, which prefers a performance core and does not pin one. At most four compute workers run at once. A fifth awake compute task shares a worker.
+**Multi-core.** The same records and the same mailbox, queue, and semaphore words. `CORES` selects it. The console stays on `64Forth.kernel`. Each task activated while `CORES` is on gets a serial queue at user-initiated quality of service, which prefers a performance core and does not pin one. At most four compute queues run at once. A fifth awake compute task shares the least busy queue. `COOP` waits for those runs and returns to the cooperative scheduler.
 
-`EMIT`, `KEY`, and `PREFRESH` from a background task are posted to the console queue, and that task waits. `evalLock` stays: a second console line is rejected while one evaluate holds the console task. The debugger stays on the console task. `x28` and `debug_armed` are not copied onto background tasks.
+`EMIT` and `KEY` from a worker take `CONSOLE-SEM` around the existing emit buffer and key queue. A blit takes `GRAPHICS-SEM` around the buffer copy, then the redraw runs on the main queue. The worker does not call into `64Forth.kernel`, because `CORES-JOIN` already holds that queue inside the console evaluate. `evalLock` stays: a second console line is rejected while one evaluate holds the console task. The debugger stays on the console task. `x28` and `debug_armed` are not copied onto background tasks.
 
-Before multi-core can be switched on, `CODE` words that keep per-execution scratch in BSS are either left console-only or moved to the CPU stack or the user area. A background task calls only that audited subset.
+`CODE` words that keep per-execution scratch in BSS stay console-only while `CORES` is on. `:`, `CREATE`, `ALLOT`, `,`, `WORD`, and `EVALUATE` from a live worker print `? CORES: console only` and stop that task. A background task calls only the audited subset.
 
 ## Tasks talking to each other
 
@@ -188,8 +209,8 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 2. **Per-task scratch.** Landed. `WORD`, `PAD`, pictured numbers, and `SOURCE` / `>IN` follow the running task. `INCLUDE` and block load stay on the console. See "Step 2 as built".
 3. **Semaphores.** Landed. `CLAIM` `RELEASE` `WAIT` `SIGNAL`, plus `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM`. See "Step 3 as built".
 4. **Mailbox and queue.** Landed. `MAILBOX` `>MBOX` `MBOX>` and `QUEUE` `>Q` `Q>` `Q-DEPTH`. Fixed rings in the shared dictionary. See "Step 4 as built".
-5. **Multi-core scheduler.** Off by default. Console queue unchanged. Compute tasks on their own queues, capped at four.
-6. **Private dictionary slice.** Only if a background task must compile. Not part of the first working tasker.
+5. **Multi-core scheduler.** Landed. `CORES` `COOP` `CORES-JOIN`. Console queue unchanged. Compute tasks on up to four worker queues. See "Step 5 as built".
+6. **Private dictionary slice.** Only if a background task must compile. Not implemented.
 
 ## Checks
 
@@ -199,8 +220,8 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 - Two tasks can each `BL WORD` and `<# #S #>` without seeing the other's text. Passed (`TASKSCRATCH.fth`: `alpha-one` / `beta-two`, `111` / `222`, `scratch-ok`). A background `INCLUDE` and `LOAD` printed the refuse lines and returned to the console.
 - A flag passed between two tasks delivers every `SIGNAL` once. Passed (`TASKSEM.fth`: hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`). A pause with no new `SIGNAL` left the count unchanged.
 - A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth. Passed (`TASKQUEUE.fth`: 4096 cells, `q-bad=0`, high-water depth `15` of 16 slots, then `queue-ok`).
-- ANS-VALIDATE stays a single-task run. Repeat it after steps 1 and 2, and again before the multi-core mode is left available.
-- With the multi-core mode on, two counting loops overlap, exchange counts through the queue, and the console still accepts a line. Cooperative mode still passes the earlier checks.
+- ANS-VALIDATE stays a single-task run. Passed again with `CORES` left off: 395 passed, 0 failed.
+- With `CORES` on, two counting loops overlap, exchange counts through the queue, and the console still runs the following lines. Passed (`TASKCORES.fth`: `console-ok 1 1 1`, `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, `depth=0`). With `CORES` left off, `TASKCLOCK.fth`, `TASKQUEUE.fth`, and `TASKSEM.fth` still passed.
 - `GROWMEMORYMB` from a background task is refused, and the console line continues. Passed. From the console it still grows once, refuses a shrink, and refuses a second call. Those console size checks were already in the kernel and were not re-run as part of this step.
 
 ## Out of scope
