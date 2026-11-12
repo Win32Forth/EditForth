@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, semaphores, a mailbox and fixed ring, a multi-core scheduler, an optional private dictionary slice, an introductory fixed-point library, and Mandelbrot samples on one task, four cooperative tasks, and four cores. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`.
+**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, semaphores, a mailbox and fixed ring, a multi-core scheduler, an optional private dictionary slice, an introductory fixed-point library, and Mandelbrot samples on one task, four cooperative tasks, and four cores. Disk image `Releases/EditForth-2.7.0-macOS.dmg`. The 2.6.4 image stays.
 
 **Last updated:** 2026-11-11
 
@@ -8,7 +8,7 @@
 
 ## v2.7.0 — Cooperative tasks, semaphores, queues, multi-core, and a dictionary slice
 
-**Version strings:** marketing **2.7.0**, build **32**. No disk image yet. The shipped image remains `Releases/EditForth-2.6.4-macOS.dmg`. Console stamp `Nov 11, 2026 4:40 PM`. `scripts/release.sh` was not run. A headless ANS-VALIDATE on the Debug kernel, with `MULTI` and `CORES` left off, reported 395 passed, 0 failed, including after the dictionary slice.
+**Version strings:** marketing **2.7.0**, build **32**. One-app disk image `Releases/EditForth-2.7.0-macOS.dmg`. The 2.6.4 image stays (`Releases/EditForth-2.6.4-macOS.dmg`). Console stamp `Nov 11, 2026 4:40 PM`. `scripts/release.sh` archive, validate, emit-smoke, and dmg: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.7.0**.
 
 **Console header stamp:**
 
@@ -33,7 +33,7 @@
 - **Graphics input.** While a graphics window is open, the evaluate pump dequeues mouse and key events. A long draw leaves the window selectable.
 - **VIEW on Restart.** Autoload copies newer shipped Library, System, and Docs before `HYPER-REINDEX`. A companion Restart does that copy too, so VIEW does not stamp a stale `System/Sources`.
 
-**Release:** no disk image yet.
+**Release:** disk image `Releases/EditForth-2.7.0-macOS.dmg`. GitHub release **v2.7.0**. The 2.6.4 image stays.
 
 ---
 
