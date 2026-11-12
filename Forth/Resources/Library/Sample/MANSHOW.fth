@@ -46,6 +46,7 @@ VARIABLE MS-HIT
 VARIABLE MS-MX
 VARIABLE MS-MY
 VARIABLE MS-MB
+VARIABLE MS-MS
 
 : MS-HOME ( -- )
   -2.2e0 MS-X0 F!
@@ -127,6 +128,7 @@ VARIABLE MS-MB
   CLS
   0 0 AT ." Q quit  L-click zoom  M pan  R redraw  +- zoom  arrows  I O  L load"
   0 MS-HIT !
+  MS@ >R
   G-PY 2/ 0 DO
     MS-STOP @ MS-HIT @ OR IF LEAVE THEN
     G-PX 2/ 0 DO
@@ -145,6 +147,8 @@ VARIABLE MS-MB
     PAUSE
     MS-NOTE IF LEAVE THEN
   LOOP
+  MS@ R> - MS-MS !
+  0 1 AT MS-MS @ . ." ms"
   PREFRESH ;
 
 \ Left recenters and zooms in. Middle recenters. Right redraws.

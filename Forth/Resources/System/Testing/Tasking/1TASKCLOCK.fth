@@ -1,4 +1,4 @@
-\ TASKCLOCK.fth — cooperative task smoke (phase 1).
+\ 1TASKCLOCK.fth — cooperative task smoke (phase 1).
 \ One counter task. MULTI lets it run on each console PAUSE.
 \ SINGLE freezes it. STOP takes it out of the rotation.
 \ GROWMEMORYMB from a background task is refused.

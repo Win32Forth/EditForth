@@ -20,6 +20,10 @@ Examples
   FROMLIB FLOAD Testing/ANSValidate/ANS-VALIDATE.fth
   FROMLIB FLOAD Testing/DbgSpanSmoke/span-tests.fth
   FROMLIB FLOAD BigInteger/big-int.fth
+  FROMLIB FLOAD FixPoint/FIXEDPOINT.fth    \ ALSO FIXED-POINT
+  \ FixPoint is introductory and incomplete. XBITS defaults to 28.
+  \ XUNIT, F>X, X>F, and X* are in. + and - are the cell words.
+  \ Division, square root, and trig are not in this slice.
   FROMLIB FLOAD PI/pi-test.fth
   FROMLIB FLOAD xchar-smoke.fth
   FROMLIB FLOAD Debugger/debugger.fth  \ DEBUG hub + loads Debugger/* (AutoLoad)
@@ -36,6 +40,8 @@ Examples
   FROMLIB FLOAD Sample/KOKO.fth            \ then: KOKO (COLOR8 fractal; any key stops)
   FROMLIB FLOAD Sample/MANGEN.fth          \ then: MANGEN (COLOR8 Mandelbrot; S writes mandel.raw)
   FROMLIB FLOAD Sample/MANSHOW.fth         \ then: MANSHOW (pan and zoom mandel.raw)
+  FROMLIB FLOAD Sample/MANSHOW-COOP.fth    \ then: MANSHOW-COOP (four cooperative tasks)
+  FROMLIB FLOAD Sample/MANSHOW-CORE.fth    \ then: MANSHOW-CORE (four worker cores)
   FROMLIB FLOAD Sample/OBJECT.fth          \ then: OBJECT-DEMO (vehicles and automobiles)
   FROMLIB FLOAD Sample/SPREAD.fth          \ then: SPREAD (26x26 sheet; Esc quits)
   FROMLIB FLOAD Sample/SZ.fth              \ then: SZ (graphics editor; Esc opens the menu)

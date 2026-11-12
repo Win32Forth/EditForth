@@ -1,4 +1,4 @@
-\ TASKCORES.fth — two worker queues overlap through the step-4 ring.
+\ 5TASKCORES.fth — two worker queues overlap through the step-4 ring.
 \ Each task sets a live cell before the transfer and clears it at the end.
 \ The console waits until both cells are set, prints, then waits for both
 \ tasks to stop. The ring holds 15 cells, so 100000 sends must overlap.

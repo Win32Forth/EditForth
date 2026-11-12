@@ -1,4 +1,4 @@
-\ TASKSEM.fth — binary semaphore smoke (step 3).
+\ 3TASKSEM.fth — binary semaphore smoke (step 3).
 \ 1 is free, 0 is taken. CLAIM stores 0 only while the reservation holds.
 \ SIGNAL stores 1 and yields. WAIT claims, and yields while the cell is 0.
 \ A second WAIT does not see a signal that was already claimed.

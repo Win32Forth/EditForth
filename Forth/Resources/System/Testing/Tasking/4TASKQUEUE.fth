@@ -1,4 +1,4 @@
-\ TASKQUEUE.fth — mailbox and fixed-ring smoke (step 4).
+\ 4TASKQUEUE.fth — mailbox and fixed-ring smoke (step 4).
 \ A mailbox is a value plus a full/empty pair, allotted once.
 \ A ring is one producer and one consumer. Head == tail means empty.
 \ The producer publishes the tail with a release store. The consumer

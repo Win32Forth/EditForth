@@ -94,7 +94,12 @@
 .equ TU_INPUT_PTR,   232            // ACCEPT / REFILL buffer, 1024 bytes
 .equ TU_SSTK_PTR,    240            // source stack, 640 bytes
 .equ TU_EVALSTK_PTR, 248            // EVALUATE resume stack, 64 bytes
-.equ TU_BYTES,       256
+// Private dictionary. All three stay 0 until SLICE. 0 means use here_ptr.
+.equ TU_DBASE,       256            // first byte of the slice
+.equ TU_DP,          264            // this task's HERE
+.equ TU_DLIM,        272            // one past the last byte of the slice
+.equ TU_BYTES,       280
+.equ HEADER_ROOM,    512            // bytes a header needs before the first cell
 .equ TASK_STACK_BYTES, 4096
 .equ TASK_WORD_BYTES, 512
 .equ TASK_PAD_BYTES, 1024
@@ -522,6 +527,9 @@ _kernel_cold_start:
 // Clobbers VM regs; leaves x20/x22/x23/x24 ready for interpret.
 _kernel_cold_common:
     stp x29, x30, [sp, #-16]!
+    // _boot_kernel builds headers before _task_cold_init. A stale x27
+    // must not look like a background task with no slice.
+    mov  x27, #0
     adrp x22, data_stack@page
     add  x22, x22, data_stack@pageoff
     add  x22, x22, #4096      // DSP starts at TOP of stack (grows down)
@@ -2092,6 +2100,9 @@ _dict_hash:
 .align 4
 _header_build:
     stp x29, x30, [sp, #-16]!
+    stp x0, x1, [sp, #-16]!        // name, nlen; require clobbers x0 and x1
+    bl   _task_require_dict
+    ldp x0, x1, [sp], #16
     mov x29, sp
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
@@ -2115,10 +2126,22 @@ _header_build:
     add  x24, x24, latest_var@pageoff
 0:
 
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x6, [x0]                   // HERE
-    mov x8, x6                     // HFA
+    bl   _task_dp_bounds           // x0=&dp x1=limit
+    mov  x6, x0
+    adrp x9, here_ptr@page
+    add  x9, x9, here_ptr@pageoff
+    cmp  x6, x9
+    b.eq _hb_save_dp
+    ldr  x8, [x6]
+    add  x7, x8, #HEADER_ROOM
+    cmp  x7, x8
+    b.lo _hb_full
+    cmp  x7, x1
+    b.hi _hb_full
+_hb_save_dp:
+    str  x6, [sp, #-16]!           // &dp, above the flags slot
+    ldr  x6, [x6]                  // HERE
+    mov  x8, x6                    // HFA
 
     // --- counted help first, pad 8 (always at least empty record) ---
     cmp x22, #255
@@ -2213,12 +2236,11 @@ _header_build:
     and x2, x2, x3
     lsl x2, x2, #48
     orr x1, x1, x2
+    ldr  x2, [sp], #16             // &dp
+    str  x6, [x2]
     ldr x5, [sp], #16              // flags from BOOT_WORD
     orr x1, x1, x5                 // FLAG_IMM / FLAG_EMM / FLAG_INLINE
     str x1, [x0, #-8]
-    adrp x2, here_ptr@page
-    add x2, x2, here_ptr@pageoff
-    str x6, [x2]
     str x0, [x10]                  // heads[i] = CFA
     adrp x2, last_cfa@page
     add  x2, x2, last_cfa@pageoff
@@ -2233,6 +2255,19 @@ _header_build:
     ldp x19, x20, [sp], #16
     ldp x29, x30, [sp], #16
     ret
+_hb_full:
+    adrp x0, sem_dict@page
+    add  x0, x0, sem_dict@pageoff
+    bl   _core_release_any
+    add  sp, sp, #16               // flags
+    ldp  x23, x24, [sp], #16
+    ldp  x21, x22, [sp], #16
+    ldp  x19, x20, [sp], #16
+    ldp  x29, x30, [sp], #16
+    adrp x0, str_dict_full@page
+    add  x0, x0, str_dict_full@pageoff
+    bl   _print_string_svc
+    b    _task_stop_or_abandon
 
 // _nfa_from_cfa: x0=CFA → x0=NFA (uses x1)
 _nfa_from_cfa:
@@ -3185,8 +3220,10 @@ XPAUSE_END:
 // ============================================================================
 // Cooperative tasks (phase 1). One VM, one queue. PAUSE yields when MULTI.
 // User area is TU_BYTES, then a 512-cell data stack, then a 512-cell return
-// stack. Offsets are the TU_* equates near RETURN_STACK_SIZE.
-// The console task lives in BSS and keeps the original stacks.
+// stack, then scratch. TU_DBASE, TU_DP, and TU_DLIM stay 0 until SLICE.
+// Offsets are the TU_* equates near RETURN_STACK_SIZE.
+// The console task lives in BSS and keeps the original stacks. Its three
+// slice cells stay 0, so console compilation keeps using here_ptr.
 // ============================================================================
 
 // x0 = 1 if some task other than the current one is awake.
@@ -3559,48 +3596,215 @@ XDICT_SEM:
     add  x20, x20, sem_dict@pageoff
     NEXT
 
+// Running task's dictionary pointer.
+// x0 = address of the DP cell, x1 = limit (one past the last byte),
+// x2 = lowest legal HERE. A task with TU_DP == 0 uses here_ptr and the
+// shared user dictionary. Clobbers x9 and x10. Does not touch x19–x28.
+_task_dp_bounds:
+    mov  x10, x27
+    cbnz x10, _tdb_up
+    adrp x10, up_var@page
+    add  x10, x10, up_var@pageoff
+    ldr  x10, [x10]
+_tdb_up:
+    cbz  x10, _tdb_global
+    ldr  x9, [x10, #TU_DP]
+    cbz  x9, _tdb_global
+    add  x0, x10, #TU_DP
+    ldr  x1, [x10, #TU_DLIM]
+    ldr  x2, [x10, #TU_DBASE]
+    ret
+_tdb_global:
+    adrp x0, here_ptr@page
+    add  x0, x0, here_ptr@pageoff
+    adrp x2, user_dict_area@page
+    add  x2, x2, user_dict_area@pageoff
+    adrp x1, user_dict_size_cell@page
+    add  x1, x1, user_dict_size_cell@pageoff
+    ldr  x1, [x1]
+    add  x1, x2, x1
+    ret
+
+// Stop a background task that cannot compile, or abandon a console evaluate.
+// Does not return. x19 must still be the instruction pointer.
+_task_stop_or_abandon:
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_is_console
+    cbnz x0, _tsoa_abandon
+    bl   _core_is_worker
+    cbnz x0, _tsoa_worker
+    mov  x5, x27
+    cbnz x5, _tsoa_mark
+    adrp x5, up_var@page
+    add  x5, x5, up_var@pageoff
+    ldr  x5, [x5]
+_tsoa_mark:
+    str  xzr, [x5, #TU_STATUS]
+    mov  x6, x19
+    bl   _task_yield
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    cmp  x0, x5
+    b.ne _tsoa_switched
+    mov  x1, #-1
+    str  x1, [x5, #TU_STATUS]
+    mov  x19, x6
+_tsoa_abandon:
+    b    _error_abandon
+_tsoa_switched:
+    ldp  x29, x30, [sp], #16
+    NEXT
+_tsoa_worker:
+    ldp  x29, x30, [sp], #16
+    str  xzr, [x27, #TU_STATUS]
+    mov  x0, #0
+    b    _core_leave
+
+// Console, or a task whose SLICE is set, returns. Any other task prints
+// and does not return. Preserves x19–x28.
+_task_require_dict:
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_is_console
+    cbnz x0, _trd_ok
+    mov  x10, x27
+    cbnz x10, _trd_have
+    adrp x10, up_var@page
+    add  x10, x10, up_var@pageoff
+    ldr  x10, [x10]
+_trd_have:
+    // Null during _boot_kernel: _task_cold_init has not set UP yet.
+    cbz  x10, _trd_ok
+    ldr  x9, [x10, #TU_DP]
+    cbnz x9, _trd_ok
+_trd_none:
+    adrp x0, str_slice_none@page
+    add  x0, x0, str_slice_none@pageoff
+    bl   _print_string_svc
+    ldp  x29, x30, [sp], #16
+    b    _task_stop_or_abandon
+_trd_ok:
+    ldp  x29, x30, [sp], #16
+    ret
+
+// Reserve x0 bytes at HERE and align the new pointer up to 8.
+// For a counted string: the bytes start at the old HERE, and the next
+// cell starts aligned. Returns x0 = the old HERE. Does not return when
+// the task has no slice or the bytes do not fit. Preserves x19–x28.
+_here_reserve:
+    stp  x29, x30, [sp, #-16]!
+    str  x0, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    ldr  x6, [sp], #16
+    mov  x5, x0
+    ldr  x3, [x5]
+    add  x4, x3, x6
+    cmp  x4, x3
+    b.lo _hr_full
+    add  x7, x4, #7
+    cmp  x7, x4
+    b.lo _hr_full
+    bic  x4, x7, #7
+    cmp  x4, x1
+    b.hi _hr_full
+    cmp  x3, x2
+    b.lo _hr_full
+    str  x4, [x5]
+    mov  x0, x3
+    ldp  x29, x30, [sp], #16
+    ret
+
+// Reserve x0 bytes and advance HERE by exactly that many. A cell compile
+// must land on old+8. Aligning here skips the CREATE data field when the
+// previous ALLOT left HERE off a cell boundary, so DOES> @ reads the gap.
+// Same failure and register rules as _here_reserve.
+_here_reserve_exact:
+    stp  x29, x30, [sp, #-16]!
+    str  x0, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    ldr  x6, [sp], #16
+    mov  x5, x0
+    ldr  x3, [x5]
+    add  x4, x3, x6
+    cmp  x4, x3
+    b.lo _hr_full
+    cmp  x4, x1
+    b.hi _hr_full
+    cmp  x3, x2
+    b.lo _hr_full
+    str  x4, [x5]
+    mov  x0, x3
+    ldp  x29, x30, [sp], #16
+    ret
+_hr_full:
+    ldp  x29, x30, [sp], #16
+    adrp x0, str_dict_full@page
+    add  x0, x0, str_dict_full@pageoff
+    bl   _print_string_svc
+    b    _task_stop_or_abandon
+
 // Allot x0 bytes (a multiple of 8) at an aligned HERE, zeroed.
 // Returns the address in x0. A full dictionary prints and does not return.
-// Clobbers x1–x7. Preserves x19–x28.
+// The shared HERE takes DICT-SEM. A private slice does not: one task writes it.
+// Clobbers x1–x7 and x9. Preserves x19–x28.
 _dict_allot:
     stp  x29, x30, [sp, #-16]!
     str  x0, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    ldr  x6, [sp]
+    adrp x9, here_ptr@page
+    add  x9, x9, here_ptr@pageoff
+    cmp  x0, x9
+    b.eq _da_lock
+    mov  x7, #0
+    b    _da_have_lock
+_da_lock:
+    stp  x0, x6, [sp, #-16]!
+    stp  x1, x2, [sp, #-16]!
     adrp x0, sem_dict@page
     add  x0, x0, sem_dict@pageoff
     bl   _core_claim_any
-    ldr  x6, [sp], #16
-    adrp x1, here_ptr@page
-    add  x1, x1, here_ptr@pageoff
-    ldr  x0, [x1]
-    add  x0, x0, #7
-    bic  x0, x0, #7
-    adrp x2, user_dict_area@page
-    add  x2, x2, user_dict_area@pageoff
-    adrp x3, user_dict_size_cell@page
-    add  x3, x3, user_dict_size_cell@pageoff
-    ldr  x3, [x3]
-    add  x2, x2, x3
-    add  x4, x0, x6
-    cmp  x4, x0
+    ldp  x1, x2, [sp], #16
+    ldp  x0, x6, [sp], #16
+    mov  x7, #1
+_da_have_lock:
+    add  sp, sp, #16
+    ldr  x3, [x0]
+    add  x3, x3, #7
+    bic  x3, x3, #7
+    add  x4, x3, x6
+    cmp  x4, x3
     b.lo _da_fail
-    cmp  x4, x2
+    cmp  x4, x1
     b.hi _da_fail
-    mov  x5, x0
-    mov  x7, x6
+    cmp  x3, x2
+    b.lo _da_fail
+    mov  x5, x3
 _da_zero:
     str  xzr, [x5], #8
-    subs x7, x7, #8
+    subs x6, x6, #8
     b.ne _da_zero
-    str  x4, [x1]
+    str  x4, [x0]
+    mov  x0, x3
+    cbz  x7, _da_ret
+    str  x0, [sp, #-16]!
     bl   _core_release_dict
+    ldr  x0, [sp], #16
+_da_ret:
     ldp  x29, x30, [sp], #16
     ret
 _da_fail:
+    cbz  x7, _da_fail_msg
     bl   _core_release_dict
+_da_fail_msg:
+    ldp  x29, x30, [sp], #16
     adrp x0, str_allot_over@page
     add  x0, x0, str_allot_over@pageoff
     bl   _print_string_svc
-    b    _error_abandon
+    b    _task_stop_or_abandon
 
 // Park on the thread in x6, the same way WAIT does.
 // Returns only when this task stays. x19 is kept (or restored). A switch
@@ -4009,25 +4213,24 @@ XACTIVATE_END:
 // (TASK-INIT) ( -- )  allot and link a task at HERE. Used by TASK: after CREATE.
     BOOT_WORD "(TASK-INIT)", "(TASK-INIT) ( -- ) allot user area and stacks at HERE and link the task", 0, XTASK_INIT, XTASK_INIT_END
 XTASK_INIT:
-    adrp x1, here_ptr@page
-    add  x1, x1, here_ptr@pageoff
-    ldr  x0, [x1]
-    adrp x2, user_dict_area@page
-    add  x2, x2, user_dict_area@pageoff
-    adrp x3, user_dict_size_cell@page
-    add  x3, x3, user_dict_size_cell@pageoff
-    ldr  x3, [x3]
-    add  x2, x2, x3
-    mov  x6, #TASK_ALLOT           // 11712 does not fit in an add immediate
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    mov  x7, x0
+    ldr  x0, [x7]
+    mov  x6, #TASK_ALLOT           // 11736 does not fit in an add immediate
     add  x4, x0, x6
-    cmp  x4, x2
+    cmp  x4, x0
+    b.lo _task_allot_fail
+    cmp  x4, x1
     b.hi _task_allot_fail
     mov  x5, x0
 _task_zero:
     str  xzr, [x5], #8
     subs x6, x6, #8
     b.ne _task_zero
-    str  x4, [x1]
+    str  x4, [x7]
+    ldp  x29, x30, [sp], #16
     add  x5, x0, #TU_BYTES
     add  x5, x5, #TASK_STACK_BYTES
     str  x5, [x0, #TU_S0]
@@ -4064,12 +4267,71 @@ _task_link:
     str  x0, [x5, #TU_LINK]
     b    XTASK_INIT_END
 _task_allot_fail:
+    ldp  x29, x30, [sp], #16
     adrp x0, str_allot_over@page
     add  x0, x0, str_allot_over@pageoff
     bl   _print_string_svc
-    b    _error_abandon
+    b    _task_stop_or_abandon
 XTASK_INIT_END:
     NEXT
+
+// SLICE ( n task -- )  Console only. Allot n bytes from the shared HERE and
+// record that region as the task's dictionary. The task must be asleep and
+// must not already have a slice. Console HERE moves past the slice.
+    BOOT_WORD "SLICE", "SLICE ( n task -- ) reserve n bytes as that task's private dictionary", 0, XSLICE, XSLICE_END
+XSLICE:
+    adrp x1, console_task@page
+    add  x1, x1, console_task@pageoff
+    cmp  x27, x1
+    b.eq _xslice_ok
+    adrp x0, str_slice_console@page
+    add  x0, x0, str_slice_console@pageoff
+    bl   _print_string_svc
+    b    XSTOP
+_xslice_ok:
+    mov  x9, x20
+    ldr  x8, [x22], #8
+    ldr  x20, [x22], #8
+    tst  x9, #7
+    b.ne _xslice_bad
+    cmp  x9, x1
+    b.eq _xslice_bad
+    adrp x2, user_dict_area@page
+    add  x2, x2, user_dict_area@pageoff
+    cmp  x9, x2
+    b.lo _xslice_bad
+    adrp x2, here_ptr@page
+    add  x2, x2, here_ptr@pageoff
+    ldr  x2, [x2]
+    cmp  x9, x2
+    b.hs _xslice_bad
+    ldr  x2, [x9, #TU_STATUS]
+    cbnz x2, _xslice_bad
+    ldr  x2, [x9, #TU_DP]
+    cbnz x2, _xslice_bad
+    cmp  x8, #1
+    b.lt _xslice_bad
+    // A size past the current dictionary end fails in _dict_allot.
+    // USER_DICT_MAX does not fit in a mov or cmp immediate.
+    add  x8, x8, #7
+    bic  x8, x8, #7
+    stp  x29, x30, [sp, #-16]!
+    stp  x8, x9, [sp, #-16]!
+    mov  x0, x8
+    bl   _dict_allot
+    ldp  x8, x9, [sp], #16
+    str  x0, [x9, #TU_DBASE]
+    str  x0, [x9, #TU_DP]
+    add  x1, x0, x8
+    str  x1, [x9, #TU_DLIM]
+    ldp  x29, x30, [sp], #16
+    NEXT
+_xslice_bad:
+    adrp x0, str_slice_bad@page
+    add  x0, x0, str_slice_bad@pageoff
+    bl   _print_string_svc
+    b    _error_abandon
+XSLICE_END:
 
 // x1 unused. Cut is forget_cut. Unlink dictionary tasks at or above the cut.
 _task_forget_cut:
@@ -4099,6 +4361,26 @@ _tf_next:
     mov  x13, x14
     b    _tf_loop
 _tf_keep:
+    // A cut inside this task's slice must not leave TU_DP past the new HERE.
+    ldr  x15, [x13, #TU_DP]
+    cbz  x15, _tf_keep_link
+    ldr  x16, [x13, #TU_DBASE]
+    ldr  x17, [x13, #TU_DLIM]
+    cmp  x17, x12
+    b.ls _tf_keep_link
+    cmp  x16, x12
+    b.hs _tf_slice_clear
+    cmp  x15, x12
+    b.ls _tf_slice_lim
+    str  x12, [x13, #TU_DP]
+_tf_slice_lim:
+    str  x12, [x13, #TU_DLIM]
+    b    _tf_keep_link
+_tf_slice_clear:
+    str  xzr, [x13, #TU_DBASE]
+    str  xzr, [x13, #TU_DP]
+    str  xzr, [x13, #TU_DLIM]
+_tf_keep_link:
     mov  x11, x13
     mov  x13, x14
     b    _tf_loop
@@ -4155,6 +4437,9 @@ _task_cold_init:
     adrp x1, eval_resume_stack@page
     add  x1, x1, eval_resume_stack@pageoff
     str  x1, [x0, #TU_EVALSTK_PTR]
+    str  xzr, [x0, #TU_DBASE]
+    str  xzr, [x0, #TU_DP]
+    str  xzr, [x0, #TU_DLIM]
     mov  x1, #1
     adrp x2, sem_graphics@page
     add  x2, x2, sem_graphics@pageoff
@@ -5558,9 +5843,10 @@ XLit_END:
 
     BOOT_WORD "DP", "DP ( -- addr ) dictionary pointer variable address (HERE is DP @)", 0, XDP, XDP_END
 XDP:
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_dp_bounds
+    ldp  x29, x30, [sp], #16
     str x20, [x22, #-8]!
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
     mov x20, x0
 XDP_END:
     NEXT
@@ -5569,10 +5855,11 @@ XDP_END:
 
     BOOT_WORD "HERE", "HERE ( -- addr ) current dictionary pointer (value)", 0, XHERE, XHERE_END
 XHERE:
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_dp_bounds
+    ldr  x0, [x0]
+    ldp  x29, x30, [sp], #16
     DPUSH
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x20, [x0]
 XHERE_END:
     NEXT
 
@@ -5582,24 +5869,20 @@ XHERE_END:
     BOOT_WORD "ALLOT", "ALLOT ( n -- ) allocate n bytes in dictionary", 0, XALLOT, XALLOT_END
 XALLOT:
     bl   _core_console_only
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_require_dict
     DPOP                           // n
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x2, [x1]                   // HERE
-    add x3, x2, x0                 // candidate HERE
-    // lower bound = start of user dictionary
-    adrp x4, user_dict_area@page
-    add x4, x4, user_dict_area@pageoff
-    cmp x3, x4
+    str  x0, [sp, #-16]!
+    bl   _task_dp_bounds           // x0=&dp x1=limit x2=base
+    ldr  x6, [sp], #16
+    ldr  x3, [x0]
+    add  x4, x3, x6
+    cmp  x4, x2
     b.lo _allot_under
-    // upper bound = start + logical size
-    adrp x5, user_dict_size_cell@page
-    add x5, x5, user_dict_size_cell@pageoff
-    ldr x5, [x5]
-    add x5, x4, x5                 // end
-    cmp x3, x5
+    cmp  x4, x1
     b.hi _allot_over
-    str x3, [x1]
+    str  x4, [x0]
+    ldp  x29, x30, [sp], #16
     NEXT
 _allot_under:
     adrp x0, str_allot_under@page
@@ -5609,9 +5892,9 @@ _allot_over:
     adrp x0, str_allot_over@page
     add  x0, x0, str_allot_over@pageoff
 _allot_fail:
-    // print message via host emit, then abort to QUIT
     bl   _print_string_svc
-    b    _error_abandon
+    ldp  x29, x30, [sp], #16
+    b    _task_stop_or_abandon
 XALLOT_END:
 
 // , ( x -- ) compile cell at HERE
@@ -5854,11 +6137,8 @@ XCOLON:
     bl _header_build               // x0 = CFA, HERE = CFA+8
     bl _nfa_smudge_cfa             // ANS: not findable until ;
     // Spare cell at CFA+8. Threaded body starts at CFA+16.
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x0, [x1]
-    str xzr, [x0], #8
-    str x0, [x1]
+    mov  x0, #0
+    bl   _compile_cell
     adrp x0, state_var@page
     add x0, x0, state_var@pageoff
     mov x1, #1
@@ -5886,6 +6166,7 @@ _colon_fail:
 XNONAME:
     // empty name + pending/empty help + DOCOL
     stp x29, x30, [sp, #-16]!
+    bl   _core_console_only
     bl _take_pending_help          // x2/x3 = help
     adrp x0, boot_h_empty@page
     add x0, x0, boot_h_empty@pageoff
@@ -5895,11 +6176,8 @@ XNONAME:
     mov x5, #0
     bl _header_build               // x0 = CFA, HERE = CFA+8
     bl _nfa_smudge_cfa
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x0, [x1]
-    str xzr, [x0], #8
-    str x0, [x1]
+    mov  x0, #0
+    bl   _compile_cell
     ldp x29, x30, [sp], #16
     adrp x1, noname_xt@page
     add x1, x1, noname_xt@pageoff
@@ -5969,11 +6247,8 @@ XCREATE:
     mov x5, #0
     bl _header_build               // HERE = CFA+8
     // reserve does_ip cell (0); user PFA follows
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x0, [x1]
-    str xzr, [x0], #8
-    str x0, [x1]
+    mov  x0, #0
+    bl   _compile_cell
     ldp x23, x24, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
@@ -7199,24 +7474,38 @@ XCURRENT:
 
     BOOT_WORD "WORDLIST", "WORDLIST ( -- wid ) create empty word list", 0, XWORDLIST
 XWORDLIST:
-    adrp x0, here_ptr@page
-    add  x0, x0, here_ptr@pageoff
-    ldr  x1, [x0]
-    // align HERE
-    add  x1, x1, #7
-    and  x1, x1, #~7
-    mov  x2, x1                    // wid = first head cell
-    mov  x3, #DICT_THREADS
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    ldr  x3, [x0]
+    add  x3, x3, #7
+    bic  x3, x3, #7
+    mov  x4, #DICT_THREADS
+    lsl  x4, x4, #3
+    add  x5, x3, x4
+    cmp  x5, x3
+    b.lo _wl_full
+    cmp  x5, x1
+    b.hi _wl_full
+    mov  x6, x3
+    mov  x4, #DICT_THREADS
 1:
-    str  xzr, [x1], #8
-    subs x3, x3, #1
+    str  xzr, [x6], #8
+    subs x4, x4, #1
     b.ne 1b
-    str  x1, [x0]
-    mov  x0, x2                    // wid for register + return
+    str  x5, [x0]
+    mov  x0, x3
     bl   _wordlist_register        // clobbers x1–x5; preserves x0 (= wid)
+    ldp  x29, x30, [sp], #16
     DPUSH
     mov  x20, x0                   // must use x0, not x2 (x2 was reg_n)
     NEXT
+_wl_full:
+    ldp  x29, x30, [sp], #16
+    adrp x0, str_dict_full@page
+    add  x0, x0, str_dict_full@pageoff
+    bl   _print_string_svc
+    b    _task_stop_or_abandon
 
 // (REGISTER-WID) ( wid -- )  append a vocabulary body to WORDLISTS.
 // VOCABULARY allots the heads itself (the body is the wid) and must register
@@ -11007,19 +11296,14 @@ XMS_END:
 
     BOOT_WORD "UNUSED", "UNUSED ( -- u ) bytes remaining in dictionary (HERE to dictionary limit)", 0, XUNUSED, XUNUSED_END
 XUNUSED:
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x1, [x0]                   // HERE
-    adrp x0, user_dict_area@page
-    add x0, x0, user_dict_area@pageoff
-    adrp x2, user_dict_size_cell@page
-    add x2, x2, user_dict_size_cell@pageoff
-    ldr x2, [x2]
-    add x0, x0, x2                 // end of user dictionary
-    subs x0, x0, x1                // free = end - HERE
-    b.hs 1f
-    mov x0, xzr                    // clamp if overrun
-1:
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_dp_bounds
+    ldr  x3, [x0]
+    subs x0, x1, x3
+    b.hs _unused_ok
+    mov  x0, xzr
+_unused_ok:
+    ldp  x29, x30, [sp], #16
     str x20, [x22, #-8]!
     mov x20, x0
 XUNUSED_END:
@@ -11272,28 +11556,26 @@ XSPACES_END:
 
     BOOT_WORD "C,", "C, ( b -- ) compile a byte", 0, XCCOMMA
 XCCOMMA:
-    mov w0, w20
-    ldr x20, [x22], #8
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x2, [x1]
-    add x3, x2, #1
-    adrp x4, user_dict_area@page
-    add x4, x4, user_dict_area@pageoff
-    adrp x5, user_dict_size_cell@page
-    add x5, x5, user_dict_size_cell@pageoff
-    ldr x5, [x5]
-    add x5, x4, x5
-    cmp x3, x5
-    b.hi 1f
-    strb w0, [x2]
-    str x3, [x1]
+    bl   _core_console_only
+    stp  x29, x30, [sp, #-16]!
+    bl   _task_require_dict
+    bl   _task_dp_bounds
+    mov  w6, w20
+    ldr  x20, [x22], #8
+    ldr  x2, [x0]
+    add  x3, x2, #1
+    cmp  x3, x1
+    b.hi _ccomma_full
+    strb w6, [x2]
+    str  x3, [x0]
+    ldp  x29, x30, [sp], #16
     NEXT
-1:
+_ccomma_full:
+    ldp  x29, x30, [sp], #16
     adrp x0, str_dict_full@page
     add  x0, x0, str_dict_full@pageoff
     bl   _print_string_svc
-    b    _error_abandon
+    b    _task_stop_or_abandon
 
 // S>D ( n -- d )  sign-extend single to double; hi cell is TOS
 
@@ -13122,9 +13404,11 @@ _sq_comp:
     // copy u bytes from c-addr to HERE
     ldr x5, [x23], #8               // pop u
     ldr x2, [x23], #8               // pop c-addr
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x1, [x0]                    // dest
+    stp x2, x5, [sp, #-16]!
+    mov x0, x5
+    bl  _here_reserve
+    ldp x2, x5, [sp], #16
+    mov x1, x0                      // dest
     mov x3, #0
 _sq_cpy:
     cmp x3, x5
@@ -13134,12 +13418,6 @@ _sq_cpy:
     add x3, x3, #1
     b _sq_cpy
 _sq_al:
-    add x1, x1, x5
-    add x1, x1, #7
-    bic x1, x1, #7
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    str x1, [x0]
     ldr x19, [x23], #8              // RPOP IP
     NEXT
 
@@ -13244,9 +13522,11 @@ _cq_comp:
     bl _compile_cell
     ldr x5, [x23], #8
     ldr x2, [x23], #8
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x1, [x0]
+    stp x2, x5, [sp, #-16]!
+    add x0, x5, #1
+    bl  _here_reserve
+    ldp x2, x5, [sp], #16
+    mov x1, x0
     strb w5, [x1], #1
     mov x3, #0
 3:
@@ -13257,12 +13537,6 @@ _cq_comp:
     add x3, x3, #1
     b 3b
 4:
-    add x1, x1, x5
-    add x1, x1, #7
-    bic x1, x1, #7
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    str x1, [x0]
     ldr x19, [x23], #8
     NEXT
 
@@ -13471,9 +13745,11 @@ _se_comp:
     bl _compile_cell
     ldr x5, [x23], #8
     ldr x2, [x23], #8
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x1, [x0]
+    stp x2, x5, [sp, #-16]!
+    mov x0, x5
+    bl  _here_reserve
+    ldp x2, x5, [sp], #16
+    mov x1, x0
     mov x3, #0
 1:
     cmp x3, x5
@@ -13483,12 +13759,6 @@ _se_comp:
     add x3, x3, #1
     b 1b
 2:
-    add x1, x1, x5
-    add x1, x1, #7
-    bic x1, x1, #7
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    str x1, [x0]
     ldr x19, [x23], #8
     NEXT
 
@@ -13748,9 +14018,11 @@ _dq_comp:
     bl _compile_cell
     ldr x5, [x23], #8
     ldr x2, [x23], #8
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    ldr x1, [x0]
+    stp x2, x5, [sp, #-16]!
+    mov x0, x5
+    bl  _here_reserve
+    ldp x2, x5, [sp], #16
+    mov x1, x0
     mov x3, #0
 _dq_cpy:
     cmp x3, x5
@@ -13760,12 +14032,6 @@ _dq_cpy:
     add x3, x3, #1
     b _dq_cpy
 _dq_al:
-    add x1, x1, x5
-    add x1, x1, #7
-    bic x1, x1, #7
-    adrp x0, here_ptr@page
-    add x0, x0, here_ptr@pageoff
-    str x1, [x0]
     adrp x0, cfa_type@page
     add x0, x0, cfa_type@pageoff
     ldr x0, [x0]
@@ -13852,9 +14118,9 @@ _compile_slit:
     mov x0, x20
     bl _compile_cell
     // copy bytes to HERE
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    ldr x21, [x1]                   // dest
+    mov x0, x20
+    bl  _here_reserve
+    mov x21, x0                     // dest
     mov x2, #0
 _cs_copy:
     cmp x2, x20
@@ -13864,13 +14130,6 @@ _cs_copy:
     add x2, x2, #1
     b _cs_copy
 _cs_pad:
-    add x21, x21, x20
-    // align HERE to 8
-    add x21, x21, #7
-    bic x21, x21, #7
-    adrp x1, here_ptr@page
-    add x1, x1, here_ptr@pageoff
-    str x21, [x1]
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     ldp x29, x30, [sp], #16
@@ -14397,6 +14656,23 @@ _report_undef_loc:
 // Stack grows down; empty DSP = data_stack+4096. Underflow if DSP > SP0.
 // Also reject DSP below data_stack (overflow into other BSS).
 _check_stack:
+    // The running task's stack, not the console BSS buffer. Console TU_S0
+    // is still data_stack+4096, so a single-task session checks the same range.
+    mov  x0, x27
+    cbnz x0, _cs_have
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+_cs_have:
+    cbz  x0, _cs_bss
+    ldr  x1, [x0, #TU_S0]
+    sub  x0, x1, #TASK_STACK_BYTES
+    cmp  x22, x1
+    b.hi _stack_underflow
+    cmp  x22, x0
+    b.lo _stack_overflow
+    ret
+_cs_bss:
     adrp x0, data_stack@page
     add x0, x0, data_stack@pageoff
     add x1, x0, #4096              // SP0
@@ -16679,31 +16955,19 @@ _wr_done:
     ret
 
 // _compile_cell: x0 = value, compile at HERE (bounds-checked)
-// On overflow: message + abandon (same as ALLOT over dict end).
+// On overflow: message, then stop a background task or abandon the console.
+// Does not touch x19–x28, so a failed compile still yields with the real IP.
     BOOT_WORD "(COMPILE-CELL)", "(COMPILE-CELL) ( -- ) compile cell at HERE (bounds-checked)", FLAG_EMM, XCOMPILE_CELL, XCOMPILE_CELL_END
 XCOMPILE_CELL:
 _compile_cell:
-    adrp x1, here_ptr@page
-    add  x1, x1, here_ptr@pageoff
-    ldr  x2, [x1]                  // HERE
-    add  x3, x2, #8                // candidate HERE
-    adrp x4, user_dict_area@page
-    add  x4, x4, user_dict_area@pageoff
-    adrp x5, user_dict_size_cell@page
-    add  x5, x5, user_dict_size_cell@pageoff
-    ldr  x5, [x5]
-    add  x5, x4, x5                // end
-    cmp  x3, x5
-    b.hi 1f
-    str  x0, [x2]
-    str  x3, [x1]
+    stp  x29, x30, [sp, #-16]!
+    str  x0, [sp, #-16]!
+    mov  x0, #8
+    bl   _here_reserve_exact
+    ldr  x1, [sp], #16
+    str  x1, [x0]
+    ldp  x29, x30, [sp], #16
     ret
-1:
-    // clobber-safe: we will not return
-    adrp x0, str_dict_full@page
-    add  x0, x0, str_dict_full@pageoff
-    bl   _print_string_svc
-    b    _error_abandon
 XCOMPILE_CELL_END:
 
 // ============================================================================
@@ -21307,6 +21571,9 @@ str_act_interp: .asciz "ACTIVATE is only valid inside a colon definition\n"
 str_act_self:   .asciz "ACTIVATE: a task cannot activate itself\n"
 str_cores_console: .asciz "? CORES only from the console task\n"
 str_cores_word: .asciz "? CORES: console only\n"
+str_slice_console: .asciz "? SLICE only from the console task\n"
+str_slice_bad:  .asciz "? SLICE: sleeping task and a positive size\n"
+str_slice_none: .asciz "? SLICE: task has no dictionary\n"
 str_redef:  .asciz " is redefined\n"
 .align 8
 quit_jmpbuf:        .skip 256      // sigjmp_buf for fault recovery

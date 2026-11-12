@@ -1,6 +1,6 @@
 # Multi-tasking
 
-**Status:** steps 1–5 are in the Mac kernel. Step 6 is not implemented. Cold start is `SINGLE`, and `CORES` is off.
+**Status:** steps 1–6 are in the Mac kernel. Cold start is `SINGLE`, and `CORES` is off.
 **Scope:** Mac EditForth (`Forth/Kernel/forth.s`, `Forth/Kernel/kernel2.fth`, `Forth/Host/KernelBridge.swift`). EditForthPWA stays one thread.
 **Source:** Brad Rodriguez, [Forth Multitasking in a Nutshell](https://www.bradrodriguez.com/papers/mtasking.html) (September 1992).
 
@@ -12,7 +12,7 @@ One task model, two schedulers. Cooperative is the default. Multi-core is a late
 
 `KEY` uses that same switch test, and only when a `KEY?` hook is installed and reports no key waiting. With no hook, `KEY` blocks as before. The waiting task resumes through a per-task trampoline so the rest of `KEY` still runs.
 
-`TASK:` refuses a name that already exists, then `CREATE`s and `(TASK-INIT)` allots the block at `HERE`: a 256-byte user area, a 512-cell data stack, a 512-cell return stack, and 3264 bytes of private scratch. That is 11712 bytes. The task is asleep until `ACTIVATE`. Each new task is linked immediately after the console, so the newest task runs first, and the circle returns to the console.
+`TASK:` refuses a name that already exists, then `CREATE`s and `(TASK-INIT)` allots the block at `HERE`: a 280-byte user area, a 512-cell data stack, a 512-cell return stack, and 3264 bytes of private scratch. That is 11736 bytes. Step 1 used a 256-byte user area and 11712 bytes. Step 6 adds the three slice cells. The task is asleep until `ACTIVATE`. Each new task is linked immediately after the console, so the newest task runs first, and the circle returns to the console.
 
 `ACTIVATE` is valid only inside a colon definition. It sets the task's instruction pointer to the body that follows, empties that task's data stack, plants a `STOP` sentinel on its return stack, copies the current `BASE`, sets `STATE` to zero, marks the task awake, and returns to the caller of the defining word. It does not switch yet. The task starts at the next yield. A body that returns hits `STOP` and then parks. `WAKE` of a finished task resumes that park. It does not rerun the old body.
 
@@ -22,9 +22,9 @@ One task model, two schedulers. Cooperative is the default. Multi-core is a late
 
 `GROWMEMORYMB` from any task other than the console prints `? GROWMEMORYMB only from the console task` and `STOP`s that task. The console line continues, and the once-per-session flag is not consumed.
 
-`BASE` and `STATE` are saved and restored with the task. A background task runs an already-compiled body. It does not `INCLUDE`, load a block, or compile.
+`BASE` and `STATE` are saved and restored with the task. A background task runs an already-compiled body. It does not `INCLUDE` or load a block. It compiles only after `SLICE` reserves a private dictionary.
 
-The sample is `Forth/Resources/Library/Sample/TASKCLOCK.fth`. On the Debug kernel, 20 console `PAUSE`s advanced the counter by 20, `SINGLE` held it, `STOP` held it, `WAKE` added one tick per further `PAUSE`, a background `GROWMEMORYMB` was refused, and `ANEW` removed both tasks. The same counts held after step 2. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
+The sample is `Forth/Resources/System/Testing/Tasking/1TASKCLOCK.fth`. On the Debug kernel, 20 console `PAUSE`s advanced the counter by 20, `SINGLE` held it, `STOP` held it, `WAKE` added one tick per further `PAUSE`, a background `GROWMEMORYMB` was refused, and `ANEW` removed both tasks. The same counts held after step 2. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
 ## Step 2 as built
 
@@ -40,7 +40,7 @@ The console pointers aim at the existing BSS buffers, so a single-task session u
 
 `INCLUDE`, `INCLUDED`, `REQUIRED`, `(INCLUDE)`, and `(LINE-SOURCE)` from a background task print `? INCLUDE only from the console task` and `STOP`. `LOAD` and `BLOCK` print `? block load only from the console task` and `STOP`. The console line continues.
 
-The sample is `Forth/Resources/Library/Sample/TASKSCRATCH.fth`. Two tasks each parsed a different name and pictured a different number. A `PAUSE` sat between `WORD` and the copy, and inside `<#` … `#>`. The run printed `alpha-one`, `beta-two`, `111`, `222`, and `scratch-ok`, then both refuse lines, `refuse-returned`, `single-ok`, and `depth=0`.
+The sample is `Forth/Resources/System/Testing/Tasking/2TASKSCRATCH.fth`. Two tasks each parsed a different name and pictured a different number. A `PAUSE` sat between `WORD` and the copy, and inside `<#` … `#>`. The run printed `alpha-one`, `beta-two`, `111`, `222`, and `scratch-ok`, then both refuse lines, `refuse-returned`, `single-ok`, and `depth=0`.
 
 ## Step 3 as built
 
@@ -50,9 +50,9 @@ If `MULTI` is off, or no other task is awake, `WAIT` prints `? WAIT: no other ta
 
 A second `SIGNAL` before the matching `WAIT` stores `1` again. The cell does not count. The sample hands off one signal at a time, so each `SIGNAL` is claimed once.
 
-`GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. On the cooperative path the kernel does not take them inside `EMIT`, a blit, or header linking. While `CORES` is on, a worker takes the console cell around emit and the graphics cell around a blit, and allot and header linking take the dictionary cell. A task that claims one releases it before `WAIT`.
+`GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM` are the three device cells. They start free. Cold init sets them back to `1`. On the cooperative path the kernel does not take them inside `EMIT`, a blit, or header linking. While `CORES` is on, a worker takes the console cell around emit and the graphics cell around a blit, and shared-dictionary allot and header linking take the dictionary cell. A private-slice allot does not. A task that claims one releases it before `WAIT`.
 
-The sample is `Forth/Resources/Library/Sample/TASKSEM.fth`. Console `CLAIM` printed `-1`, `0`, `-1`. The device cells printed `1`, `0`, `1`, `1`, then the stuck-wait line and `wait-stuck-ok`. Two tasks then printed `hits1=1`, `hits2=1`, `hits3=2`, `hits4=2`, `hits5=2`, `hits6=3`, `sem-ok`, and `depth=0`. `TASKCLOCK.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
+The sample is `Forth/Resources/System/Testing/Tasking/3TASKSEM.fth`. Console `CLAIM` printed `-1`, `0`, `-1`. The device cells printed `1`, `0`, `1`, `1`, then the stuck-wait line and `wait-stuck-ok`. Two tasks then printed `hits1=1`, `hits2=1`, `hits3=2`, `hits4=2`, `hits5=2`, `hits6=3`, `sem-ok`, and `depth=0`. `1TASKCLOCK.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
 ## Step 4 as built
 
@@ -62,7 +62,7 @@ The sample is `Forth/Resources/Library/Sample/TASKSEM.fth`. Console `CLAIM` prin
 
 While the cell is busy and another task can run, the word yields and resumes on a retry. The following word is saved in the same user-area cell `KEY` and `WAIT` use. A task does not call `>MBOX`, `MBOX>`, `>Q`, or `Q>` from inside `KEY` or `WAIT`. If `MULTI` is off, or no other task is awake, the word prints a stuck line, drops its inputs, and does not take the cell. `MBOX>` and `Q>` then push `0`. The lines are `? >MBOX: no other task can receive`, `? MBOX>: no other task can send`, `? >Q: no other task can receive`, and `? Q>: no other task can send`. `QUEUE` of fewer than 2 slots prints `? QUEUE: need at least 2 slots` and does not allot.
 
-The sample is `Forth/Resources/Library/Sample/TASKQUEUE.fth`. With `MULTI` off, a second `>MBOX` and a second `>Q` printed the stuck lines. The held mailbox value was `0`, and the two-slot ring depth was `0`. Two tasks then moved 8 mailbox cells (`mbox-got=8`, `mbox-bad=0`, `mbox-ok`) and 4096 ring cells (`q-got=4096`, `q-bad=0`, high-water depth `15` on a 16-slot ring, `q-depth=0`, `queue-ok`, `depth=0`). `TASKCLOCK.fth` and `TASKSEM.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
+The sample is `Forth/Resources/System/Testing/Tasking/4TASKQUEUE.fth`. With `MULTI` off, a second `>MBOX` and a second `>Q` printed the stuck lines. The held mailbox value was `0`, and the two-slot ring depth was `0`. Two tasks then moved 8 mailbox cells (`mbox-got=8`, `mbox-bad=0`, `mbox-ok`) and 4096 ring cells (`q-got=4096`, `q-bad=0`, high-water depth `15` on a 16-slot ring, `q-depth=0`, `queue-ok`, `depth=0`). `1TASKCLOCK.fth` and `3TASKSEM.fth` still passed. With `MULTI` left off, ANS-VALIDATE reported 395 passed, 0 failed.
 
 ## Step 5 as built
 
@@ -76,11 +76,25 @@ A worker runs until `PAUSE`, `STOP`, or a park inside `WAIT`, `>MBOX`, `MBOX>`, 
 
 `x27` is the user area of the task on this thread. The console thread keeps `x27` equal to `up_var`. A worker sets `x27` to its own record and leaves `up_var` on the console. `x28` stays 0 on a worker, so the debugger stays on the console. `BASE` and `STATE` stay the shared cells. The sample loops do not read or write them.
 
-`EMIT` and `KEY` from a worker take `CONSOLE-SEM` around the existing emit buffer and key queue. The host drains that buffer on the main queue. A blit copies the graphics buffer, then posts the redraw to the main queue, and the worker holds `GRAPHICS-SEM` around the copy. A worker does not hop onto `64Forth.kernel`. The console evaluate, including `CORES-JOIN`, already holds that queue. While `CORES` is on, dictionary allot and header linking take `DICT-SEM`, including the console, and release it before a park. `evalLock` is unchanged.
+`EMIT` and `KEY` from a worker take `CONSOLE-SEM` around the existing emit buffer and key queue. The host drains that buffer on the main queue. A blit copies the graphics buffer, then posts the redraw to the main queue, and the worker holds `GRAPHICS-SEM` around the copy. A worker does not hop onto `64Forth.kernel`. The console evaluate, including `CORES-JOIN`, already holds that queue. While `CORES` is on, allot from the shared `HERE` and header linking take `DICT-SEM`, including the console, and release it before a park. An allot inside a private slice does not take it. `evalLock` is unchanged.
 
-A live worker that executes `:`, `CREATE`, `ALLOT`, `,`, `WORD`, or `EVALUATE` prints `? CORES: console only` and stops. Background tasks still run an already-compiled body.
+A live worker that executes `:`, `:NONAME`, `CREATE`, `ALLOT`, `,`, `C,`, `WORD`, or `EVALUATE` prints `? CORES: console only` and stops. Background tasks still run an already-compiled body.
 
-The sample is `Forth/Resources/Library/Sample/TASKCORES.fth`. Two workers moved 100000 cells through a 16-slot ring. The console printed `console-ok 1 1 1` while both live cells were still set, then after the join `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, and `depth=0`. With `CORES` left off, `TASKCLOCK.fth`, `TASKQUEUE.fth`, and `TASKSEM.fth` still passed, and ANS-VALIDATE reported 395 passed, 0 failed.
+The sample is `Forth/Resources/System/Testing/Tasking/5TASKCORES.fth`. Two workers moved 100000 cells through a 16-slot ring. The console printed `console-ok 1 1 1` while both live cells were still set, then after the join `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, and `depth=0`. With `CORES` left off, `1TASKCLOCK.fth`, `4TASKQUEUE.fth`, and `3TASKSEM.fth` still passed, and ANS-VALIDATE reported 395 passed, 0 failed.
+
+## Step 6 as built
+
+`SLICE` is console-only. It allots from the console `HERE` and records the base, the task `HERE`, and the limit on that task. The console cells stay zero, so console compilation stays on the shared pointer. A task does not receive a private `HERE` until this call. `WORD` still uses `word_scratch`.
+
+A cooperative task with a slice can `CREATE` and `ALLOT` inside it. The console `HERE` does not move. Without a slice, `ALLOT`, `CREATE`, `MAILBOX`, and `QUEUE` print `? SLICE: task has no dictionary` and `STOP`. `GROWMEMORYMB` is still not a per-task heap. It stays console-only, once per session, and does not shrink. The console raises the shared fence before reserving a slice that needs the room.
+
+`LAST` stays shared. While `CORES` is on, header linking still takes `DICT-SEM`. A private allot does not. A live worker is still refused for `:`, `:NONAME`, `CREATE`, `ALLOT`, `,`, `C,`, `WORD`, and `EVALUATE`.
+
+`FORGET` trims a kept task's slice when the cut lands inside it, clears the three cells when the slice starts at or above the cut, and leaves the slice when the cut is past its limit.
+
+The between-word stack check uses the running task's `S0`. The console `S0` is still the top of `data_stack`, so a single-task session checks the same range as before.
+
+The sample is `Forth/Resources/System/Testing/Tasking/6TASKSLICE.fth`. One cooperative task compiled and allotted inside a 4096-byte slice. The console printed `fence-held`, `slice-below`, `here-after-task`, `word-stable`, `word-apart`, `bare-hit=0`, `answer=42`, and `buf=99`. An unsliced `ALLOT` printed `? SLICE: task has no dictionary`. A worker `EVALUATE` printed `? CORES: console only` and `went=0`. `ANEW` then printed `answer-gone` and `comp-gone`.
 
 ## What a task is
 
@@ -105,19 +119,24 @@ User-area fields:
 - `S0` and `R0`
 - `BASE` and `STATE`
 - pointers to `word_scratch`, `PAD`, the input buffer, the source stack, and the evaluate-resume stack
+- slice base, slice `HERE`, and slice limit. All three stay 0 until `SLICE`. Zero means the shared dictionary
 - `HLD`, `SOURCE`, `>IN`, `SOURCE-ID`, `BLK`, the line window, the parse cursor, and the source-stack depth
 
 The console user area is a fixed BSS record. Its stacks are the existing `data_stack` and `return_stack` (512 cells each). Its scratch pointers aim at the existing global buffers, so a single-task session uses the same addresses as today.
 
 ## Dictionary and HERE
 
-`TASK:` allots a background task's user area and two stacks from the shared dictionary. The console `HERE` moves past that block and further console definitions compile there.
+`TASK:` allots a background task's user area and two stacks from the shared dictionary. The console `HERE` moves past that block and further console definitions compile there. A task has no private dictionary until the console calls `SLICE`.
 
-A background task runs an already-compiled word. It does not get its own `HERE`. A private dictionary slice is a later step, and only if a background task must `CREATE` or `ALLOT`. That slice would sit inside the task block, with its own `HERE` and limit. The console `HERE` would already be past the whole block.
+`SLICE ( n task -- )` reserves `n` bytes, rounded up to a cell, from the console `HERE` and records the base, the task's own `HERE`, and the limit. The task must be asleep, not the console, and not already sliced. `TASK:` then `4096 T SLICE` places that slice immediately after the task block. The console `HERE` is already past those bytes. The console user area keeps the three cells at zero and keeps compiling into the shared dictionary. This is not a private `HERE` for every task.
 
-`WORD` does not write at `HERE`. It writes `word_scratch`. Compiled bytes below `HERE` stay put while tasks run. Two tasks that both compile would share the one `HERE`, so background tasks do not compile until the private-slice step.
+A cooperative task with a slice can `CREATE`, `ALLOT`, and `,` inside it. Those writes do not move the console `HERE`. `WORD` writes `word_scratch`, not that `HERE`. An unsliced background `ALLOT`, `CREATE`, `MAILBOX`, or `QUEUE` prints `? SLICE: task has no dictionary` and `STOP`s. The console line continues.
 
-`FORGET` and `ANEW` unlink any task whose user area is at or above the cut before reclaiming that memory. The console task is a BSS record, so a dictionary cut cannot remove it. The unlink runs before the space is reused.
+`LAST` and the `CURRENT` wordlist stay shared. While `CORES` is on, a live worker is still refused for `:`, `:NONAME`, `CREATE`, `ALLOT`, `,`, `C,`, `WORD`, and `EVALUATE`. Shared-dictionary allot and header linking take `DICT-SEM`. An allot inside a private slice does not. Header linking still takes `DICT-SEM` when `CORES` is on.
+
+`GROWMEMORYMB` is not the slice allocator. It stays console-only, once per session, and does not shrink. The console raises the one shared fence before reserving slices that need the room.
+
+`FORGET` and `ANEW` unlink any task whose user area is at or above the cut before reclaiming that memory. The console task is a BSS record, so a dictionary cut cannot remove it. The unlink runs before the space is reused. A kept task's slice is cleared when the cut is at or below its base, trimmed to the cut when the cut falls inside it, and left in place when the cut is past its limit.
 
 ## GROWMEMORYMB
 
@@ -146,6 +165,7 @@ The 256 KiB `file_buffer` and the block buffer stay shared. Only the console tas
 | Word | Effect |
 | --- | --- |
 | `TASK:` | Allot the user area and two stacks, link the task. Refuse a second create of the same task. |
+| `SLICE` | `( n task -- )` Reserve n bytes, rounded up to a cell, as that sleeping task's private dictionary. Console only. |
 | `ACTIVATE` | Set the new task's instruction pointer to the high-level body that follows. Used inside a definition, not while interpreting. The body loops, or ends in `STOP`. |
 | `SLEEP` | Mark a task asleep. |
 | `WAKE` | Mark a task awake. |
@@ -210,18 +230,19 @@ One aligned cell may be published with a plain store. A second cell, a counted s
 3. **Semaphores.** Landed. `CLAIM` `RELEASE` `WAIT` `SIGNAL`, plus `GRAPHICS-SEM`, `CONSOLE-SEM`, and `DICT-SEM`. See "Step 3 as built".
 4. **Mailbox and queue.** Landed. `MAILBOX` `>MBOX` `MBOX>` and `QUEUE` `>Q` `Q>` `Q-DEPTH`. Fixed rings in the shared dictionary. See "Step 4 as built".
 5. **Multi-core scheduler.** Landed. `CORES` `COOP` `CORES-JOIN`. Console queue unchanged. Compute tasks on up to four worker queues. See "Step 5 as built".
-6. **Private dictionary slice.** Only if a background task must compile. Not implemented.
+6. **Private dictionary slice.** Landed. `SLICE`. A background task compiles into that slice. The console `HERE` stays put. See "Step 6 as built".
 
 ## Checks
 
-- One task and `MULTI` off: `PAUSE` still flushes and returns. Passed (`pause-ok` in `TASKCLOCK.fth`, and ANS-VALIDATE 395 passed, 0 failed).
+- One task and `MULTI` off: `PAUSE` still flushes and returns. Passed (`pause-ok` in `1TASKCLOCK.fth`, and ANS-VALIDATE 395 passed, 0 failed).
 - A counter task advances while the console accepts a line. `SINGLE` freezes it. `STOP` removes it from the rotation. Passed (20 pauses → 20, then the count held, then `WAKE` added one per pause).
 - `ANEW` of a file that created a task unlinks it, and the circle still reaches the console. Passed (`clock-gone`, `gmm-gone`, then pauses after the old blocks were overwritten).
-- Two tasks can each `BL WORD` and `<# #S #>` without seeing the other's text. Passed (`TASKSCRATCH.fth`: `alpha-one` / `beta-two`, `111` / `222`, `scratch-ok`). A background `INCLUDE` and `LOAD` printed the refuse lines and returned to the console.
-- A flag passed between two tasks delivers every `SIGNAL` once. Passed (`TASKSEM.fth`: hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`). A pause with no new `SIGNAL` left the count unchanged.
-- A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth. Passed (`TASKQUEUE.fth`: 4096 cells, `q-bad=0`, high-water depth `15` of 16 slots, then `queue-ok`).
+- Two tasks can each `BL WORD` and `<# #S #>` without seeing the other's text. Passed (`2TASKSCRATCH.fth`: `alpha-one` / `beta-two`, `111` / `222`, `scratch-ok`). A background `INCLUDE` and `LOAD` printed the refuse lines and returned to the console.
+- A flag passed between two tasks delivers every `SIGNAL` once. Passed (`3TASKSEM.fth`: hits `1`, `1`, `2`, `2`, `2`, `3`, then `sem-ok`). A pause with no new `SIGNAL` left the count unchanged.
+- A producer and a consumer move several thousand cells with no loss, no duplicate, and a bounded depth. Passed (`4TASKQUEUE.fth`: 4096 cells, `q-bad=0`, high-water depth `15` of 16 slots, then `queue-ok`).
 - ANS-VALIDATE stays a single-task run. Passed again with `CORES` left off: 395 passed, 0 failed.
-- With `CORES` on, two counting loops overlap, exchange counts through the queue, and the console still runs the following lines. Passed (`TASKCORES.fth`: `console-ok 1 1 1`, `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, `depth=0`). With `CORES` left off, `TASKCLOCK.fth`, `TASKQUEUE.fth`, and `TASKSEM.fth` still passed.
+- With `CORES` on, two counting loops overlap, exchange counts through the queue, and the console still runs the following lines. Passed (`5TASKCORES.fth`: `console-ok 1 1 1`, `overlap=1`, `pgot=100000`, `cgot=100000`, `cbad=0`, `q-depth=0`, `depth=0`). With `CORES` left off, `1TASKCLOCK.fth`, `4TASKQUEUE.fth`, and `3TASKSEM.fth` still passed.
+- A sliced task can `CREATE` and `ALLOT` without moving the console `HERE`, and `WORD` does not write at that `HERE`. An unsliced `ALLOT` is refused. A worker `EVALUATE` is refused. Passed (`6TASKSLICE.fth`: `fence-held`, `slice-below`, `here-after-task`, `word-stable`, `word-apart`, `bare-hit=0`, `answer=42`, `buf=99`, `went=0`, then `answer-gone` and `comp-gone`). ANS-VALIDATE passed again with `MULTI` and `CORES` off: 395 passed, 0 failed.
 - `GROWMEMORYMB` from a background task is refused, and the console line continues. Passed. From the console it still grows once, refuses a shrink, and refuses a second call. Those console size checks were already in the kernel and were not re-run as part of this step.
 
 ## Out of scope

@@ -3129,14 +3129,19 @@ final class KernelBridge {
             }
             // The kernel runs on forthQueue. This loop only services AppKit.
             // A 12 ms nextEvent every 16 ms kept the main thread runnable for the
-            // whole word and crowded that queue. Compute sleeps here for 50 ms
-            // and does one cheap turn (emit, WINDOW, blit). KEY shortens the
-            // slice so keyDown is still dequeued within a frame or two.
+            // whole word and crowded that queue. Plain compute sleeps here for
+            // 50 ms and does one cheap turn (emit, WINDOW, blit).
+            // Console KEY sets kernelAwaitingKey. GRAPHICS KEY? / (APP-MOUSE)
+            // do not: they only read queues filled from nextEvent. Without that
+            // pump the window server spins the cursor and the graphics window
+            // never becomes key (MANSHOW draws, then ignores mouse and keys).
             // Nested CFRunLoopRunInMode re-entry (e.g. from scroll/layout while
             // already pumping) has trapped as EXC_BREAKPOINT on some macOS builds.
             while true {
                 let awaitingKey = self.isKernelAwaitingKey()
-                let slice: TimeInterval = awaitingKey ? 0.02 : 0.05
+                let graphicsLive = AppOutputHost.shared.isOpened
+                let interactive = awaitingKey || graphicsLive
+                let slice: TimeInterval = interactive ? 0.02 : 0.05
                 if done.wait(timeout: .now() + slice) != .timedOut { break }
                 // Drain here. The async main-queue flush can sit unrun while this
                 // loop is inside nextEvent, so a long FLOAD shows nothing until
@@ -3145,12 +3150,13 @@ final class KernelBridge {
                 // Companion GRAPHICS: (APP-OPEN) waits on a pending-open semaphore;
                 // service it here so WINDOW does not deadlock with nextEvent.
                 // Blit posts are applied on this same turn (companion does not
-                // async them). 50 ms is the gap between frames.
+                // async them).
                 AppOutputHost.shared.servicePendingUIOnMain()
                 if !self.isPumpingEvents {
                     _ = CFRunLoopRunInMode(CFRunLoopMode.defaultMode, 0, true)
                 }
-                if awaitingKey {
+                // Re-read after service: WINDOW may have opened on this turn.
+                if awaitingKey || AppOutputHost.shared.isOpened {
                     self.pumpUIForKeyInput(seconds: 0.005)
                 }
             }
