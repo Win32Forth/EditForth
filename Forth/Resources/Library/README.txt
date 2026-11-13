@@ -21,9 +21,9 @@ Examples
   FROMLIB FLOAD Testing/DbgSpanSmoke/span-tests.fth
   FROMLIB FLOAD BigInteger/big-int.fth
   FROMLIB FLOAD FixPoint/FIXEDPOINT.fth    \ ALSO FIXED-POINT
-  \ FixPoint is introductory and incomplete. XBITS defaults to 28.
-  \ XUNIT, F>X, X>F, and X* are in. + and - are the cell words.
-  \ Division, square root, and trig are not in this slice.
+  \ FixPoint is one signed cell. XBITS defaults to 28.
+  \ XUNIT, F>X, X>F, X*, X/, XSQRT, XSIN, and XCOS are in.
+  \ + and - are the cell words. Log, exp, and inverse trig are not.
   FROMLIB FLOAD PI/pi-test.fth
   FROMLIB FLOAD xchar-smoke.fth
   FROMLIB FLOAD Debugger/debugger.fth  \ DEBUG hub + loads Debugger/* (AutoLoad)

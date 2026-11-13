@@ -2,7 +2,7 @@
 
 **Public domain.** Headless control so tools (Grok, CI, scripts) can load Forth files and capture console output without driving the GUI.
 
-**Status:** shipped (**64Forth 1.1.2+**; current **2.7.1**, build **33**, banner `Nov 12, 2026 9:27 PM`). Disk image `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays. See also [STATUS.md](STATUS.md) (section **v1.1.2 — agent channel**).
+**Status:** shipped (**64Forth 1.1.2+**; current **2.7.3**, build **34**, banner `Nov 12, 2026 10:51 PM`). No 2.7.3 disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays. See also [STATUS.md](STATUS.md) (section **v1.1.2 — agent channel**).
 ## Why
 
 The GUI app does not treat stdin as a REPL. Accessibility can type keys but cannot reliably read the SwiftUI console. The agent channel runs the same kernel (`kernel_eval`) with EMIT captured to **stdout** and an optional transcript file.

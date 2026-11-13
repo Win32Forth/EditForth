@@ -1,8 +1,32 @@
 # 64Forth development status
 
-**Current:** **2.7.1** (build **33**) — recent folder menu, WINED64, ANS file words in a stand-alone image, and emitter fixes for blit, `LEAVE`, object literals, and `RESIZE`. Disk image `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
+**Current:** **2.7.3** (build **34**) — fixed-point divide, square root, and sine and cosine. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
 
 **Last updated:** 2026-11-12
+
+---
+
+## v2.7.3 — Fixed-point divide, root, and trig
+
+**Version strings:** marketing **2.7.3**, build **34**. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp `Nov 12, 2026 10:51 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.7.3 === Nov 12, 2026 10:51 PM ===
+```
+
+### Highlights since 2.7.1
+
+- **Fixed point.** `Library/FixPoint/FIXEDPOINT.fth`, vocabulary `FIXED-POINT`. One signed cell. `XBITS` fraction bits sit at the bottom. The default is 28, read when the file loads. A later `TO XBITS` does not change the literals already compiled. Load with `FROMLIB FLOAD FixPoint/FIXEDPOINT.fth`, then `ALSO FIXED-POINT`.
+- **XUNIT.** Immediate. It compiles 2^XBITS into the caller. At the prompt, `LITERAL` does not check `STATE`, so that value is compiled into the dictionary.
+- **X*.** `M*`, then a logical right shift of `XBITS`. A negative product adds 2^XBITS−1 first, so the quotient rounds toward zero. `MANSHOW-COOP` and `MANSHOW-CORE` plot with this word.
+- **X/.** Shifts the dividend up by `XBITS`, then `SM/REM`. Toward zero. A zero divisor returns −1. A quotient that does not fit the cell is the kernel overflow result.
+- **XSQRT.** Integer root of `n` shifted up by `XBITS`, so the result keeps this scale. Zero and negative return 0. The loop uses only the stack, so a cooperative task can call it.
+- **XSIN and XCOS.** Taylor series in radians. `XPI`, `XPI/2`, and `X2PI` are the nearest cells. The angle is reduced with `X2PI`, then folded into the Taylor range. `(XTRIG)` leaves sine under cosine. Inside a few turns the result stays within 2 cells of the nearest value. Sine of pi/2 is one cell under `XUNIT`. A huge angle loses that accuracy because 2×pi is rounded. Log, exp, and inverse trig are not in this file.
+- **Cell arithmetic.** `+`, `-`, `2*`, and `2/` already share the scale. Cell `/` is not a fixed divide. `F>X` and `X>F` still use floating point.
+
+**Release:** no disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
 
 ---
 
