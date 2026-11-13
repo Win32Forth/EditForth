@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.7.1** (build **33**) — recent folder menu, WINED64, ANS file words in a stand-alone image, and emitter fixes for blit, `LEAVE`, object literals, and `RESIZE`. No disk image yet. The shipped image remains `Releases/EditForth-2.7.0-macOS.dmg`.
+**Current:** **2.7.1** (build **33**) — recent folder menu, WINED64, ANS file words in a stand-alone image, and emitter fixes for blit, `LEAVE`, object literals, and `RESIZE`. Disk image `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
 
 **Last updated:** 2026-11-12
 
@@ -8,7 +8,7 @@
 
 ## v2.7.1 — WINED64, recent folders, and stand-alone file words
 
-**Version strings:** marketing **2.7.1**, build **33**. No disk image yet. The shipped image remains `Releases/EditForth-2.7.0-macOS.dmg`. Console stamp `Nov 12, 2026 9:27 PM`. `scripts/release.sh` was not run.
+**Version strings:** marketing **2.7.1**, build **33**. One-app disk image `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp `Nov 12, 2026 9:27 PM`. `scripts/release.sh` archive, validate, emit-smoke, and dmg: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.7.1**.
 
 **Console header stamp:**
 
@@ -30,7 +30,7 @@
 - **Reach.** `LEAVE` and `(DO)` have no inline offset. `LEAVE` finds `(LOOP)` or `(+LOOP)` at run time. Treating either as a branch consumed the next xt. `(?DO)`, `(LOOP)`, `(+LOOP)`, `BRANCH`, and `0BRANCH` still have an offset cell. A `DOES>` `CELL+` object passes CFA+24. The class pointer sits at the parameter field, so the emitter imports the owner at that address minus 24. Without that import, `EMIT-WINDOW-APP WINED64` aborted on an unmapped literal.
 - **RESIZE.** Host slot **33** is `RESIZE` (`realloc`). `#HOST-APP` is **34** (slots 0–33). Slots 12–14 stay the big-integer hooks. A missing slot left the call as a NOP, so a grown buffer never moved. `EMIT-WINDOW-APP WINED64` reached 379 words and produced an app whose menu row is NEW OPEN SAVE CLOSE NEXT FIND HELP QUIT. Load the emitter before WINED64 so `EMIT-NO-WRAPPER` exists. Emit from a new EditForth session. A session that already loaded the emitter keeps those words. `WINED64` under `--agent` does not open a window.
 
-**Release:** no disk image yet.
+**Release:** disk image `Releases/EditForth-2.7.1-macOS.dmg`. GitHub release **v2.7.1**. The 2.7.0 image stays.
 
 ---
 
