@@ -4,7 +4,7 @@
 
 **Emitter version:** **0.7** (stand-alone GRAPHICS emit; tetra + PIMAIN verified as `.app`).  
 **Status:** design freeze for the window/IO surface (2026-09-05); packaging path live as of 2026-09-06; SA locals/BI + window I/O remap in **0.7** (2026-09-07).  
-**Menus** and **File-Access-in-kit** are deferred.  
+**Menus** are deferred. ANS File-Access words run in stand-alone images through `SA-FILES`.  
 **First emit target:** `tetra/tetra.fth` (64TCOM tree) — interactive GRAPHICS + stand-alone `EMIT-WINDOW-APP` → `TETRA.app`. Also `PI/pi-chudnovsky.fth` → `PIMAIN.app`.
 
 This document names the runtime base that Emitter-built stand-alone apps will sit on. It is **not** a second GUI toolkit: it is the existing **GRAPHICS** vocabulary plus host `(APP-*)` hooks, with room for a later **MENUS** vocabulary.
@@ -49,7 +49,7 @@ Host draw uses a CGImage stretch (not per-pixel rect fills). Char overlay stays 
 
 `(APP-IMG-CHOOSE)` / `(APP-IMG-LOAD)` / `(APP-IMG-SIZE)` / `(APP-IMG-RENDER)` decode any format `NSImage` supports (JPEG, PNG, HEIC, TIFF, GIF, …) into a host BGRA cache, then sample into the Forth `TRUECOLOR` buffer. Zoom is `zoom100` (100 = 1:1) around an image-space center. Sample: `Library/Sample/IMAGEVIEW64.fth` → `IMAGEVIEW`. Interactive Swift host and Emitter `emit-run` both implement slots **17–20** (NSOpenPanel / path load / render). SA also accepts `--image PATH`, a second argv path, or drag-drop onto the window (staged path consumed by OPEN / choose).
 
-`(APP-FILE-CHOOSE)` / `(APP-FILE-SAVE-AS)` / `(APP-FILE-PATH)` / `(APP-FILE-SLURP)` / `(APP-FILE-SPEW)` stage a path via NSOpenPanel/NSSavePanel then read/write bytes (slots **21–25**). Sample: `Library/Sample/EDIT64.fth` → `EDIT64`. Keeps ANS File-Access out of the emit reach graph.
+`(APP-FILE-CHOOSE)` / `(APP-FILE-SAVE-AS)` / `(APP-FILE-PATH)` / `(APP-FILE-SLURP)` / `(APP-FILE-SPEW)` stage a path via NSOpenPanel/NSSavePanel then read/write bytes (slots **21–25**). Sample: `Library/Sample/EDIT64.fth` → `EDIT64`. Those slots clamp to the caller's buffer. ANS file words (`OPEN-FILE`, `CREATE-FILE`, `READ-FILE`, `WRITE-FILE`, `FILE-SIZE`, `CLOSE-FILE`, and the rest of that set) also run in an `EMIT-WINDOW-APP` image: `SA-FILES` uses Darwin calls. `FILE-SIZE` is `( fileid -- ud ior )`, low cell = byte length. Smoke: `System/Emitter/EmitterSmoke/sa-fsize-win.fth`.
 
 ### Forth words (GRAPHICS)
 
@@ -83,7 +83,7 @@ Samples: `Library/Sample/DOODLE64.fth` → `DOODLE` (1-bit); `Library/Sample/DOO
 - `(APP-FILE-SLURP) ( c-addr max -- u ior )` — read staged file into buffer.
 - `(APP-FILE-SPEW) ( c-addr u -- ior )` — write buffer to staged path.
 
-Emitter `HOST-APP` slot table is append-only in `reloc.fth` / `emit-host.inc` / `emit-run.m` (`#HOST-APP` **33**, slots **0–32**): `(APP-*)` **0–8**, `MS@` **9**, `ALLOCATE`/`FREE` **10–11**, `BI-*` **12–14**, `(APP-MOUSE)` **15**, `(APP-CBLIT)` **16**, `(APP-IMG-*)` **17–20**, `(APP-FILE-*)` **21–25**, `(APP-SIZE?)` **26**, `TIME&DATE` **27**, `CLIP!`/`CLIP@`/`CWD@` **28–30**, `SYSTEM` **31**, `MS` **32**. Hook-style words (`BI-*`, `TIME&DATE`, `SYSTEM`) use `SA-FIX-BI-HOOK` (NOP `CBZ`, retarget `BLR X9`). Forth helpers: `OPEN-APP`, `OPEN-TERMINAL-AT`, `RUN-EMITTED` in `app.fth`. Stand-alone `TGT-BUILD` opens a **2 MiB** data arena (and **256 KiB** code) so TRUECOLOR `G-PIX` (~1 MiB) can import.
+Emitter `HOST-APP` slot table is append-only in `reloc.fth` / `emit-host.inc` / `emit-run.m` (`#HOST-APP` **34**, slots **0–33**): `(APP-*)` **0–8**, `MS@` **9**, `ALLOCATE`/`FREE` **10–11**, `BI-*` **12–14**, `(APP-MOUSE)` **15**, `(APP-CBLIT)` **16**, `(APP-IMG-*)` **17–20**, `(APP-FILE-*)` **21–25**, `(APP-SIZE?)` **26**, `TIME&DATE` **27**, `CLIP!`/`CLIP@`/`CWD@` **28–30**, `SYSTEM` **31**, `MS` **32**, `RESIZE` **33**. Hook-style words (`BI-*`, `TIME&DATE`, `SYSTEM`) use `SA-FIX-BI-HOOK` (NOP `CBZ`, retarget `BLR X9`). Forth helpers: `OPEN-APP`, `OPEN-TERMINAL-AT`, `RUN-EMITTED` in `app.fth`. Stand-alone `TGT-BUILD` opens a **2 MiB** data arena (and **256 KiB** code) so TRUECOLOR `G-PIX` (~1 MiB) can import.
 
 **`emit-run` binary:** the stand-alone runner at `System/Emitter/runner/emit-run` is **gitignored** (build product). Sources are `emit-run.m` + `emit-host.inc` (tracked). After changing host slots or `emit-host.inc`, rebuild before `EMIT-WINDOW-APP` / `app-build.sh`:
 
@@ -104,7 +104,7 @@ Forth owns `G-BUF` / `G-PIX`; the host owns the `NSWindow`, blit, key queue, ton
 | Deferred | Notes |
 |----------|--------|
 | **MENUS** vocabulary | Limited menu construction/handling — later |
-| File-Access as Emitter kit fence | ANS file words already exist in the kernel/host; not part of this freeze |
+| File-Access declared-import fence | Not used. ANS file words run in the image via `SA-FILES` |
 | IDE surfaces | Console, Facility, SZ-EDITOR, Hyper, Tools menus |
 
 ---
@@ -187,4 +187,4 @@ Emitter milestone: emit **tetra** as a stand-alone macOS app that still uses the
    - **Done:** `EMIT-WINDOW-APP` / `EMIT-WINDOW-APP-TO` — build a `:NONAME` headless main `S" STEM" APP-NAME WINDOW <xt> WINDOW-OFF ;` then pack. **STEM** = uppercase basename of `LAST-INCLUDED` (load the app `.fth` *after* Emitter). Example: include `tetra.fth`, then `' GAME EMIT-WINDOW-APP` → `TETRA.app`. Smoke: `EmitterSmoke/emit-window-app-smoke.fth`.
    - **Done:** `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED` — Forth-visible FROMLIB arm, Library root, and last INCLUDE/FLOAD path.
    - **Done:** `CATCH` / `(CATCH-OK)` / `THROW` have `CODE-BOUNDS`. **SA-EXCEPT** retargets their BSS ADRPs into RW `TGT-DATA` cells. **`EMIT-APP` / `EMIT-WINDOW-APP` auto-wrap with `CATCH`**; default `EMIT-ON-THROW` prints the code then **`KEY DROP`** so the user can read it before shutdown (override with `' MY-HANDLER IS EMIT-ON-THROW`). Raw `TGT-BUILD` still refuses `ABORT` without `CATCH`. Uncaught `THROW` never enters `QUIT`.
-4. Later: **MENUS** vocab; document File-Access as part of the kit fence when stand-alone apps need declared file imports.
+4. Later: **MENUS** vocab. ANS File-Access in stand-alone images is done (`sa-fsize-win.fth`); no separate import fence.

@@ -126,7 +126,8 @@ static void rebase_cell(uint8_t *cell, uint64_t code_base, uint64_t code_len,
  *   cfar: .quad retc
  *   body: .quad cfar     ← RPUSH this as return IP
  */
-static void __attribute__((noinline)) run_itc(void *cfa, void *dsp, void *rp) {
+static void __attribute__((noinline)) run_itc(void *cfa, void *dsp, void *rp,
+                                             void *up) {
   uint8_t *g = (uint8_t *)mmap(NULL, EMIT_PAGE, PROT_READ | PROT_WRITE,
                                MAP_ANON | MAP_PRIVATE, -1, 0);
   if (g == MAP_FAILED) die("gadget mmap");
@@ -153,6 +154,7 @@ static void __attribute__((noinline)) run_itc(void *cfa, void *dsp, void *rp) {
   __asm__ volatile(
     "mov x19, %0\n\t"
     "mov x22, x19\n\t"
+    "mov x27, %4\n\t" /* stand-alone user area; 0 if the image has none */
     "movz x28, #0\n\t"
     "movz x20, #0\n\t"
     "mov x23, %1\n\t"
@@ -167,9 +169,9 @@ static void __attribute__((noinline)) run_itc(void *cfa, void *dsp, void *rp) {
     "br x1\n\t"
     "1:\n\t"
     :
-    : "r"(dsp), "r"(rp), "r"(cfa), "r"(body)
+    : "r"(dsp), "r"(rp), "r"(cfa), "r"(body), "r"(up)
     : "x0", "x1", "x2", "x3", "x16", "x17",
-      "x19", "x20", "x21", "x22", "x23", "x28", "x30", "memory"
+      "x19", "x20", "x21", "x22", "x23", "x27", "x28", "x30", "memory"
   );
 }
 
@@ -297,7 +299,7 @@ int main(int argc, char **argv) {
     uint32_t off = rd_u32(rel + i * 8);
     uint32_t slot = rd_u32(rel + i * 8 + 4);
     if (off + 8 > code_len) die("reloc off");
-    if (slot >= 33 || !host_fn[slot]) die("reloc slot");
+    if (slot >= 34 || !host_fn[slot]) die("reloc slot");
     uint64_t fn = (uint64_t)(uintptr_t)host_fn[slot];
     memcpy(buf + off, &fn, 8);
   }
@@ -308,6 +310,40 @@ int main(int argc, char **argv) {
 
   void *dsp = buf + total - 64;
   void *rp  = (uint8_t *)dsp - EMIT_RP_BYTES;
+
+  /* Reloc plants SA-SP0-MAGIC in every cell that must be the empty DSP
+     (FILE_POP_UNDER, TU_S0, TU_DSP). up_var's cell points at a user area
+     whose byte 48 is that magic. Same constant as reloc.fth. */
+  void *up = NULL;
+  {
+    static const uint64_t SA_SP0_MAGIC = 0x454D495453503021ULL;
+    uint64_t sp0 = (uint64_t)(uintptr_t)dsp;
+    uintptr_t d0 = (uintptr_t)data;
+    uintptr_t d1 = d0 + (uintptr_t)data_len;
+    for (uint64_t off = 0; off + 8 <= data_len; off += 8) {
+      uint64_t v = 0;
+      memcpy(&v, data + off, 8);
+      if (v < d0 || v > d1 - 56)
+        continue;
+      uint64_t slot = 0;
+      memcpy(&slot, (void *)(uintptr_t)(v + 48), 8);
+      if (slot == SA_SP0_MAGIC) {
+        up = (void *)(uintptr_t)v;
+        break;
+      }
+    }
+    int hits = 0;
+    for (uint64_t off = 0; off + 8 <= data_len; off += 8) {
+      uint64_t v = 0;
+      memcpy(&v, data + off, 8);
+      if (v == SA_SP0_MAGIC) {
+        memcpy(data + off, &sp0, 8);
+        hits++;
+      }
+    }
+    if (getenv("EMIT_DEBUG"))
+      fprintf(stderr, "sa-sp0 %p hits %d up %p\n", dsp, hits, up);
+  }
   void *cfa = buf + entry_off;
 
   if (getenv("EMIT_DEBUG")) {
@@ -324,7 +360,7 @@ int main(int argc, char **argv) {
   if (!emit_headless) {
     emit_ensure_app();
   }
-  run_itc(cfa, dsp, rp);
+  run_itc(cfa, dsp, rp, up);
 
   if (!emit_headless && emit_opened) {
     [NSApp run];

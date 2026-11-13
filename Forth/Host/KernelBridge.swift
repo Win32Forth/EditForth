@@ -3142,7 +3142,12 @@ final class KernelBridge {
                 let graphicsLive = AppOutputHost.shared.isOpened
                 let interactive = awaitingKey || graphicsLive
                 let slice: TimeInterval = interactive ? 0.02 : 0.05
-                if done.wait(timeout: .now() + slice) != .timedOut { break }
+                if done.wait(timeout: .now() + slice) != .timedOut {
+                    // Forth may have asked to close the graphics window on
+                    // the way out. Apply it here, outside sendEvent.
+                    AppOutputHost.shared.servicePendingUIOnMain()
+                    break
+                }
                 // Drain here. The async main-queue flush can sit unrun while this
                 // loop is inside nextEvent, so a long FLOAD shows nothing until
                 // KEY blocks and the queue gets a turn.

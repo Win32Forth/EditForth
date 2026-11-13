@@ -1,5 +1,7 @@
 \ Mac window. Host op 1 creates, 2 closes, 3 sets the title.
-\ Not the GRAPHICS App Output window.
+\ Op 8 returns content width and height packed as w|(h<<16).
+\ Op 9 returns true once after the user resizes that window.
+\ Not the GRAPHICS App Output window. WINED64 draws on that one.
 
 :CLASS WINDOW <SUPER OBJECT
     INT WID
@@ -21,5 +23,13 @@
         WID 0 3 (OOP-CALL) DROP
     ;M
     :M GETID: ( -- id ) WID ;M
+    :M SIZE: ( -- w h )
+        WID 0 0 0 8 (OOP-CALL)
+        DUP 65535 AND
+        SWAP 16 RSHIFT 65535 AND
+    ;M
+    :M ?RESIZE: ( -- flag )
+        WID 0 0 0 9 (OOP-CALL)
+    ;M
     :M ~: ( -- ) CLOSE: SELF ;M
 ;CLASS

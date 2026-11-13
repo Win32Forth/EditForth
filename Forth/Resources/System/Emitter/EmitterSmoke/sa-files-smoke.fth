@@ -39,6 +39,13 @@ CREATE SF-BUF  16 ALLOT
   S" /tmp/64forth-sa-files.txt" R/O OPEN-FILE
   IF  4 . EXIT  THEN                 \ 4 = OPEN fail
   SF-FID !
+  \ FILE-SIZE is the length (lo hi, hi on top). A sentinel under the
+  \ file id must survive. FILE-POSITION here would be 0.
+  99 SF-FID @ FILE-SIZE
+  IF  9 . EXIT  THEN                 \ 9 = FILE-SIZE ior
+  IF  10 . EXIT  THEN                \ 10 = high cell not 0
+  2 = 0= IF  11 . EXIT  THEN         \ 11 = low cell is not 2
+  99 = 0= IF  12 . EXIT  THEN        \ 12 = under-cell lost
   SF-BUF 2 SF-FID @ READ-FILE
   IF  5 . EXIT  THEN                 \ 5 = READ ior fail
   2 = 0= IF  6 . EXIT  THEN          \ 6 = bad length

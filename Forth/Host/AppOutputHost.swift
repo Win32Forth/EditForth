@@ -10,6 +10,12 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
+/// Result cell for a file panel. Written on the main thread before the
+/// waiting Forth thread is released.
+private final class PanelResult {
+    var value: Int64 = -2
+}
+
 /// Minimal AppKit surface for TCOM-style character graphics under interactive 64Forth.
 final class AppOutputHost: NSObject, NSWindowDelegate {
     static let shared = AppOutputHost()
@@ -56,6 +62,15 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     private var pendingPixDepth = 1
     private var pendingPixStride = 0
     private var pendingCells: [UInt8]?
+
+    /// File panel to run on the main thread, outside `nextEvent`.
+    /// A sheet begun from the key pump never gets a modal-panel turn, so
+    /// Command-O looks dead and later clicks go nowhere.
+    private let pendingPanelLock = NSLock()
+    private var pendingPanel: (() -> Void)?
+    /// Set by `(APP-CLOSE)` / the close button path. Torn down from
+    /// `servicePendingUIOnMain`, which is not inside the close-button tracker.
+    private var teardownRequested = false
     
     fileprivate var forthPixW: Int { max(1, cols * 8) }
     fileprivate var forthPixH: Int { max(1, rows * 16) }
@@ -66,10 +81,16 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     /// Latest mouse sample in Forth PLOT coords (origin bottom-left).
     /// Button mask matches classic getmous / NSEvent.pressedMouseButtons:
     /// bit0=left (1), bit1=right (2), bit2=middle (4).
+    /// A click is also latched. Forth polls about every 10 ms, so mouseUp
+    /// can wipe `mouseButtons` before `G-MOUSE` sees the down.
     private let mouseLock = NSLock()
     private var mouseX: Int64 = 0
     private var mouseY: Int64 = 0
     private var mouseButtons: Int64 = 0
+    private var clickLatchX: Int64 = 0
+    private var clickLatchY: Int64 = 0
+    private var clickLatchButtons: Int64 = 0
+    private var clickLatchArmed = false
 
     /// True when the graphics window has been opened (may be behind EditForth).
     var isOpened: Bool { opened }
@@ -148,6 +169,15 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             pendingOpenLock.unlock()
         }
         applyPendingBlitOnMain()
+        var panel: (() -> Void)?
+        pendingPanelLock.lock()
+        panel = pendingPanel
+        pendingPanel = nil
+        let closeNow = teardownRequested
+        if closeNow { teardownRequested = false }
+        pendingPanelLock.unlock()
+        panel?()
+        if closeNow { teardownWindow() }
     }
 
     /// Compatibility name for call sites.
@@ -169,6 +199,11 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         self.keyLock.lock()
         self.keyQueue.removeAll()
         self.keyLock.unlock()
+        // Keep a newer corner-drag size. Adopting this open must not clear it.
+        if !sizeDirty {
+            pendingCols = cols
+            pendingRows = rows
+        }
         self.window?.orderFrontRegardless()
         self.window?.makeKeyAndOrderFront(nil)
         self.window?.makeFirstResponder(self.gridView)
@@ -178,10 +213,14 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     }
 
     func close() {
-        // Never tear down synchronously inside pumpUIForKeyInput / sendEvent.
-        DispatchQueue.main.async { [weak self] in
-            self?.teardownWindow()
-        }
+        // Do not orderOut here. This often runs while the red close button
+        // is still in its tracking loop, and tearing the window down from
+        // that loop beaches the cursor. The evaluate pump applies the flag
+        // from servicePendingUIOnMain, outside sendEvent.
+        pendingPanelLock.lock()
+        teardownRequested = true
+        pendingPanelLock.unlock()
+        CFRunLoopWakeUp(CFRunLoopGetMain())
     }
 
     private func teardownWindow() {
@@ -202,6 +241,7 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         mouseX = 0
         mouseY = 0
         mouseButtons = 0
+        clickLatchArmed = false
         mouseLock.unlock()
     }
 
@@ -218,17 +258,30 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             return
         }
         mouseLock.lock()
-        x?.pointee = mouseX
-        y?.pointee = mouseY
-        buttons?.pointee = mouseButtons
+        if clickLatchArmed {
+            x?.pointee = clickLatchX
+            y?.pointee = clickLatchY
+            buttons?.pointee = clickLatchButtons
+            clickLatchArmed = false
+        } else {
+            x?.pointee = mouseX
+            y?.pointee = mouseY
+            buttons?.pointee = mouseButtons
+        }
         mouseLock.unlock()
     }
 
-    fileprivate func updateMouse(x: Int, y: Int, buttons: Int) {
+    fileprivate func updateMouse(x: Int, y: Int, buttons: Int, latchDown: Bool = false) {
         mouseLock.lock()
         mouseX = Int64(max(0, x))
         mouseY = Int64(max(0, y))
         mouseButtons = Int64(buttons & 0x7)
+        if latchDown && mouseButtons != 0 {
+            clickLatchX = mouseX
+            clickLatchY = mouseY
+            clickLatchButtons = mouseButtons
+            clickLatchArmed = true
+        }
         mouseLock.unlock()
     }
 
@@ -255,20 +308,61 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         return true // swallow so console KEY does not also see it
     }
 
+    /// Modifier tags OR'd onto a key. Unmodified arrows stay 200/203/205/208
+    /// so EDIT64 keeps working. Shift on a plain letter is already in the
+    /// character (`S`), so that bit is added only for navigation, Tab, and
+    /// Command/Option chords (Command-Shift-S). Command and Control share
+    /// one bit: the documented binding is Command, and Control does the same
+    /// while this window is key. Esc is always 27.
+    fileprivate static let keyShift: Int64 = 256
+    fileprivate static let keyCmd: Int64 = 512
+    fileprivate static let keyOpt: Int64 = 1024
+
     fileprivate static func mapKeyEvent(_ event: NSEvent) -> Int64 {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let shift = flags.contains(.shift)
+        let command = flags.contains(.command) || flags.contains(.control)
+        let option = flags.contains(.option)
+        var mods: Int64 = 0
+        if shift { mods |= keyShift }
+        if command { mods |= keyCmd }
+        if option { mods |= keyOpt }
+
+        if event.keyCode == 53 { return 0x1B }
+
+        let nav: Int64?
         switch event.keyCode {
-        case 123: return 203 // Left arrow → EDIT64 left
-        case 124: return 205 // Right arrow → EDIT64 right
-        case 125: return 208 // Down arrow → EDIT64 down
-        case 126: return 200 // Up arrow → EDIT64 up
-        case 53: return 0x1B // Esc → ASCII 27
-        case 49: return 0x20 // Space → ASCII 32
-        default: break
+        case 123: nav = 203 // left
+        case 124: nav = 205 // right
+        case 125: nav = 208 // down
+        case 126: nav = 200 // up
+        case 115: nav = 199 // home
+        case 119: nav = 207 // end
+        case 116: nav = 201 // page up
+        case 121: nav = 209 // page down
+        case 117: nav = 212 // forward delete
+        case 114: nav = 213 // help / insert
+        default: nav = nil
         }
-        if let chars = event.charactersIgnoringModifiers, let ch = chars.utf16.first, ch < 128 {
-            return Int64(ch)
+        if let nav {
+            return mods == 0 ? nav : nav | mods
         }
-        return -1
+
+        var base: Int64 = -1
+        if event.keyCode == 49 {
+            base = 0x20
+        } else if let chars = event.charactersIgnoringModifiers, let ch = chars.utf16.first, ch < 128 {
+            base = Int64(ch)
+        }
+        if base < 0 { return -1 }
+        // Tab carries Shift (Shift-Tab). Other characters already include Shift.
+        if base == 9 {
+            return mods == 0 ? base : base | mods
+        }
+        if command || option {
+            return base | mods
+        }
+        return base
     }
 
     private let pixLock = NSLock()
@@ -729,18 +823,26 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        gridView?.needsDisplay = true
-    }
-    
-    func windowDidEndLiveResize(_ notification: Notification) {
         guard let view = gridView else { return }
         let (c, r) = snapGrid(from: view)
-        if c != pendingCols || r != pendingRows {
+        if (c != cols || r != rows) && (c != pendingCols || r != pendingRows || !sizeDirty) {
             pendingCols = c
             pendingRows = r
             sizeDirty = true
         }
-        gridView?.needsDisplay = true
+        view.needsDisplay = true
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        liveResizing = false
+        guard let view = gridView else { return }
+        let (c, r) = snapGrid(from: view)
+        if c != cols || r != rows {
+            pendingCols = c
+            pendingRows = r
+            sizeDirty = true
+        }
+        view.needsDisplay = true
     }
 
     /// (APP-SIZE?) support. Returns -1 if Forth should adopt cols/rows.
@@ -756,12 +858,11 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // Defer teardown — closing mid pumpUIForKeyInput/sendEvent crashes.
-        opened = false
-        pushKey(0x1B) // Esc — unblock GRAPHICS KEY if it is waiting
-        DispatchQueue.main.async { [weak self] in
-            self?.teardownWindow()
-        }
+        // Esc, same as the graphics-window exit. Do not orderOut: the close
+        // button is still tracking this click, and destroying the window
+        // from that loop spins the beachball. Forth leaves, then (APP-CLOSE)
+        // asks servicePendingUIOnMain to tear the window down.
+        pushKey(0x1B)
         return false
     }
 
@@ -991,48 +1092,57 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         fileStagedPath = url.path
     }
 
+    /// Run `body` on the main thread from `servicePendingUIOnMain`.
+    ///
+    /// `body` must be the whole panel, including `init` and `runModal`.
+    /// A sheet started from the key pump never receives events: the pump
+    /// only dequeues the default run-loop mode, so the dialog never appears
+    /// and the editor stops polling keys and clicks. `runModal` here is on
+    /// the evaluate turn, between those pumps, so it can run its own loop.
+    private func runPanelOnPump(_ body: @escaping () -> Void) {
+        if Thread.isMainThread {
+            body()
+            return
+        }
+        let done = DispatchSemaphore(value: 0)
+        pendingPanelLock.lock()
+        pendingPanel = {
+            body()
+            done.signal()
+        }
+        pendingPanelLock.unlock()
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+        while done.wait(timeout: .now() + 0.05) == .timedOut {}
+    }
+
     /// NSOpenPanel — stage chosen path. 0=ok, -1=cancel, -2=fail.
     func chooseFile() -> Int64 {
         if AgentChannel.isRequested { return -1 }
-        let work: () -> Int64 = { [weak self] in
-            guard let self else { return -2 }
+        let slot = PanelResult()
+        runPanelOnPump { [weak self] in
+            guard let self else { slot.value = -2; return }
             let panel = NSOpenPanel()
             panel.title = "Open File"
             panel.canChooseFiles = true
             panel.canChooseDirectories = false
             panel.allowsMultipleSelection = false
-            if let win = self.window {
-                let group = DispatchGroup()
-                var result: NSApplication.ModalResponse = .abort
-                group.enter()
-                panel.beginSheetModal(for: win) { r in
-                    result = r
-                    group.leave()
-                }
-                while group.wait(timeout: .now() + 0.05) == .timedOut {
-                    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-                }
-                guard result == .OK, let url = panel.url else { return -1 }
-                self.stageFile(at: url)
-                return 0
-            } else {
-                guard panel.runModal() == .OK, let url = panel.url else { return -1 }
-                self.stageFile(at: url)
-                return 0
+            guard panel.runModal() == .OK, let url = panel.url else {
+                slot.value = -1
+                return
             }
+            self.stageFile(at: url)
+            slot.value = 0
         }
-        if Thread.isMainThread { return work() }
-        var ior: Int64 = -2
-        DispatchQueue.main.sync { ior = work() }
-        return ior
+        return slot.value
     }
 
     /// NSSavePanel — stage chosen path. 0=ok, -1=cancel, -2=fail.
     func saveFileAs() -> Int64 {
         if AgentChannel.isRequested { return -1 }
         let suggested = fileStagedPath
-        let work: () -> Int64 = { [weak self] in
-            guard let self else { return -2 }
+        let slot = PanelResult()
+        runPanelOnPump { [weak self] in
+            guard let self else { slot.value = -2; return }
             let panel = NSSavePanel()
             panel.title = "Save File"
             panel.canCreateDirectories = true
@@ -1041,30 +1151,14 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
                 panel.directoryURL = url.deletingLastPathComponent()
                 panel.nameFieldStringValue = url.lastPathComponent
             }
-            if let win = self.window {
-                let group = DispatchGroup()
-                var result: NSApplication.ModalResponse = .abort
-                group.enter()
-                panel.beginSheetModal(for: win) { r in
-                    result = r
-                    group.leave()
-                }
-                while group.wait(timeout: .now() + 0.05) == .timedOut {
-                    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-                }
-                guard result == .OK, let url = panel.url else { return -1 }
-                self.stageFile(at: url)
-                return 0
-            } else {
-                guard panel.runModal() == .OK, let url = panel.url else { return -1 }
-                self.stageFile(at: url)
-                return 0
+            guard panel.runModal() == .OK, let url = panel.url else {
+                slot.value = -1
+                return
             }
+            self.stageFile(at: url)
+            slot.value = 0
         }
-        if Thread.isMainThread { return work() }
-        var ior: Int64 = -2
-        DispatchQueue.main.sync { ior = work() }
-        return ior
+        return slot.value
     }
 
     /// Copy staged path into Forth buffer. Returns bytes written (0 if none).
@@ -1175,16 +1269,22 @@ final class AppGridView: NSView {
             let rows = host.gridRows
             guard cols > 0, rows > 0 else { return }
 
-            let chromeRows = min(2, rows)
             let cw = host.gridCellW
             let ch = host.gridCellH
-            var fontSize = ch - 2
+            // Glyphs sit on the same rectangle as the pixel image so a resize
+            // keeps the caret, the highlight, and the text on one grid.
+            let onPixels = host.showingPixels && dest.width > 1 && dest.height > 1
+            let gw = onPixels ? dest.width / CGFloat(cols) : cw
+            let gh = onPixels ? dest.height / CGFloat(rows) : ch
+            let originX = onPixels ? dest.minX : inner.minX
+            let originTop = onPixels ? dest.maxY : inner.maxY
+            var fontSize = gh - 2
             if !fontSize.isFinite { fontSize = 12 }
-            fontSize = min(22, max(11, fontSize))
+            fontSize = min(22, max(8, fontSize))
             let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
             let classicGreen = NSColor(calibratedRed: 0.7, green: 1.0, blue: 0.7, alpha: 1)
 
-            for y in 0..<chromeRows {
+            for y in 0..<rows {
                 for x in 0..<cols {
                     let chv = host.cellAt(col: x, row: y)
                     if chv == 32 { continue }
@@ -1205,9 +1305,9 @@ final class AppGridView: NSView {
                         textFg = classicGreen
                     }
                     let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textFg]
-                    let px = inner.minX + CGFloat(x) * cw
-                    let baseline = inner.maxY - CGFloat(y + 1) * ch
-                        + (ch - font.ascender + font.descender) / 2
+                    let px = originX + CGFloat(x) * gw
+                    let baseline = originTop - CGFloat(y + 1) * gh
+                        + (gh - font.ascender + font.descender) / 2
                     (s as NSString).draw(at: NSPoint(x: px, y: baseline), withAttributes: attrs)
                 }
             }
@@ -1228,35 +1328,49 @@ final class AppGridView: NSView {
                 width: max(1, bounds.width - 8),
                 height: max(1, bounds.height - 8)
             )
-            let chromeH = ch * 2
             let local = convert(event.locationInWindow, from: nil)
 
             var x: Int
             var y: Int
 
-            if local.y >= inner.maxY - chromeH {
-                // Visible QUIT / OPEN / FIT row — Forth row 0 / 1 at top of canvas
-                let col = Int(((local.x - inner.minX) / cw).rounded(.down))
-                let row = Int(((inner.maxY - local.y) / ch).rounded(.down))
-                let cc = min(max(0, col), cols - 1)
-                let rr = min(max(0, row), 1)
-                x = cc * (pw / cols)
-                y = ph - 1 - rr * (ph / rows) - (ph / rows) / 2
-            } else {
+            if host.showingPixels {
                 let box = letterbox.width > 1 ? letterbox : inner
                 let dw = max(1, box.width)
                 let dh = max(1, box.height)
                 x = Int(((local.x - box.minX) / dw * CGFloat(pw)).rounded(.down))
                 y = Int(((local.y - box.minY) / dh * CGFloat(ph)).rounded(.down))
+            } else {
+                let col = Int(((local.x - inner.minX) / cw).rounded(.down))
+                let row = Int(((inner.maxY - local.y) / ch).rounded(.down))
+                let cc = min(max(0, col), cols - 1)
+                let rr = min(max(0, row), rows - 1)
+                x = cc * (pw / cols) + (pw / cols) / 2
+                y = ph - 1 - rr * (ph / rows) - (ph / rows) / 2
             }
 
             if x < 0 { x = 0 }
             if y < 0 { y = 0 }
             if x >= pw { x = pw - 1 }
             if y >= ph { y = ph - 1 }
-            let buttons = Int(NSEvent.pressedMouseButtons) & 0x7
-            host.updateMouse(x: x, y: y, buttons: buttons)
+            host.updateMouse(x: x, y: y, buttons: buttons(for: event), latchDown: event.type == .leftMouseDown || event.type == .rightMouseDown || event.type == .otherMouseDown)
         }
+
+    /// Button from the event. `pressedMouseButtons` is often still 0 inside
+    /// `mouseDown`, so a click never reached the editor.
+    private func buttons(for event: NSEvent) -> Int {
+        switch event.type {
+        case .leftMouseDown, .leftMouseDragged:
+            return 1
+        case .rightMouseDown, .rightMouseDragged:
+            return 2
+        case .otherMouseDown, .otherMouseDragged:
+            return 4
+        case .leftMouseUp, .rightMouseUp, .otherMouseUp, .mouseMoved:
+            return 0
+        default:
+            return Int(NSEvent.pressedMouseButtons) & 0x7
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -1325,25 +1439,42 @@ final class AppGridView: NSView {
             host.pushKey(code)
         }
     }
+
+    /// Command and Control belong to this window while it is key, so EditForth
+    /// menu shortcuts (Save, Find, Close Tab) do not also run.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let host, host.isKeyWindowActive else { return false }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.command) || flags.contains(.control) else { return false }
+        let code = AppOutputHost.mapKeyEvent(event)
+        if code >= 0 {
+            host.pushKey(code)
+        }
+        return true
+    }
 }
 
 // MARK: - C ABI from forth.s
 
 // OOP windows, menus, and buttons. Separate from the GRAPHICS char window.
-private final class OOPWin {
+private final class OOPWin: NSObject, NSWindowDelegate {
     let window: NSWindow?
     let view: NSView
     var menu: NSMenu?
     var menuBarItem: NSMenuItem?
+    var sizeDirty = false
     init(x: Int64, y: Int64, w: Int64, h: Int64) {
         let rect = NSRect(x: CGFloat(x), y: CGFloat(y), width: CGFloat(max(w, 120)), height: CGFloat(max(h, 80)))
         let win = NSWindow(contentRect: rect, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         win.title = "OOP"
         win.isReleasedWhenClosed = false
-        view = NSView(frame: NSRect(origin: .zero, size: rect.size))
-        view.autoresizingMask = [.width, .height]
-        win.contentView = view
+        let content = NSView(frame: NSRect(origin: .zero, size: rect.size))
+        content.autoresizingMask = [.width, .height]
         window = win
+        view = content
+        super.init()
+        win.delegate = self
+        win.contentView = content
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -1353,10 +1484,21 @@ private final class OOPWin {
         let ph = parent.view.bounds.height
         let ww = CGFloat(max(w, 8))
         let hh = CGFloat(max(h, 8))
-        view = NSView(frame: NSRect(x: CGFloat(x), y: ph - CGFloat(y) - hh, width: min(ww, pw), height: min(hh, ph)))
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        parent.view.addSubview(view)
+        let child = NSView(frame: NSRect(x: CGFloat(x), y: ph - CGFloat(y) - hh, width: min(ww, pw), height: min(hh, ph)))
+        child.wantsLayer = true
+        child.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        view = child
+        super.init()
+        parent.view.addSubview(child)
+    }
+    func windowDidResize(_ notification: Notification) {
+        sizeDirty = true
+    }
+    func packedContentSize() -> Int64 {
+        let s = view.bounds.size
+        let w = min(65535, max(0, Int(s.width.rounded(.down))))
+        let h = min(65535, max(0, Int(s.height.rounded(.down))))
+        return Int64(w) | (Int64(h) << 16)
     }
 }
 
@@ -1449,6 +1591,17 @@ public func host_oop_call(_ a: Int64, _ b: Int64, _ c: Int64, _ d: Int64, _ op: 
             let h = (c >> 16) & 0xffff
             hub.wins[id] = OOPWin(childOf: parent, x: a, y: b, w: w, h: h)
             return Int64(id)
+        }
+    case 8:
+        return hub.run {
+            hub.wins[Int(a)]?.packedContentSize() ?? 0
+        }
+    case 9:
+        return hub.run {
+            guard let ow = hub.wins[Int(a)] else { return 0 }
+            let flag: Int64 = ow.sizeDirty ? -1 : 0
+            ow.sizeDirty = false
+            return flag
         }
     case 6:
         let pending = hub.take()

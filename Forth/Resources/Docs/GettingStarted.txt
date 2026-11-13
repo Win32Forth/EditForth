@@ -11,8 +11,9 @@ come back here.
 Wait until the console shows ok(0)> before you type a command.
 
 The first demo is HELLO.fth, in Library/Sample. The list on the left
-starts in your Documents/EditForth folder, with Docs open. Click a
-folder name to open or close it. There is no separate read-only list.
+opens the last folder you chose for it. The first time, that is
+Documents/EditForth, with Docs open. Click a folder name to open or
+close it. There is no separate read-only list.
 
 Click Library, then Sample, until both are open. Click HELLO.fth once.
 It opens in this window. Click the GettingStarted tab to come back.
@@ -39,7 +40,8 @@ The console prints:
 
 These files are on your disk, under Documents/EditForth. Save writes
 the file that is open. Share is Save As. New starts a blank file.
-The folder button above the list can show a different folder.
+The folder name above the list is a menu of the last ten folders.
+Choose Folder… picks another folder.
 File → Open opens a file from anywhere on the disk.
 
 Restart, to the right of Pause, boots a fresh Forth and clears the

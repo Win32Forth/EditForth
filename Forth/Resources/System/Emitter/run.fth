@@ -79,6 +79,8 @@ VARIABLE RUN-RSP-MEM
 \ On entry from CALL-NATIVE: x19 = dsp we passed, x0 unused.
 \ Set x22=dsp, x23=RSP, x21=colon-CFA, x20=0, x28=0, push a
 \ synthetic return IP, then NEXT into the colon body.
+\ WRITE-COLON stores the body at CFA+8 (the host DOES> slot is not
+\ copied). emit-run and the patched (DOCOL) use the same #8.
 \
 \ BL veneers in sliced code use BLR and clobber X30. Save CALL-NATIVE's
 \ LR on the run RSP at entry; the return gadget restores it before RET.
@@ -92,6 +94,9 @@ VARIABLE RET-BODY
   xt MAP-FIND DUP 0= IF  ." RUN unmapped" CR ABORT  THEN  TO cfa
   RUN-ORG @ RUN-DP !
   $AA1303F6 RUN-W,             \ MOV X22, X19   (DSP)
+  \ Leave x27 alone. CALL-NATIVE's SAVE_VM slot is shared with the
+  \ image, and a copied SAVE_VM would publish this x27 back to the host.
+  \ emit-run sets x27 itself; it has no host user area to restore.
   0 28 0 ARM-MOVZ,             \ X28 = 0 (no debug NEXT)
   0 20 0 ARM-MOVZ,             \ X20 = 0 (TOS)
   RUN-RSP @ 23 ARM-MOV64,      \ X23 = RSP
@@ -101,7 +106,7 @@ VARIABLE RET-BODY
   RUN-HERE TO patch
   0 0 ARM-MOV64,               \ 4 insns; overwritten below
   $F81F8EE0 RUN-W,             \ STR X0, [X23, #-8]!   RPUSH return IP
-  $910042B3 RUN-W,             \ ADD X19, X21, #16     IP = body
+  $910022B3 RUN-W,             \ ADD X19, X21, #8      IP = body
   $F8408675 RUN-W,             \ LDR X21, [X19], #8    NEXT
   $F94002A1 RUN-W,             \ LDR X1, [X21]
   $D61F0020 RUN-W,             \ BR X1
@@ -159,6 +164,9 @@ VARIABLE RET-BODY
   {: cfa | retc cfar body patch -- :}
   RUN-ORG @ RUN-DP !
   $AA1303F6 RUN-W,             \ MOV X22, X19   (DSP)
+  \ Leave x27 alone. CALL-NATIVE's SAVE_VM slot is shared with the
+  \ image, and a copied SAVE_VM would publish this x27 back to the host.
+  \ emit-run sets x27 itself; it has no host user area to restore.
   0 28 0 ARM-MOVZ,             \ X28 = 0 (no debug NEXT)
   0 20 0 ARM-MOVZ,             \ X20 = 0 (TOS)
   RUN-RSP @ 23 ARM-MOV64,      \ X23 = RSP
@@ -167,7 +175,7 @@ VARIABLE RET-BODY
   RUN-HERE TO patch
   0 0 ARM-MOV64,
   $F81F8EE0 RUN-W,             \ STR X0, [X23, #-8]!   RPUSH return IP
-  $910042B3 RUN-W,             \ ADD X19, X21, #16     IP = body
+  $910022B3 RUN-W,             \ ADD X19, X21, #8      IP = body
   $F8408675 RUN-W,             \ LDR X21, [X19], #8    NEXT
   $F94002A1 RUN-W,             \ LDR X1, [X21]
   $D61F0020 RUN-W,             \ BR X1
@@ -182,10 +190,24 @@ VARIABLE RET-BODY
   body 0 ARM-MOV64,
   ;
 
+\ Every SA-SP0-MAGIC in the data segment is an empty-DSP slot
+\ (FILE_POP_UNDER's cell, TU_S0, TU_DSP). Replace them all.
+: SA-SP0-APPLY  ( -- )
+  TGT-DATA-ORG @ 0= IF  EXIT  THEN
+  TGT-DATA-ORG @
+  BEGIN  DUP TGT-DATA-DP @ U<  WHILE
+    DUP @ SA-SP0-MAGIC = IF
+      RUN-DSP @ OVER !
+    THEN
+    CELL+
+  REPEAT
+  DROP ;
+
 : TGT-RUN-AT  ( cfa -- )
   HOST-BIND-IF-NEEDED
   RUN-OPEN
   RUN-EMIT-CFA
+  SA-SP0-APPLY
   RUN-PROTECT
   0  RUN-DSP @  RUN-ORG @  CALL-NATIVE
   DROP

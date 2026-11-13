@@ -54,13 +54,14 @@ VARIABLE REACH-WORK
 
 \ Branch / loop inline: IP at opcode, next cell is byte offset; target =
 \ addr_of_offset + offset (see forth.s XBranch / X0Branch).
+\ LEAVE and (DO) have no inline offset. LEAVE scans the body at run time
+\ for (LOOP) / (+LOOP). Treating LEAVE as a branch consumes the next xt.
 : BR-OP?  ( xt -- flag )
   DUP 0BRANCH-ADDR =
   OVER BRANCH-ADDR = OR
   OVER ['] (LOOP) = OR
   OVER ['] (+LOOP) = OR
-  OVER ['] (?DO) = OR
-  SWAP ['] LEAVE = OR ;
+  SWAP ['] (?DO) = OR ;
 
 \ Exclusive end of colon region still to visit (branch-aware).
 \ Needed so IF EXIT THEN does not stop the scan at the mid-colon EXIT.
@@ -75,11 +76,14 @@ VARIABLE SCAN-ADDR
 
 \ Lit payload may be a number, an xt (CATCH / [']), or a VALUE/VARIABLE
 \ PFA from TO (host dict cell). CREATE: does_ip @ CFA+8, user PFA @ CFA+16.
+\ DOES> CELL+ objects (WINED-APP) pass CFA+24. The class pointer sits at
+\ the PFA, so the owner xt is addr-24.
 \ Avoid @ on small ints (SIGSEGV). Kernel VALUEs sit below USER-DICT.
 : LIT-MARK-DATA-OWNER  ( addr -- )
   DUP DATA-WORD? IF  (MARK) EXIT  THEN
   DUP 16 - DATA-WORD? IF  16 - (MARK) EXIT  THEN
   DUP 8 - DATA-WORD? IF  8 - (MARK) EXIT  THEN
+  DUP 24 - DATA-WORD? IF  24 - (MARK) EXIT  THEN
   DROP ;
 
 : LIT-PAYLOAD-MARK  ( x -- )

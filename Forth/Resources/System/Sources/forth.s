@@ -1025,7 +1025,8 @@ XAPP_OPEN_END:
     NEXT
 
 // (OOP-CALL) ( a b c d op -- n )  Mac window/menu/button. Not GRAPHICS.
-    BOOT_WORD "(OOP-CALL)", "(OOP-CALL) ( a b c d op -- n ) OOP window host", 0, XOOP_CALL, XOOP_CALL_END
+// ops 1-7 window/menu/button/event/child. op 8 packed content size. op 9 resized.
+    BOOT_WORD "(OOP-CALL)", "(OOP-CALL) ( a b c d op -- n ) OOP window host; 8=size 9=resized", 0, XOOP_CALL, XOOP_CALL_END
 XOOP_CALL:
     mov  x4, x20                   // op
     ldr  x3, [x22], #8             // d

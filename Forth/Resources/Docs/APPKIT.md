@@ -4,7 +4,7 @@
 
 **Emitter version:** **0.7** (stand-alone GRAPHICS emit; tetra + PIMAIN verified as `.app`).  
 **Status:** design freeze for the window/IO surface (2026-09-05); packaging path live as of 2026-09-06; SA locals/BI + window I/O remap in **0.7** (2026-09-07).  
-**Menus** and **File-Access-in-kit** are deferred.  
+**Menus** are deferred. ANS File-Access words run in stand-alone images through `SA-FILES`.  
 **First emit target:** `tetra/tetra.fth` (64TCOM tree) — interactive GRAPHICS + stand-alone `EMIT-WINDOW-APP` → `TETRA.app`. Also `PI/pi-chudnovsky.fth` → `PIMAIN.app`.
 
 This document names the runtime base that Emitter-built stand-alone apps will sit on. It is **not** a second GUI toolkit: it is the existing **GRAPHICS** vocabulary plus host `(APP-*)` hooks, with room for a later **MENUS** vocabulary.
@@ -43,13 +43,15 @@ Entry pattern (unchanged): load sources, then `MAIN` (AutoLoad may call `APP-RUN
 
 **Ink** (`WHITE` `BLACK` `INVERT`) remain **modes** (set / clear / xor), not palette names. **Pen** is `COLOR` (index in `COLOR8`, `$00RRGGBB` in `TRUECOLOR`). Classic indices: `CBLACK`…`CWHITE`. Pack truecolor with `r g b RGB`.
 
-Host draw uses a CGImage stretch (not per-pixel rect fills). Char overlay stays green; spaces leave pixels visible.
+Host draw uses a CGImage stretch (not per-pixel rect fills). Spaces leave pixels visible. COLOR8 glyphs are black on paper index 8 and above, and white on a darker index. Other depths keep the green glyph. Every character row is drawn, on the same rectangle as the pixel image.
+
+Keys: unmodified arrows stay `200` up, `208` down, `203` left, `205` right. Home `199`, End `207`, Page Up `201`, Page Down `209`, forward delete `212`, Insert `213`. Shift is `256`, Command or Control is `512`, Option is `1024`, OR'd onto those navigation codes. A Command or Option letter is the character OR those bits (Command-Shift-S is `S` with `256` and `512`). Shift alone still arrives as the shifted character, so Shift-S is `S`. Esc is always 27. The graphics window consumes Command and Control while it is key. EditForth text commands are Command-N/O/S, Command-Shift-S, Command-W/F/G, Command-Shift-F/G, Command-A/C/X/V/Z, Command-/, and Command-Shift-B. Debugger keys stay with the EditForth text view.
 
 ### Image load (interactive host)
 
 `(APP-IMG-CHOOSE)` / `(APP-IMG-LOAD)` / `(APP-IMG-SIZE)` / `(APP-IMG-RENDER)` decode any format `NSImage` supports (JPEG, PNG, HEIC, TIFF, GIF, …) into a host BGRA cache, then sample into the Forth `TRUECOLOR` buffer. Zoom is `zoom100` (100 = 1:1) around an image-space center. Sample: `Library/Sample/IMAGEVIEW64.fth` → `IMAGEVIEW`. Interactive Swift host and Emitter `emit-run` both implement slots **17–20** (NSOpenPanel / path load / render). SA also accepts `--image PATH`, a second argv path, or drag-drop onto the window (staged path consumed by OPEN / choose).
 
-`(APP-FILE-CHOOSE)` / `(APP-FILE-SAVE-AS)` / `(APP-FILE-PATH)` / `(APP-FILE-SLURP)` / `(APP-FILE-SPEW)` stage a path via NSOpenPanel/NSSavePanel then read/write bytes (slots **21–25**). Sample: `Library/Sample/EDIT64.fth` → `EDIT64`. Keeps ANS File-Access out of the emit reach graph.
+`(APP-FILE-CHOOSE)` / `(APP-FILE-SAVE-AS)` / `(APP-FILE-PATH)` / `(APP-FILE-SLURP)` / `(APP-FILE-SPEW)` stage a path via NSOpenPanel/NSSavePanel then read/write bytes (slots **21–25**). Sample: `Library/Sample/EDIT64.fth` → `EDIT64`. Those slots clamp to the caller's buffer. ANS file words (`OPEN-FILE`, `CREATE-FILE`, `READ-FILE`, `WRITE-FILE`, `FILE-SIZE`, `CLOSE-FILE`, and the rest of that set) also run in an `EMIT-WINDOW-APP` image: `SA-FILES` uses Darwin calls. `FILE-SIZE` is `( fileid -- ud ior )`, low cell = byte length. Smoke: `System/Emitter/EmitterSmoke/sa-fsize-win.fth`.
 
 ### Forth words (GRAPHICS)
 
@@ -57,7 +59,7 @@ Char / IO: `WINDOW` `WINDOW-OFF` `APP-NAME` `CLS` `AT` `EMIT` `TYPE` `SPACE` `CR
 
 Time / sound: `TIME-RESET` `10TH-ELAPSED` `TENTHS` `TONE`
 
-Mouse: `G-MOUSE` / `GETMOUS` → `(APP-MOUSE)` — `( -- x y buttons )`, PLOT origin (bottom-left); buttons `1`=left `2`=right `4`=middle
+Mouse: `G-MOUSE` / `GETMOUS` → `(APP-MOUSE)` — `( -- x y buttons )`, PLOT origin (bottom-left); buttons `1`=left `2`=right `4`=middle. Shift is not part of the button mask.
 
 Points: `1BIT` `COLOR8` `TRUECOLOR` `WHITE` `BLACK` `INVERT` `COLOR` `RGB` `CBLACK`…`CWHITE` `PLOT` `UNPLOT` `LINE` `POINT@` `POINT-COLOR@` `PCLS` `PREFRESH`
 
@@ -104,7 +106,7 @@ Forth owns `G-BUF` / `G-PIX`; the host owns the `NSWindow`, blit, key queue, ton
 | Deferred | Notes |
 |----------|--------|
 | **MENUS** vocabulary | Limited menu construction/handling — later |
-| File-Access as Emitter kit fence | ANS file words already exist in the kernel/host; not part of this freeze |
+| File-Access declared-import fence | Not used. ANS file words run in the image via `SA-FILES` |
 | IDE surfaces | Console, Facility, SZ-EDITOR, Hyper, Tools menus |
 
 ---
@@ -187,4 +189,4 @@ Emitter milestone: emit **tetra** as a stand-alone macOS app that still uses the
    - **Done:** `EMIT-WINDOW-APP` / `EMIT-WINDOW-APP-TO` — build a `:NONAME` headless main `S" STEM" APP-NAME WINDOW <xt> WINDOW-OFF ;` then pack. **STEM** = uppercase basename of `LAST-INCLUDED` (load the app `.fth` *after* Emitter). Example: include `tetra.fth`, then `' GAME EMIT-WINDOW-APP` → `TETRA.app`. Smoke: `EmitterSmoke/emit-window-app-smoke.fth`.
    - **Done:** `FROMLIB?` / `FROMLIB-OFF` / `LIBRARY-PATH` / `LAST-INCLUDED` — Forth-visible FROMLIB arm, Library root, and last INCLUDE/FLOAD path.
    - **Done:** `CATCH` / `(CATCH-OK)` / `THROW` have `CODE-BOUNDS`. **SA-EXCEPT** retargets their BSS ADRPs into RW `TGT-DATA` cells. **`EMIT-APP` / `EMIT-WINDOW-APP` auto-wrap with `CATCH`**; default `EMIT-ON-THROW` prints the code then **`KEY DROP`** so the user can read it before shutdown (override with `' MY-HANDLER IS EMIT-ON-THROW`). Raw `TGT-BUILD` still refuses `ABORT` without `CATCH`. Uncaught `THROW` never enters `QUIT`.
-4. Later: **MENUS** vocab; document File-Access as part of the kit fence when stand-alone apps need declared file imports.
+4. Later: **MENUS** vocab. ANS File-Access in stand-alone images is done (`sa-fsize-win.fth`); no separate import fence.

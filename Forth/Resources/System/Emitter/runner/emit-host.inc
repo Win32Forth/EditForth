@@ -8,7 +8,8 @@
  * slot 27 TIME&DATE / host_time_date (localtime_r → out[6]),
  * slot 28 CLIP! / 29 CLIP@ / 30 CWD@,
  * slot 31 SYSTEM (/bin/sh -c),
- * slot 32 MS / nanosleep.
+ * slot 32 MS / nanosleep,
+ * slot 33 RESIZE / realloc.
  * Public domain.
  */
 #import <Cocoa/Cocoa.h>
@@ -169,22 +170,44 @@ static int64_t emit_key_pop(void) {
   return c;
 }
 
+/* Same packing as AppOutputHost.mapKeyEvent. Unmodified arrows stay
+   200/208/203/205. Shift=256, Command or Control=512, Option=1024.
+   Esc is always 27. */
 static int64_t emit_map_key(NSEvent *ev) {
+  NSEventModifierFlags fl = [ev modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask;
+  int64_t mods = 0;
+  if (fl & NSEventModifierFlagShift) mods |= 256;
+  if (fl & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) mods |= 512;
+  if (fl & NSEventModifierFlagOption) mods |= 1024;
+  if ([ev keyCode] == 53) return 0x1B;
+  int64_t nav = -1;
   switch ([ev keyCode]) {
-    case 123: return 203;
-    case 124: return 205;
-    case 125: return 208;
-    case 126: return 200;
-    case 53:  return 0x1B;
-    case 49:  return 0x20;
+    case 123: nav = 203; break;
+    case 124: nav = 205; break;
+    case 125: nav = 208; break;
+    case 126: nav = 200; break;
+    case 115: nav = 199; break;
+    case 119: nav = 207; break;
+    case 116: nav = 201; break;
+    case 121: nav = 209; break;
+    case 117: nav = 212; break;
+    case 114: nav = 213; break;
     default: break;
   }
-  NSString *chars = [ev charactersIgnoringModifiers];
-  if (chars && [chars length] > 0) {
-    unichar u = [chars characterAtIndex:0];
-    if (u < 128) return (int64_t)u;
+  if (nav >= 0) return mods ? (nav | mods) : nav;
+  int64_t base = -1;
+  if ([ev keyCode] == 49) base = 0x20;
+  else {
+    NSString *chars = [ev charactersIgnoringModifiers];
+    if (chars && [chars length] > 0) {
+      unichar u = [chars characterAtIndex:0];
+      if (u < 128) base = (int64_t)u;
+    }
   }
-  return -1;
+  if (base < 0) return -1;
+  if (base == 9) return mods ? (base | mods) : base;
+  if (mods & (512 | 1024)) return base | mods;
+  return base;
 }
 
 @interface EmitGridView : NSView
@@ -729,6 +752,11 @@ static int64_t host_free(int64_t ptr, int64_t unused) {
   return 0;
 }
 
+/* Slot 33: RESIZE's bl _realloc (x0=ptr, x1=size). Kernel bumps 0 to 1. */
+static int64_t host_realloc(int64_t ptr, int64_t sz) {
+  return (int64_t)(uintptr_t)realloc((void *)(uintptr_t)ptr, (size_t)sz);
+}
+
 /* Slots 12–14: BI hooks. Forth leaves a,b,r / num,den,quot,rem / a,r in
  * x0..x3 then BLR into the veneer. emit_host_fn is (x0,x1) only — capture
  * x2/x3 before any C prologue can clobber them (-O2). */
@@ -1235,8 +1263,8 @@ static int64_t host_ms_nanosleep(int64_t req, int64_t rem) {
                             (struct timespec *)(uintptr_t)rem);
 }
 
-/* Slot table — must match Emitter reloc.fth HOST-APP slots 0–32. */
-static emit_host_fn host_fn[33] = {
+/* Slot table — must match Emitter reloc.fth HOST-APP slots 0–33. */
+static emit_host_fn host_fn[34] = {
   host_app_open,
   host_app_close,
   host_app_blit,
@@ -1269,5 +1297,6 @@ static emit_host_fn host_fn[33] = {
   host_clip_get,
   host_cwd_get,
   host_system,
-  host_ms_nanosleep
+  host_ms_nanosleep,
+  host_realloc
 };

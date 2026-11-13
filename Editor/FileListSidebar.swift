@@ -3,7 +3,9 @@
 //  EditForth
 //
 //  Left-hand list of the folders and files under one directory.
-//  The directory starts at ~/Documents/EditForth with Docs open.
+//  The directory starts at the last folder chosen for this list, or
+//  ~/Documents/EditForth the first time, with Docs open when present.
+//  The folder name is a menu of the ten most recent roots.
 //  New, Save, and Share
 //  use the same document actions as the File menu. Share runs Save As.
 //
@@ -24,10 +26,16 @@ struct FileListEntry: Identifiable {
     var id: String { path }
 }
 
-/// Watches one folder and publishes its tree. The root is not persisted:
-/// each launch starts at Documents/EditForth.
+/// Watches one folder and publishes its tree. The menu keeps the ten
+/// most recent roots. Launch opens the newest one that is still a folder,
+/// or Documents/EditForth.
 final class FileListModel: ObservableObject {
+    static let recentRootsLimit = 10
+    private static let recentRootsKey = "fileListRecentRoots"
+
     @Published private(set) var root: URL
+    /// Newest first. Includes folders that are not on disk right now.
+    @Published private(set) var recentRoots: [URL] = []
     @Published private(set) var entries: [FileListEntry] = []
     @Published private(set) var expanded: Set<String> = []
 
@@ -38,7 +46,14 @@ final class FileListModel: ObservableObject {
     private var lastSelection: URL?
 
     init() {
-        root = ForthMenuSupport.userTreeURL.standardizedFileURL
+        let stored = Self.loadRecentRoots()
+        let fallback = ForthMenuSupport.userTreeURL.standardizedFileURL
+        let start = stored.first(where: Self.isDirectory) ?? fallback
+        root = start
+        recentRoots = stored
+        if !recentRoots.contains(where: { $0.path == start.path }) {
+            rememberRoot(start)
+        }
         let docs = root.appendingPathComponent("Docs", isDirectory: true)
         if FileManager.default.fileExists(atPath: docs.path) {
             expanded = [docs.standardizedFileURL.path]
@@ -52,7 +67,12 @@ final class FileListModel: ObservableObject {
     }
 
     var displayRoot: String {
-        let path = root.path
+        displayPath(root)
+    }
+
+    /// Home-relative path, for the menu title and its items.
+    func displayPath(_ url: URL) -> String {
+        let path = url.standardizedFileURL.path
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
         if path == home { return "~" }
         if path.hasPrefix(home + "/") {
@@ -90,13 +110,46 @@ final class FileListModel: ObservableObject {
     }
 
     func setRoot(_ url: URL) {
-        root = url.standardizedFileURL
+        let next = url.standardizedFileURL
+        rememberRoot(next)
+        guard next.path != root.path else { return }
+        root = next
         expanded = []
         revealedPath = ""
         stopWatching()
         startWatching()
         reload()
         noteSelection(lastSelection)
+    }
+
+    /// Put `url` first in the ten-folder menu and save that order.
+    private func rememberRoot(_ url: URL) {
+        let next = url.standardizedFileURL
+        var urls = [next]
+        for item in recentRoots where item.path != next.path {
+            urls.append(item)
+            if urls.count == Self.recentRootsLimit { break }
+        }
+        recentRoots = urls
+        UserDefaults.standard.set(urls.map(\.path), forKey: Self.recentRootsKey)
+    }
+
+    private static func loadRecentRoots() -> [URL] {
+        let paths = UserDefaults.standard.stringArray(forKey: recentRootsKey) ?? []
+        var seen = Set<String>()
+        var urls: [URL] = []
+        for path in paths where !path.isEmpty {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard seen.insert(url.path).inserted else { continue }
+            urls.append(url)
+            if urls.count == recentRootsLimit { break }
+        }
+        return urls
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     /// Expand the folders above `url` once, when the selected file changes.
@@ -277,20 +330,36 @@ struct FileListSidebar: View {
             .padding(.top, 8)
             .padding(.bottom, 6)
 
-            Button {
-                model.chooseFolder()
+            Menu {
+                ForEach(model.recentRoots, id: \.path) { url in
+                    Toggle(model.displayPath(url), isOn: Binding(
+                        get: { url.path == model.root.path },
+                        set: { _ in model.setRoot(url) }
+                    ))
+                }
+                if !model.recentRoots.isEmpty {
+                    Divider()
+                }
+                Button("Choose Folder…") {
+                    model.chooseFolder()
+                }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                     Text(model.displayRoot)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .help("Choose the folder this list shows. \(model.root.path)")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help("Recent folders for this list. \(model.root.path)")
             .padding(.horizontal, 8)
             .padding(.bottom, 6)
 

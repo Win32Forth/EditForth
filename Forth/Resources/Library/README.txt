@@ -70,6 +70,7 @@ Examples
   FROMLIB FLOAD Sample/SSBLIT.fth          \ then: SSBLIT (logo and a moving Z; any key stops)
   FROMLIB FLOAD Sample/IMAGEVIEW64.fth     \ then: IMAGEVIEW (TRUECOLOR open/zoom)
   FROMLIB FLOAD Sample/EDIT64.fth          \ then: EDIT64 (GRAPHICS mini-editor; EMITable)
+  FROMLIB FLOAD WinEd/WINED64.fth          \ then: WINED64 (editor; keys match EditForth)
   \ REF / XREF / USEDIN / CALLS / ANYWORDS — cold-loaded (Kernel/xref.fth .incbin)
   \   REF DUP          \ colon/DEFER refs; Space=pause Esc/Q=stop; title shows leaf:line
   \   ANYWORDS OVER    \ WORDS-like across FORTH + named VOCABULARYs (optional filter)

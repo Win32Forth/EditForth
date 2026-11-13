@@ -1,8 +1,36 @@
 # 64Forth development status
 
-**Current:** **2.7.0** (build **32**) — cooperative tasks, per-task scratch, semaphores, a mailbox and fixed ring, a multi-core scheduler, an optional private dictionary slice, an introductory fixed-point library, and Mandelbrot samples on one task, four cooperative tasks, and four cores. Disk image `Releases/EditForth-2.7.0-macOS.dmg`. The 2.6.4 image stays.
+**Current:** **2.7.1** (build **33**) — recent folder menu, WINED64, ANS file words in a stand-alone image, and emitter fixes for blit, `LEAVE`, object literals, and `RESIZE`. No disk image yet. The shipped image remains `Releases/EditForth-2.7.0-macOS.dmg`.
 
-**Last updated:** 2026-11-11
+**Last updated:** 2026-11-12
+
+---
+
+## v2.7.1 — WINED64, recent folders, and stand-alone file words
+
+**Version strings:** marketing **2.7.1**, build **33**. No disk image yet. The shipped image remains `Releases/EditForth-2.7.0-macOS.dmg`. Console stamp `Nov 12, 2026 9:27 PM`. `scripts/release.sh` was not run.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.7.1 === Nov 12, 2026 9:27 PM ===
+```
+
+### Highlights since 2.7.0
+
+- **Recent folders.** The name beside the folder icon is a menu of the ten most recent file-list roots. Newest is first. Choose Folder… opens the panel. Launch opens the newest stored folder that is still a directory, otherwise `~/Documents/EditForth`. That menu does not change the Forth working directory. Docs starts open when the chosen folder has a Docs child.
+- **WINED64.** `Library/WinEd/WINED64.fth` is a translation of Win32Forth `wined.F` (about March 23, 2002). `FROMLIB FLOAD WinEd/WINED64.fth` then `WINED64`. Loading the file does not open the window. The text is the resizable GRAPHICS App Output grid. The corner drag reflows the columns and rows. Eight slots keep their own text. The top row is NEW, OPEN, SAVE, CLOSE, NEXT, FIND, HELP, and QUIT. NEXT steps through the eight slots, including empty ones. Help is a mode: a later key, or a click after the mouse comes up, returns to the text. Command-Q leaves the editor the same way Esc does. It does not quit EditForth. Quit asks once for every dirty slot. S saves and continues, D discards and continues, Esc cancels and keeps every edit. The red close button sends Esc. The window stays up until the editor leaves. Copy, cut, and paste use a buffer inside the editor. Find is case-insensitive and does not wrap. Long lines scroll sideways.
+- **File buffers.** Opening a file allocates twice the file size, and at least 4096 bytes. An empty file still gets 4096. A file whose size does not fit in one cell is refused as too big and is not truncated. Typing, paste, and replace grow the body, the undo buffer, the clip, and the scratch buffer by doubling. The first growth block is at least 4096 bytes. Out of memory is the only other refusal. `WE-SELFTEST` printed `wined64-ok`.
+- **Keys.** Command letters match the EditForth text commands: N, O, S, Shift-S, W, Q, F, Shift-F, G, Shift-G, A, C, X, V, Z, /, and Shift-B. Control does the same while the graphics window is key. Arrows, Option-word, Command-line and Command-file, Home, End, Page Up, and Page Down match the editor. Shift extends a selection. The old WinEd Control-letter map is not used.
+- **Not ported.** Printing, the registry, the toolbar, HTML browse, `hyper.f`, `MORE-HTML.F`, `custom-keys.F`, macros, binary and block mode, multiple fonts, a turnkey EXE, and WinINet. Page and overstrike are Option-Page and Insert, not separate files.
+- **Classes.** The method shape matches Win32Forth (`:CLASS`, `<SUPER`, `:M`, `;M`, `;CLASS`, `START:`). The system underneath does not. `Classes/README.txt` lists the differences. `START:` does not open a second window. `WINDOW` `SIZE:` and `?RESIZE:` report the content size and one resize of that separate Mac window (`(OOP-CALL)` ops 8 and 9). WINED64 does not draw on it.
+- **Graphics host.** COLOR8 glyphs are black on paper index 8 and above, and white on a darker index. Every character row is drawn. Unmodified arrows stay 200, 208, 203, and 205. Home, End, Page Up, Page Down, forward delete, and Insert are 199, 207, 201, 209, 212, and 213. Shift is 256, Command or Control is 512, and Option is 1024, OR'd onto those codes. Shift is not part of the mouse-button mask. A file panel runs as a modal panel on the evaluate pump. The close-button teardown runs after that button's tracking loop, so the cursor does not beach.
+- **ANS files in an emitted app.** `OPEN-FILE`, `CREATE-FILE`, `READ-FILE`, `WRITE-FILE`, `FILE-SIZE`, `FILE-POSITION`, `CLOSE-FILE`, and the rest of that set run in an `EMIT-WINDOW-APP` image. `SA-FILES` uses Darwin calls. `FILE-SIZE` is `( fileid -- ud ior )`. `FILE-POSITION` is the current offset. Smoke: `System/Emitter/EmitterSmoke/sa-fsize-win.fth`. The choose, save-as, path, slurp, and spew slots still clamp to the caller's buffer.
+- **Blit.** `(APP-BLIT)`, `(APP-PBLIT)`, and `(APP-CBLIT)` call claim, then the host, then release. The emitter records the claim and release addresses and does not bind the host slot to them. Binding the first call painted a window of `?` and skipped the real blit. Stand-alone builds NOP claim and release.
+- **Reach.** `LEAVE` and `(DO)` have no inline offset. `LEAVE` finds `(LOOP)` or `(+LOOP)` at run time. Treating either as a branch consumed the next xt. `(?DO)`, `(LOOP)`, `(+LOOP)`, `BRANCH`, and `0BRANCH` still have an offset cell. A `DOES>` `CELL+` object passes CFA+24. The class pointer sits at the parameter field, so the emitter imports the owner at that address minus 24. Without that import, `EMIT-WINDOW-APP WINED64` aborted on an unmapped literal.
+- **RESIZE.** Host slot **33** is `RESIZE` (`realloc`). `#HOST-APP` is **34** (slots 0–33). Slots 12–14 stay the big-integer hooks. A missing slot left the call as a NOP, so a grown buffer never moved. `EMIT-WINDOW-APP WINED64` reached 379 words and produced an app whose menu row is NEW OPEN SAVE CLOSE NEXT FIND HELP QUIT. Load the emitter before WINED64 so `EMIT-NO-WRAPPER` exists. Emit from a new EditForth session. A session that already loaded the emitter keeps those words. `WINED64` under `--agent` does not open a window.
+
+**Release:** no disk image yet.
 
 ---
 

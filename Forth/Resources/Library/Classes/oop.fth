@@ -10,6 +10,8 @@ FROMLIB FLOAD Classes/classes.fth
 [THEN]
 
 \ op 6: next menu or button tag, or 0.
+\ op 8: content size of a window id, packed w|(h<<16). SIZE: unpacks it.
+\ op 9: true once after that window is resized. ?RESIZE: reads it.
 : OOP-EVENT ( -- tag ) 0 0 0 0 6 (OOP-CALL) ;
 
 \ Tag 1..32 -> xt.  ' DO-QUIT 1 OOP-ON

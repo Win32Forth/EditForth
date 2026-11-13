@@ -168,3 +168,8 @@ What is not portable, or not the same as Win32Forth
 17. Words such as Heap> for NEW>, and <Object or <Class for <SUPER, are
     not defined. SYNONYM is not in the word sets above. On 64Forth the
     dictionary folds case, so :Class and :CLASS are the same word.
+
+18. oop-window.fth WINDOW is a Mac window, not the GRAPHICS App Output
+    grid. SIZE: returns content width and height. ?RESIZE: returns true
+    once after the user resizes that window. WINED64 draws on the
+    GRAPHICS grid. Its START: does not open this window.

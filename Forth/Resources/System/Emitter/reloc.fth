@@ -63,10 +63,11 @@ $D61F0200 CONSTANT ARM-BR-X16
 \ 28 CLIP!  29 CLIP@  30 CWD@  (bl _host_clip_* / _host_cwd_get).
 \ 31 SYSTEM (blr x9 system_hook → /bin/sh -c).
 \ 32 MS (bl _nanosleep).
+\ 33 RESIZE (bl _realloc). Slots 12–14 are already the BI hooks.
 \ .quad = HOST-CALL-MAGIC|slot until HOST-BIND.
 
 $C0DE000000000000 CONSTANT HOST-CALL-MAGIC
-33 CONSTANT #HOST-APP
+34 CONSTANT #HOST-APP
 128 CONSTANT #HOST-RELOC
 
 CREATE HOST-APP-VA     #HOST-APP CELLS ALLOT
@@ -227,7 +228,20 @@ DEFER SA-PATCH-B-HELPER   ( npc tgt -- )
   OVER CBNZ-X28? IF  CBNZ-TGT    EXIT  THEN
   2DROP 0 ;
 
-\ First out-of-span BL/B target in a CODE prim (= _host_app_* VA).
+\ (APP-BLIT) / (APP-PBLIT) / (APP-CBLIT) bl _core_claim_worker before the
+\ host call, then _core_release_worker after. The host pointer is restored
+\ from the stack between those two. Binding the slot to the first BL plants
+\ host_app_blit on the claim site, so the copy reads the semaphore cell
+\ (zeros → a window of '?') and the real blit is NOP'd.
+VARIABLE SA-CLAIM-VA
+VARIABLE SA-RELEASE-VA
+
+: SA-WORKER-VA?  ( va -- flag )
+  DUP 0= IF  DROP FALSE EXIT  THEN
+  DUP SA-CLAIM-VA @ =
+  SWAP SA-RELEASE-VA @ = OR ;
+
+\ First out-of-span BL/B that is not claim/release (= _host_app_* VA).
 : HOST-PRIM-VA  ( xt -- va | 0 )
   {: xt | code u off insn tgt -- :}
   xt PRIM-SPAN TO u TO code
@@ -236,7 +250,9 @@ DEFER SA-PATCH-B-HELPER   ( npc tgt -- )
     code off + W@ TO insn
     insn B/BL? IF
       insn code off + B/BL-TGT TO tgt
-      tgt code u IN-SPAN? 0= IF  tgt EXIT  THEN
+      tgt code u IN-SPAN? 0= IF
+        tgt SA-WORKER-VA? 0= IF  tgt EXIT  THEN
+      THEN
     THEN
     off 4 + TO off
   REPEAT
@@ -564,7 +580,42 @@ S" KEY?"  (GFX-IO-XT) CONSTANT GFX-KEY?
 
 ' (TGT-MARK-WINDOW-IO) IS TGT-MARK-WINDOW-IO
 
+\ n-th out-of-span BL target in a prim (0 = first). 0 if there is no such BL.
+: HOST-EXT-BL  ( code u n -- va | 0 )
+  {: code u n | off insn tgt seen -- :}
+  0 TO off  0 TO seen
+  BEGIN  off u <  WHILE
+    code off + W@ TO insn
+    insn B/BL? IF
+      insn code off + B/BL-TGT TO tgt
+      tgt code u IN-SPAN? 0= IF
+        seen n = IF  tgt EXIT  THEN
+        seen 1+ TO seen
+      THEN
+    THEN
+    off 4 + TO off
+  REPEAT
+  0 ;
+
+\ (APP-BLIT) is claim, host blit, release. Remember the two worker VAs so
+\ HOST-PRIM-VA keeps the host call. Older kernels with one BL leave both 0.
+: SA-NOTE-WORKERS  ( -- )
+  {: | code u claim host release -- :}
+  S" (APP-BLIT)" HOST-APP-XT PRIM-SPAN TO u TO code
+  code u 0 HOST-EXT-BL TO claim
+  code u 1 HOST-EXT-BL TO host
+  code u 2 HOST-EXT-BL TO release
+  release IF host IF
+    claim SA-CLAIM-VA !
+    release SA-RELEASE-VA !
+  ELSE
+    0 SA-CLAIM-VA !  0 SA-RELEASE-VA !
+  THEN ELSE
+    0 SA-CLAIM-VA !  0 SA-RELEASE-VA !
+  THEN ;
+
 : HOST-APP-DISCOVER  ( -- )
+  SA-NOTE-WORKERS
   S" (APP-OPEN)"  HOST-APP-XT 0 HOST-APP-SET
   S" (APP-CLOSE)" HOST-APP-XT 1 HOST-APP-SET
   S" (APP-BLIT)"  HOST-APP-XT 2 HOST-APP-SET
@@ -580,6 +631,10 @@ S" KEY?"  (GFX-IO-XT) CONSTANT GFX-KEY?
   \ ALLOCATE/FREE bl libc — SA would NOP those BLs and crash on first heap use.
   ['] ALLOCATE 10 HOST-APP-SET
   ['] FREE 11 HOST-APP-SET
+  \ RESIZE bl _realloc. Same host_tmp0 stand-in as ALLOCATE (32 bytes;
+  \ RESIZE uses +0/+8/+16). Without a slot the BL is NOP'd and the
+  \ buffer never grows.
+  ['] RESIZE 33 HOST-APP-SET
   \ Slots 12–14 (BI-*) are wired by SA-FIX-BI-HOOKS (blr x9, not bl host).
   \ (APP-MOUSE) bl _host_app_mouse — without a slot, SA NOP'd the BL (zeros)
   \ or left a bad abs veneer; DOODLE.app flashed/crashed on first G-MOUSE.
@@ -647,6 +702,20 @@ CREATE SA-BSS-LEN   #SA-BSS CELLS ALLOT   \ byte length of each span
 VARIABLE SA-BSS-N
 VARIABLE SA-XC   \ host cfa_catch_ok (for FIX-CFA)
 VARIABLE SA-DC   \ data cfa_catch_ok
+\ Host data_stack symbol, and the RW cell FILE_POP_UNDER loads as SP0.
+VARIABLE SA-STACK-ABS
+VARIABLE SA-SP0-CELL
+VARIABLE SA-SP0-NPC
+VARIABLE SA-SP0-CODE
+VARIABLE SA-SP0-OFF
+VARIABLE SA-SP0-U
+\ Host up_var, and the stand-alone user area its cell points at.
+VARIABLE SA-UP-ABS
+VARIABLE SA-USER
+\ Must match runner/emit-run.m SA_SP0_MAGIC. Planted in every cell that
+\ must become the empty DSP (FILE_POP_UNDER's stand-in, and TU_S0 / TU_DSP).
+\ TGT-RUN and emit-run overwrite every copy before entry.
+$454D495453503021 CONSTANT SA-SP0-MAGIC
 
 \ Locals BSS sizes must match Kernel/forth.s LOCAL_* layout.
 8    CONSTANT /SA-LOC-DEPTH     \ local_frame_depth
@@ -691,7 +760,8 @@ VARIABLE SA-DC   \ data cfa_catch_ok
 
 : SA-BSS-RESET  ( -- )
   0 SA-BSS-N !
-  0 SA-XC !  0 SA-DC ! ;
+  0 SA-XC !  0 SA-DC !
+  0 SA-SP0-CELL ! ;
 
 : SA-BSS-FIND  ( host -- data|0 )
   {: h | i -- :}
@@ -868,6 +938,111 @@ $D63F0120 CONSTANT ARM-BLR-X9
   npc abs SA-BSS-ENSURE PATCH-ADRP-ADD
   TRUE ;
 
+\ ADD Xd, Xd, #4096  (imm12=1, LSL #12). FILE_POP_UNDER and the other
+\ data_stack SP0 sites use this immediately after ADRP+ADD.
+: ADD-SAME-4096?  ( insn -- flag )
+  DUP $FFFFFC00 AND $91400400 <> IF  DROP FALSE EXIT  THEN
+  DUP $1F AND  SWAP 5 RSHIFT $1F AND = ;
+
+\ LDR Xd, [Xd]
+: ENC-LDR-SELF  ( rd -- insn )
+  DUP 5 LSHIFT OR  $F9400000 OR ;
+
+\ OPEN-FILE's first ADRP is data_stack (FILE_POP_UNDER). Cache that host
+\ address so a return-stack ADRP+4096 is left alone.
+: SA-STACK-DISCOVER  ( -- )
+  ['] OPEN-FILE PRIM-SPAN SA-SP0-U ! SA-SP0-CODE !
+  0 SA-SP0-OFF !
+  BEGIN  SA-SP0-OFF @ 8 + SA-SP0-U @ U> 0=  WHILE
+    SA-SP0-CODE @ SA-SP0-OFF @ ADRP-ADD-ABS ?DUP IF
+      SA-STACK-ABS !
+      ." sa-sp0 data_stack " SA-STACK-ABS @ U. CR
+      EXIT
+    THEN
+    4 SA-SP0-OFF +!
+  REPEAT
+  ." sa-sp0: OPEN-FILE has no data_stack ADRP" CR ABORT ;
+
+\ Anonymous data-segment bytes. Same bump as SA-BSS-ENSURE-SZ.
+: SA-DATA-ALLOT  ( u -- addr )
+  {: u | d -- :}
+  u 7 + -8 AND TO u
+  u 0= IF  8 TO u  THEN
+  TGT-DATA @ 0= IF  ." sa-bss: no data seg" CR ABORT  THEN
+  TGT-DATA-DP @ 7 + -8 AND TO d
+  d u + TGT-DATA-LIMIT @ U> IF  ." sa-bss: data overflow" CR ABORT  THEN
+  d u 0 FILL
+  d u + TGT-DATA-DP !
+  u TGT-DATA-BYTES +!
+  d ;
+
+\ forth.s task layout. TU_S0 is 48. Scratch pointers sit after the two stacks.
+280  4096 + 4096 + 512 + 1024 + 1024 + 640 + 64 + CONSTANT /SA-USER
+
+\ Store addr at user+field and record the cell so emit-run rebases it.
+: SA-UP-PTR!  ( addr field -- )
+  SA-USER @ +
+  DUP ROT SWAP !
+  1 PTR-RELOC-ADD ;
+
+\ EXECUTE does ADRP up_var / LDR / LDR [x0, #TU_S0]. The stand-in cell is
+\ the symbol itself, so it must hold a user-area pointer, and that area's
+\ TU_S0 must be the empty DSP. Reuses the SA-SP0 scan temps; setup only.
+: SA-UP-DISCOVER  ( -- )
+  ['] EXECUTE PRIM-SPAN SA-SP0-U ! SA-SP0-CODE !
+  0 SA-SP0-OFF !
+  BEGIN  SA-SP0-OFF @ 8 + SA-SP0-U @ U> 0=  WHILE
+    SA-SP0-CODE @ SA-SP0-OFF @ ADRP-ADD-ABS ?DUP IF
+      SA-UP-ABS !
+      EXIT
+    THEN
+    4 SA-SP0-OFF +!
+  REPEAT
+  ." sa-up: EXECUTE has no up_var ADRP" CR ABORT ;
+
+: SA-UP-SETUP  ( -- )
+  SA-UP-DISCOVER
+  /SA-USER SA-DATA-ALLOT SA-USER !
+  \ Word, PAD, input, source stack, eval stack. Same order as (TASK-INIT).
+  SA-USER @ 280 + 4096 + 4096 +
+  DUP 216 SA-UP-PTR!
+  512 +
+  DUP 224 SA-UP-PTR!
+  1024 +
+  DUP 232 SA-UP-PTR!
+  1024 +
+  DUP 240 SA-UP-PTR!
+  640 +
+  248 SA-UP-PTR!
+  10 SA-USER @ 64 + !                 \ TU_BASE
+  SA-SP0-MAGIC SA-USER @ 48 + !       \ TU_S0
+  SA-SP0-MAGIC SA-USER @ 32 + !       \ TU_DSP
+  SA-UP-ABS @ 8 SA-BSS-ENSURE-SZ
+  DUP SA-USER @ SWAP !
+  1 PTR-RELOC-ADD
+  ." sa-up user " SA-USER @ U. CR ;
+
+\ After SA-BSS-TRY-PATCH, xN holds the stand-in cell's address and the
+\ following ADD Xn,Xn,#4096 treats that address as the stack base.
+\ The cell is 8 bytes, so base+4096 is not the empty DSP. TGT-RUN's stack
+\ sits above it, FILE_POP_UNDER takes the empty path, and the word pushes
+\ a 0. The next ! then stores through the file id.
+\ Load the cell instead. Callers store the real empty DSP there.
+: SA-SP0-SINK  ( npc code off u -- )
+  SA-SP0-U !  SA-SP0-OFF !  SA-SP0-CODE !  SA-SP0-NPC !
+  SA-STACK-ABS @ 0= IF  EXIT  THEN
+  SA-SP0-OFF @ 12 + SA-SP0-U @ U> IF  EXIT  THEN
+  SA-SP0-NPC @ 8 + W@ ADD-SAME-4096? 0= IF  EXIT  THEN
+  SA-SP0-CODE @ SA-SP0-OFF @ ADRP-ADD-ABS SA-STACK-ABS @ <> IF  EXIT  THEN
+  SA-STACK-ABS @ SA-BSS-FIND DUP 0= IF  DROP EXIT  THEN
+  SA-SP0-CELL @ 0= IF
+    DUP SA-SP0-CELL !
+    ." sa-sp0 cell " DUP U. CR
+  THEN
+  DROP
+  SA-SP0-NPC @ 8 + W@ $1F AND ENC-LDR-SELF  SA-SP0-NPC @ 8 + W!
+  SA-SP0-MAGIC SA-SP0-CELL @ ! ;
+
 \ CATCH ADRP+ADD order (Kernel/forth.s XCATCH):
 \   0 throw_handler  1 eval_resume_sp  2 source_sp
 \   3 cfa_catch_ok   4 catch_ok_cell   (+ optional debug_*)
@@ -875,7 +1050,8 @@ $D63F0120 CONSTANT ARM-BLR-X9
 \ (CATCH-OK) CFA into eval_resume_sp. catch_ok_cell stayed 0 → NEXT
 \ after the body loaded a null CFA (window flash / SIGSEGV x21=0).
 : SA-EXCEPT-DISCOVER  ( -- )
-  {: code u off n abs -- :}
+  \ Locals, not inputs. A bare {: a b -- :} pops the caller's stack.
+  {: | code u off n abs -- :}
   SA-XC @ IF  EXIT  THEN
   ['] CATCH PRIM-SPAN TO u TO code
   0 TO off  0 TO n
@@ -919,6 +1095,9 @@ $D63F0120 CONSTANT ARM-BLR-X9
 : SA-EXCEPT-FIX-CFA  ( -- )
   ?EMIT-STANDALONE 0= IF  EXIT  THEN
   SA-DC @ 0= IF  EXIT  THEN
+  \ CATCH's host cell is discovered even when the app never calls CATCH.
+  \ Only apps that reach CATCH have (CATCH-OK) in the image.
+  ['] CATCH MARKED? 0= IF  EXIT  THEN
   S" (CATCH-OK)" ['] SYSVOC 2 CELLS + SEARCH-WORDLIST
   0= IF  ." sa-bss: (CATCH-OK) missing" CR ABORT  THEN
   MAP-FIND ?DUP 0= IF
@@ -931,16 +1110,22 @@ $D63F0120 CONSTANT ARM-BLR-X9
   ." sa-bss cfa-ok fixed " SA-DC @ @ U. CR ;
 
 : SA-EXCEPT-SETUP  ( -- )
+  0 SA-USER !
   ?EMIT-STANDALONE 0= IF  EXIT  THEN
   SA-BSS-RESET
   SA-LOCALS-DISCOVER
   SA-HOST-TMP-DISCOVER
-  SA-EXCEPT-DISCOVER ;
+  SA-EXCEPT-DISCOVER
+  SA-STACK-DISCOVER
+  SA-UP-SETUP ;
 
 \ After SA-HELP MOVE (+ optional pool patch): retarget host BSS ADRP+ADD.
 \ In-span ADRP is re-encoded into the copy; out-of-span → SA-BSS LDR-lit.
+\ A copied block keeps in-span B/BL (the relative offset still lands inside
+\ the move). An out-of-span B/BL is a host address — the SA-PRINT debug
+\ note, or a float fast-path that standalone never takes — and becomes NOP.
 : SA-HELP-RELOC-BSS  ( host new u -- )
-  {: host new u | off abs npc -- :}
+  {: host new u | off abs npc insn tgt -- :}
   0 TO off
   BEGIN  off 4 + u <  WHILE
     host off ADRP-ADD-ABS TO abs
@@ -950,12 +1135,30 @@ $D63F0120 CONSTANT ARM-BLR-X9
         npc W@  npc  abs host - new +  npc W@ ENC-ADRP npc W!
       ELSE
         npc abs SA-BSS-ENSURE PATCH-ADRP-ADD
+        npc host off u SA-SP0-SINK
       THEN
       off 8 + TO off
     ELSE
+      host off + W@ TO insn
+      insn B/BL? IF
+        insn host off + B/BL-TGT TO tgt
+        tgt host u IN-SPAN? 0= IF
+          ARM-NOP  new off + W!
+        THEN
+      THEN
       off 4 + TO off
     THEN
   REPEAT
+  \ The ADRP peek stops one instruction early. A trailing B/BL is still stale.
+  off u < IF
+    host off + W@ TO insn
+    insn B/BL? IF
+      insn host off + B/BL-TGT TO tgt
+      tgt host u IN-SPAN? 0= IF
+        ARM-NOP  new off + W!
+      THEN
+    THEN
+  THEN
   ;
 
 \ Host (PUTCHAR)/(WRITE-STDOUT)/(GETCHAR) ADRP a hook. In a stand-alone
@@ -1110,7 +1313,9 @@ $D63F0120 CONSTANT ARM-BLR-X9
     tgt IF
       tgt code u IN-SPAN? 0= IF
         ?EMIT-STANDALONE insn ADRP? AND IF
-          npc code off SA-BSS-TRY-PATCH 0= IF
+          npc code off SA-BSS-TRY-PATCH IF
+            npc code off u SA-SP0-SINK
+          ELSE
             npc insn tgt PATCH
           THEN
         ELSE
