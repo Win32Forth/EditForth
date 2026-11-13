@@ -22,8 +22,12 @@ Examples
   FROMLIB FLOAD BigInteger/big-int.fth
   FROMLIB FLOAD FixPoint/FIXEDPOINT.fth    \ ALSO FIXED-POINT
   \ FixPoint is one signed cell. XBITS defaults to 28.
-  \ XUNIT, F>X, X>F, X*, X/, XSQRT, XSIN, and XCOS are in.
-  \ + and - are the cell words. Log, exp, and inverse trig are not.
+  \ Define CONSTANT XBITS before the load to choose another scale.
+  \ MANSHOW-COOP and MANSHOW-CORE define 52.
+  \ XUNIT, F>X, X>F, X*, X/, XSQRT, XSIN, XCOS, XEXP, XALOG,
+  \ XLN, XLOG, XATAN, XASIN, XACOS, and XATAN2 are in.
+  \ Log, exp, and inverse trig use constants written for 28 fraction bits.
+  \ + and - are the cell words.
   FROMLIB FLOAD PI/pi-test.fth
   FROMLIB FLOAD xchar-smoke.fth
   FROMLIB FLOAD Debugger/debugger.fth  \ DEBUG hub + loads Debugger/* (AutoLoad)

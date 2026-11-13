@@ -21,6 +21,10 @@
 [DEFINED] EMIT-NO-WRAPPER [IF] EMIT-NO-WRAPPER [THEN]
 
 [DEFINED] FIXED-POINT 0= [IF]
+  52 CONSTANT XBITS 	\ We will define XBITS as 52 instead of the default 28 bits
+						\ to improve precision within the constraints of our 64 bit math
+						\ if we increase XBITS to 60, things get really interesting
+						\ but we start losing precision on the high end.
   FROMLIB FLOAD FixPoint/FIXEDPOINT.fth
 [THEN]
 

@@ -2,8 +2,6 @@
 \
 \ A value is one signed cell. XBITS fraction bits sit at the bottom.
 \ The default is 28. This file reads XBITS when it loads.
-\ A later TO XBITS does not change the literals in these words.
-\ Every value in one calculation uses that same scale.
 \
 \ + and - are the cell words. 2* doubles a value. 2/ halves it.
 \ X* multiplies and X/ divides. Both round toward zero.
@@ -12,7 +10,11 @@
 \ within 2 cells of the nearest value. A huge angle loses that,
 \ because the turn is reduced with a rounded 2*pi.
 \
-\ Log, exp, and inverse trig are not in this file.
+\ XLN is the natural log. XLOG is base 10. Zero and negative return 0.
+\ XEXP is e^x. XALOG is 10^x. A result smaller than one cell is 0.
+\ A result that does not fit is the largest cell.
+\ XASIN and XACOS outside [-1,1] return 0. XATAN2 of 0 0 returns 0.
+\ Those eight stay within 3 cells of the nearest value.
 \
 \ Load:
 \   FROMLIB FLOAD FixPoint/FIXEDPOINT.fth
@@ -28,7 +30,9 @@ ONLY FORTH ALSO FIXED-POINT DEFINITIONS
 ALSO FLOATING
 DECIMAL
 
-28 VALUE XBITS
+[UNDEFINED] XBITS 
+[IF] 28 CONSTANT XBITS 
+[ELSE] .( Externally defined XBITS = ) XBITS . [THEN]
 
 \ Compile 2^XBITS into the caller. The value is frozen at load.
 : XUNIT ( -- n )
@@ -147,5 +151,275 @@ DECIMAL
 
 : XCOS ( n1 -- n2 )
   (XTRIG) NIP ;
+
+\ ln 2 and ln 10, rounded at load. The wide forms keep the fraction.
+\ (XLOG2F) is log2(10)-3 at 2^64. The 3 is added on its own.
+3196577161300663915 CONSTANT (XLN2)
+49946518145322874 CONSTANT (XLN2+)
+618095479 CONSTANT (XLN10)
+5938525176524057593 CONSTANT (XLOG2F)
+111189606 CONSTANT (XTAN8)
+210828714 CONSTANT (XPI4)
+379625062 CONSTANT (XSQRT2)
+1 62 LSHIFT CONSTANT (X62)
+1 XBITS LSHIFT CONSTANT (X1)
+1 63 LSHIFT 1- CONSTANT (XMAX)
+
+\ Q62 multiply. Same bias as X*, then a 62-bit shift.
+: (X*62) ( n1 n2 -- n3 )
+  M*
+  DUP 0< IF [ 1 62 LSHIFT 1- ] LITERAL 0 D+ THEN
+  2 LSHIFT
+  SWAP
+  62 RSHIFT
+  OR ;
+
+\ Logical left shift of a double by 6. ( lo hi -- lo hi )
+: (DSHL6) ( d1 -- d2 )
+  6 LSHIFT
+  OVER 58 RSHIFT OR
+  SWAP
+  6 LSHIFT
+  SWAP ;
+
+\ Nearest cell after a right shift. Half goes away from zero.
+: (XNEAR) ( n sh -- n2 )
+  SWAP DUP 0< >R
+  ABS SWAP
+  DUP >R
+  1- 1 SWAP LSHIFT
+  +
+  R> RSHIFT
+  R> IF NEGATE THEN ;
+
+\ x = k*ln2 + f, with f a Q62 fraction in [-ln2/2, ln2/2].
+: (XEXPRED) ( n -- k f )
+  S>D (XLSHIFT) (DSHL6)
+  (XLN2) SM/REM
+  SWAP
+  DUP ABS 2* (XLN2) >= IF
+    DUP 0< IF
+      (XLN2) +
+      SWAP 1- SWAP
+    ELSE
+      (XLN2) -
+      SWAP 1+ SWAP
+    THEN
+  THEN ;
+
+\ exp(f) at Q62. f is under the unit, and stays there.
+: (XEXPPOLY) ( f -- p )
+  DUP >R
+  (X62)
+  16
+  BEGIN
+    >R
+    OVER (X*62)
+    R@ /
+    (X62) +
+    R> 1-
+    DUP 0=
+  UNTIL
+  DROP NIP
+  R> DROP ;
+
+\ Turn Q62 exp(f) and the power of two into a Q28 cell.
+\ A positive (k-34) shifts left. A negative one shifts right.
+: (XEXP-SCALE) ( p k -- n )
+  34 -
+  DUP 0= IF DROP EXIT THEN
+  DUP 0> IF
+    DUP 62 >= IF 2DROP (XMAX) EXIT THEN
+    2DUP
+    (XMAX) SWAP RSHIFT
+    > IF
+      2DROP (XMAX)
+    ELSE
+      LSHIFT
+    THEN
+    EXIT
+  THEN
+  NEGATE
+  DUP 62 > IF 2DROP 0 EXIT THEN
+  (XNEAR) ;
+
+: (XEXP-KF) ( k f -- n )
+  (XEXPPOLY) SWAP (XEXP-SCALE) ;
+
+: XEXP ( n1 -- n2 )
+  (XEXPRED) (XEXP-KF) ;
+
+\ Nearest cell of a double after a right shift of 30.
+: (DNEAR30) ( d -- n )
+  DUP 0< >R
+  R@ IF DNEGATE THEN
+  [ 1 29 LSHIFT ] LITERAL 0 D+
+  SWAP 30 RSHIFT
+  SWAP 34 LSHIFT
+  OR
+  R> IF NEGATE THEN ;
+
+\ 10^x for a positive cell. x*log2(10) is built at 2^92.
+: (XALOG+) ( n -- k f )
+  DUP 3 *
+  0 SWAP
+  ROT (XLOG2F) M*
+  D+
+  DUP 28 RSHIFT
+  OVER [ 1 27 LSHIFT ] LITERAL AND IF 1+ THEN
+  DUP >R
+  28 LSHIFT
+  -
+  (DNEAR30)
+  R> SWAP
+  (XLN2) (X*62) ;
+
+: XALOG ( n1 -- n2 )
+  DUP 0< >R
+  ABS
+  (XALOG+)
+  R> IF SWAP NEGATE SWAP NEGATE THEN
+  (XEXP-KF) ;
+
+\ m in [sqrt(1/2), sqrt(2)], and the power of two that got it there.
+: (XNORM) ( n -- m e )
+  0
+  BEGIN OVER [ 1 XBITS LSHIFT 1 LSHIFT ] LITERAL >= WHILE
+    SWAP 2/ SWAP 1+
+  REPEAT
+  BEGIN OVER (X1) < WHILE
+    SWAP 2* SWAP 1-
+  REPEAT
+  OVER (XSQRT2) > IF
+    SWAP 2/ SWAP 1+
+  THEN ;
+
+\ atanh at Q62. s*s is consumed by the last NIP.
+: (XATANH) ( s -- a )
+  DUP >R
+  DUP (X*62)
+  [ 1 62 LSHIFT 13 / ] LITERAL
+  OVER (X*62) [ 1 62 LSHIFT 11 / ] LITERAL +
+  OVER (X*62) [ 1 62 LSHIFT 9 / ] LITERAL +
+  OVER (X*62) [ 1 62 LSHIFT 7 / ] LITERAL +
+  OVER (X*62) [ 1 62 LSHIFT 5 / ] LITERAL +
+  OVER (X*62) [ 1 62 LSHIFT 3 / ] LITERAL +
+  OVER (X*62) (X62) +
+  NIP
+  R> (X*62) ;
+
+: XLN ( n1 -- n2 )
+  DUP 1 < IF DROP 0 EXIT THEN
+  (XNORM) >R
+  DUP (X1) -
+  SWAP (X1) +
+  >R
+  S>D (XLSHIFT) (XLSHIFT) (DSHL6)
+  R> SM/REM NIP
+  (XATANH) 2*
+  34 (XNEAR)
+  R> (XLN2+) *
+  28 (XNEAR)
+  + ;
+
+: XLOG ( n1 -- n2 )
+  XLN (XLN10) X/ ;
+
+\ atan on [-tan(pi/8), tan(pi/8)]. u = z*z stays under the sum.
+: (XATAN0) ( z -- r )
+  DUP >R
+  DUP X*
+  [ 1 XBITS LSHIFT 19 / ] LITERAL NEGATE
+  OVER X* [ 1 XBITS LSHIFT 17 / ] LITERAL +
+  OVER X* [ 1 XBITS LSHIFT 15 / ] LITERAL -
+  OVER X* [ 1 XBITS LSHIFT 13 / ] LITERAL +
+  OVER X* [ 1 XBITS LSHIFT 11 / ] LITERAL -
+  OVER X* [ 1 XBITS LSHIFT 9 / ] LITERAL +
+  OVER X* [ 1 XBITS LSHIFT 7 / ] LITERAL -
+  OVER X* [ 1 XBITS LSHIFT 5 / ] LITERAL +
+  OVER X* [ 1 XBITS LSHIFT 3 / ] LITERAL -
+  OVER X* (X1) +
+  NIP
+  R> X* ;
+
+\ 0 <= n <= 1.
+: (XATANLE) ( n -- r )
+  DUP (XTAN8) > IF
+    DUP (X1) - SWAP (X1) + X/
+    (XATAN0) (XPI4) +
+    EXIT
+  THEN
+  (XATAN0) ;
+
+: (XATANABS) ( n -- r )
+  DUP (X1) > IF
+    (X1) SWAP X/
+    DUP 0= IF DROP XPI/2 EXIT THEN
+    (XATANLE)
+    XPI/2 SWAP -
+    EXIT
+  THEN
+  (XATANLE) ;
+
+: XATAN ( n1 -- n2 )
+  DUP 0< IF NEGATE (XATANABS) NEGATE EXIT THEN
+  (XATANABS) ;
+
+\ y x -- angle. x is on top, same as FATAN2.
+: XATAN2 ( n1 n2 -- n3 )
+  2DUP OR 0= IF 2DROP 0 EXIT THEN
+  OVER ABS OVER ABS > IF
+    OVER 0< >R
+    SWAP X/ XATAN
+    R> IF XPI/2 + NEGATE ELSE XPI/2 SWAP - THEN
+    EXIT
+  THEN
+  OVER 0< >R
+  DUP 0< >R
+  X/ XATAN
+  R> IF
+    R> IF XPI - ELSE XPI + THEN
+  ELSE
+    R> DROP
+  THEN ;
+
+\ Floor of the integer square root.
+: (ISQRT) ( n -- root )
+  DUP 2 < IF EXIT THEN
+  >R
+  (X1)
+  BEGIN
+    R@ OVER /
+    OVER + 2/
+    2DUP >
+  WHILE
+    NIP
+  REPEAT
+  DROP
+  R> DROP ;
+
+: (XASIN+) ( n -- r )
+  DUP (X1) = IF DROP XPI/2 EXIT THEN
+  DUP >R
+  (X1) OVER - SWAP (X1) + *
+  (ISQRT)
+  DUP 0= IF R> 2DROP XPI/2 EXIT THEN
+  R> SWAP X/ XATAN ;
+
+: XASIN ( n1 -- n2 )
+  DUP (X1) > IF DROP 0 EXIT THEN
+  DUP (X1) NEGATE < IF DROP 0 EXIT THEN
+  DUP 0< IF NEGATE (XASIN+) NEGATE EXIT THEN
+  (XASIN+) ;
+
+: XACOS ( n1 -- n2 )
+  DUP (X1) > IF DROP 0 EXIT THEN
+  DUP (X1) NEGATE < IF DROP 0 EXIT THEN
+  DUP (X1) = IF DROP 0 EXIT THEN
+  DUP (X1) NEGATE = IF DROP XPI EXIT THEN
+  DUP >R
+  (X1) OVER - SWAP (X1) + *
+  (ISQRT)
+  R> XATAN2 ;
 
 ONLY FORTH DEFINITIONS

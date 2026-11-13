@@ -1,12 +1,12 @@
 # 64Forth development status
 
-**Current:** **2.7.3** (build **34**) — fixed-point divide, square root, and sine and cosine. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
+**Current:** **2.7.3** (build **34**) — fixed-point divide, root, trig, log, and exp. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
 
-**Last updated:** 2026-11-12
+**Last updated:** 2026-11-13
 
 ---
 
-## v2.7.3 — Fixed-point divide, root, and trig
+## v2.7.3 — Fixed-point divide, root, trig, log, and exp
 
 **Version strings:** marketing **2.7.3**, build **34**. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp `Nov 12, 2026 10:51 PM`.
 
@@ -18,13 +18,15 @@
 
 ### Highlights since 2.7.1
 
-- **Fixed point.** `Library/FixPoint/FIXEDPOINT.fth`, vocabulary `FIXED-POINT`. One signed cell. `XBITS` fraction bits sit at the bottom. The default is 28, read when the file loads. A later `TO XBITS` does not change the literals already compiled. Load with `FROMLIB FLOAD FixPoint/FIXEDPOINT.fth`, then `ALSO FIXED-POINT`.
+- **Fixed point.** `Library/FixPoint/FIXEDPOINT.fth`, vocabulary `FIXED-POINT`. One signed cell. `XBITS` fraction bits sit at the bottom. `XBITS` is a `CONSTANT`. The file defines 28 only when `XBITS` is not already defined. The words freeze that scale when the file loads. Load with `FROMLIB FLOAD FixPoint/FIXEDPOINT.fth`, then `ALSO FIXED-POINT`.
 - **XUNIT.** Immediate. It compiles 2^XBITS into the caller. At the prompt, `LITERAL` does not check `STATE`, so that value is compiled into the dictionary.
 - **X*.** `M*`, then a logical right shift of `XBITS`. A negative product adds 2^XBITS−1 first, so the quotient rounds toward zero. `MANSHOW-COOP` and `MANSHOW-CORE` plot with this word.
 - **X/.** Shifts the dividend up by `XBITS`, then `SM/REM`. Toward zero. A zero divisor returns −1. A quotient that does not fit the cell is the kernel overflow result.
 - **XSQRT.** Integer root of `n` shifted up by `XBITS`, so the result keeps this scale. Zero and negative return 0. The loop uses only the stack, so a cooperative task can call it.
-- **XSIN and XCOS.** Taylor series in radians. `XPI`, `XPI/2`, and `X2PI` are the nearest cells. The angle is reduced with `X2PI`, then folded into the Taylor range. `(XTRIG)` leaves sine under cosine. Inside a few turns the result stays within 2 cells of the nearest value. Sine of pi/2 is one cell under `XUNIT`. A huge angle loses that accuracy because 2×pi is rounded. Log, exp, and inverse trig are not in this file.
+- **XSIN and XCOS.** Taylor series in radians. `XPI`, `XPI/2`, and `X2PI` are the nearest cells. The angle is reduced with `X2PI`, then folded into the Taylor range. `(XTRIG)` leaves sine under cosine. Inside a few turns the result stays within 2 cells of the nearest value. Sine of pi/2 is one cell under `XUNIT`. A huge angle loses that accuracy because 2×pi is rounded.
+- **Log, exp, and inverse trig.** `XLN` is the natural log. `XLOG` is base 10. `XEXP` is e^x. `XALOG` is 10^x. `XATAN`, `XASIN`, `XACOS`, and `XATAN2` follow the floating-point names. `XATAN2` takes y then x. Zero and negative logs return 0. Inverse sine and cosine outside [−1,1] return 0. `XATAN2` of 0 0 returns 0. A result that does not fit is the largest cell. A result smaller than one cell is 0. Those eight stay within 3 cells. Their constants are written for 28 fraction bits.
 - **Cell arithmetic.** `+`, `-`, `2*`, and `2/` already share the scale. Cell `/` is not a fixed divide. `F>X` and `X>F` still use floating point.
+- **MANSHOW scale.** `MANSHOW-COOP` and `MANSHOW-CORE` define `52 CONSTANT XBITS` before the load, when `FIXED-POINT` is not yet defined. The view stays in floating point. The pixel loop uses `X*` and cell `+`. Zoom stops when `F>X` of the new step is 0. At 60 fraction bits the bailout add wraps.
 
 **Release:** no disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
 
