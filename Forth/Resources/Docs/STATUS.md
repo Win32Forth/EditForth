@@ -1,6 +1,6 @@
 # 64Forth development status
 
-**Current:** **2.7.3** (build **34**) — fixed-point divide, root, trig, log, and exp. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
+**Current:** **2.7.3** (build **34**) — fixed-point divide, root, trig, log, and exp. Disk image `Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image stays. The 2.7.0 image stays.
 
 **Last updated:** 2026-11-13
 
@@ -8,7 +8,7 @@
 
 ## v2.7.3 — Fixed-point divide, root, trig, log, and exp
 
-**Version strings:** marketing **2.7.3**, build **34**. No disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp `Nov 12, 2026 10:51 PM`.
+**Version strings:** marketing **2.7.3**, build **34**. One-app disk image `Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image stays (`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp `Nov 12, 2026 10:51 PM`. `scripts/release.sh` archive, validate, emit-smoke, and dmg: ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`. GitHub release **v2.7.3**.
 
 **Console header stamp:**
 
@@ -28,7 +28,7 @@
 - **Cell arithmetic.** `+`, `-`, `2*`, and `2/` already share the scale. Cell `/` is not a fixed divide. `F>X` and `X>F` still use floating point.
 - **MANSHOW scale.** `MANSHOW-COOP` and `MANSHOW-CORE` define `52 CONSTANT XBITS` before the load, when `FIXED-POINT` is not yet defined. The view stays in floating point. The pixel loop uses `X*` and cell `+`. Zoom stops when `F>X` of the new step is 0. At 60 fraction bits the bailout add wraps.
 
-**Release:** no disk image. The image to install stays `Releases/EditForth-2.7.1-macOS.dmg`. The 2.7.0 image stays.
+**Release:** disk image `Releases/EditForth-2.7.3-macOS.dmg`. GitHub release **v2.7.3**. The 2.7.1 image stays. The 2.7.0 image stays.
 
 ---
 
