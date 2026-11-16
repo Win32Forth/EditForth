@@ -169,7 +169,176 @@ enum AskForthSession {
         if closeParens {
             out = closeUnclosedParenComments(out)
         }
-        return out
+        return wrapColumns(out)
+    }
+
+    /// Break long lines near 80 columns. A `\` comment continues with `\`.
+    /// A `."` / `S"` / `C"` / `ABORT"` / `S\"` string stays on one line.
+    static let wrapColumn = 80
+
+    private static func wrapColumns(_ text: String, width: Int = wrapColumn) -> String {
+        splitLines(text).flatMap { wrapOne($0, width: width) }.joined(separator: "\n")
+    }
+
+    private static func wrapOne(_ line: String, width: Int) -> [String] {
+        if line.count <= width { return [line] }
+        let indent = String(line.prefix(while: { $0 == " " || $0 == "\t" }))
+        var body = Substring(line.dropFirst(indent.count))
+        if body.isEmpty { return [line] }
+        var lines: [String] = []
+        var commenting = false
+        var first = true
+        while !body.isEmpty {
+            let prefix = first ? indent : (commenting ? indent + "\\ " : indent)
+            first = false
+            let budget = max(1, width - prefix.count)
+            if body.count <= budget {
+                lines.append(prefix + String(body))
+                break
+            }
+            guard let cut = wrapCut(in: body, limit: budget, width: width) else {
+                lines.append(prefix + String(body))
+                break
+            }
+            let emitted = prefix + String(body[..<cut])
+            lines.append(emitted)
+            body = body[cut...].drop(while: { $0 == " " || $0 == "\t" })
+            if !commenting && hasLineComment(emitted) {
+                commenting = true
+            }
+        }
+        return lines
+    }
+
+    /// Index of a space where the line may break. Prefers a space at or
+    /// before `limit`. Spaces inside a quoted string are not breaks.
+    /// A "phrase in quotes" that fits in `width` stays on one line.
+    private static func wrapCut(in source: Substring, limit: Int, width: Int) -> String.Index? {
+        let glued = shortPlainQuotes(in: source, width: width)
+        var index = source.startIndex
+        var columns = 0
+        var state = 0 // 0 code, 1 line comment, 2 quoted string
+        var token = ""
+        var lastBefore: String.Index?
+        var firstAfter: String.Index?
+
+        func finishToken() {
+            if state == 0 {
+                if token == "\\" {
+                    state = 1
+                } else if stringWords.contains(token) {
+                    state = 2
+                }
+            }
+            token = ""
+        }
+
+        while index < source.endIndex {
+            let ch = source[index]
+            if state == 2 {
+                if ch == "\"" {
+                    state = 0
+                } else if ch == "\\" {
+                    columns += 1
+                    let next = source.index(after: index)
+                    if next < source.endIndex {
+                        columns += 1
+                        index = source.index(after: next)
+                        continue
+                    }
+                }
+                columns += 1
+                index = source.index(after: index)
+                continue
+            }
+            if ch == " " || ch == "\t" {
+                let opensString = state == 0 && stringWords.contains(token)
+                finishToken()
+                columns += 1
+                index = source.index(after: index)
+                // The space after ." / S" / C" / ABORT" / S\" belongs to the
+                // string. Spaces inside the quotes are not breaks.
+                if opensString || state == 2 { continue }
+                if glued.contains(where: { $0.contains(source.index(before: index)) }) { continue }
+                if columns - 1 <= limit {
+                    lastBefore = source.index(before: index)
+                } else if firstAfter == nil {
+                    firstAfter = source.index(before: index)
+                }
+                continue
+            }
+            token.append(ch)
+            columns += 1
+            index = source.index(after: index)
+        }
+        finishToken()
+        if let lastBefore { return lastBefore }
+        return firstAfter
+    }
+
+    /// `"..."` spans that fit on one line. The quote inside `."` is not an opener.
+    private static func shortPlainQuotes(in source: Substring, width: Int) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var index = source.startIndex
+        while index < source.endIndex {
+            if source[index] == "\"" {
+                let previous = index == source.startIndex ? nil : source[source.index(before: index)]
+                let opens = previous == nil || previous == " " || previous == "\t"
+                if opens {
+                    var end = source.index(after: index)
+                    while end < source.endIndex && source[end] != "\"" {
+                        end = source.index(after: end)
+                    }
+                    if end < source.endIndex {
+                        end = source.index(after: end)
+                        if source[index..<end].count <= width {
+                            ranges.append(index..<end)
+                        }
+                        index = end
+                        continue
+                    }
+                }
+            }
+            index = source.index(after: index)
+        }
+        return ranges
+    }
+
+    /// True when `line` has a whitespace-delimited `\` outside a quoted string.
+    private static func hasLineComment(_ line: String) -> Bool {
+        var index = line.startIndex
+        var state = 0 // 0 code, 1 string
+        var token = ""
+        func finish() -> Bool {
+            if state == 0 && token == "\\" { return true }
+            if state == 0 && stringWords.contains(token) { state = 1 }
+            token = ""
+            return false
+        }
+        while index < line.endIndex {
+            let ch = line[index]
+            if state == 1 {
+                if ch == "\"" {
+                    state = 0
+                } else if ch == "\\" {
+                    let next = line.index(after: index)
+                    if next < line.endIndex {
+                        index = line.index(after: next)
+                        continue
+                    }
+                }
+                index = line.index(after: index)
+                continue
+            }
+            if ch == " " || ch == "\t" {
+                if finish() { return true }
+                index = line.index(after: index)
+                continue
+            }
+            token.append(ch)
+            index = line.index(after: index)
+        }
+        return finish()
     }
 
     static func agentEnhanceNote(from transcript: String) -> String {
@@ -621,7 +790,29 @@ enum AskForthSessionTestMain {
         check("stream leaves paren", streaming == ": FOO ( n --", streaming)
         let longLine = String(repeating: "A", count: 120)
         let kept = AskForthSession.sanitizeLive(longLine, closeParens: true)
-        check("no wrap", kept == longLine, "count \(kept.count)")
+        check("long token stays", kept == longLine, "count \(kept.count)")
+        let sentence = "BANNER-DEMO displays a message on the console and waits for a key press. It repeatedly prints the message WELCOME and then more words follow here."
+        let wrapped = AskForthSession.sanitizeLive(sentence, closeParens: true)
+        let wrappedLines = wrapped.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        check("wraps near 80", wrappedLines.allSatisfy { $0.count <= 80 }, wrapped)
+        check("wrap keeps words", wrapped.replacingOccurrences(of: "\n", with: " ") == sentence, wrapped)
+        let comment = "\\ " + String(repeating: "word ", count: 30)
+        let wrappedComment = AskForthSession.sanitizeLive(comment.trimmingCharacters(in: .whitespaces), closeParens: true)
+        let commentLines = wrappedComment.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        check("comment stays commented", commentLines.allSatisfy { $0.hasPrefix("\\") }, wrappedComment)
+        check("comment lines fit", wrappedComment.split(separator: "\n").allSatisfy { $0.count <= 80 }, wrappedComment)
+        let code = ": T ( n -- n )  2* ; \\ " + String(repeating: "note ", count: 20)
+        let wrappedCode = AskForthSession.sanitizeLive(code.trimmingCharacters(in: .whitespaces), closeParens: true)
+        let codeLines = wrappedCode.split(separator: "\n").map(String.init)
+        check("code first line kept", codeLines[0].contains(": T"), wrappedCode)
+        check("comment continuation", codeLines.dropFirst().allSatisfy { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\\") }, wrappedCode)
+        let string = ".\" " + String(repeating: "WELCOME ", count: 12) + "\""
+        let wrappedString = AskForthSession.sanitizeLive(string, closeParens: true)
+        check("string not split", wrappedString == string, wrappedString)
+        let quoted = "It prints \"BANNER finished.\" after the other large words have already filled the line and need a break."
+        let wrappedQuoted = AskForthSession.sanitizeLive(quoted, closeParens: true)
+        check("quoted phrase stays whole", wrappedQuoted.contains("\"BANNER finished.\""), wrappedQuoted)
+        check("quoted lines fit", wrappedQuoted.split(separator: "\n").allSatisfy { $0.count <= 80 }, wrappedQuoted)
 
         let note = AskForthSession.agentEnhanceNote(from: """
         [64Forth agent] status=-1 depth=3

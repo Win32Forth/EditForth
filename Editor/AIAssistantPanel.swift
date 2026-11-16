@@ -289,7 +289,7 @@ struct AIAssistantPanel: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Button("Output") {
+                    Button("Output folder") {
                         openAskForthOutputFolder()
                     }
                     .font(.caption)

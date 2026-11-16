@@ -367,7 +367,10 @@ struct ContentView: View {
                             onEmitCurrent: {
                                 ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
                             },
-                            onRunToOffset: { offset in forth.runTo(offset: offset) }
+                            onRunToOffset: { offset in forth.runTo(offset: offset) },
+                            onOpenMarkdownLink: { url in
+                                openMarkdownLink(url, from: tab.fileURL)
+                            }
                         )
                         .id("right-\(tab.id)")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -547,6 +550,24 @@ struct ContentView: View {
         }
     }
 
+    /// Preview links. Relative paths open next to the Markdown file.
+    /// A `#fragment` stays in the preview. http and https leave the app.
+    private func openMarkdownLink(_ url: URL, from fileURL: URL?) {
+        if let scheme = url.scheme?.lowercased() {
+            if scheme == "file" {
+                workspace.openURL(url)
+                return
+            }
+            NSWorkspace.shared.open(url)
+            return
+        }
+        let relative = url.relativePath.isEmpty ? url.relativeString : url.relativePath
+        if relative.isEmpty || relative.hasPrefix("#") { return }
+        guard let folder = fileURL?.deletingLastPathComponent() else { return }
+        let resolved = URL(fileURLWithPath: relative, relativeTo: folder).standardizedFileURL
+        workspace.openURL(resolved)
+    }
+
     /// File tabs stay mounted for keep-alive; `visibleTabID` picks which one is interactive.
     /// While split, the right pane’s tab is omitted here so it is not duplicated (hidden
     /// left copies were stealing VIEW-miss find / selection from the right pane).
@@ -580,7 +601,10 @@ struct ContentView: View {
                     onEmitCurrent: {
                         ForthMenuSupport.emitCurrentTab(workspace: workspace, forth: forth)
                     },
-                    onRunToOffset: { offset in forth.runTo(offset: offset) }
+                    onRunToOffset: { offset in forth.runTo(offset: offset) },
+                    onOpenMarkdownLink: { url in
+                        openMarkdownLink(url, from: tab.fileURL)
+                    }
                 )
                 .opacity(selected ? 1 : 0)
                 .allowsHitTesting(selected)
@@ -1008,10 +1032,19 @@ private struct TabEditorPane: View {
     var isSelectedEditor: Bool
     var onEmitCurrent: () -> Void
     var onRunToOffset: (Int) -> Void
+    var onOpenMarkdownLink: (URL) -> Void = { _ in }
+
+    /// Formatted preview is display-only. Source keeps the plain-text editor.
+    private var showsMarkdownPreview: Bool {
+        tab.isMarkdownFile && !tab.showsMarkdownSource
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            if tab.isViewMode {
+            if tab.isMarkdownFile {
+                markdownDisplayBar
+            }
+            if tab.isViewMode && !showsMarkdownPreview {
                 HStack(spacing: 8) {
                     Text("View mode")
                         .fontWeight(.semibold)
@@ -1036,50 +1069,86 @@ private struct TabEditorPane: View {
                 .background(Color.yellow.opacity(0.22))
             }
 
-            EditorTextView(
-                text: Binding(
-                    get: { tab.text },
-                    set: { newValue in
-                        if tab.text != newValue {
-                            tab.text = newValue
-                            tab.isDirty = true
+            if showsMarkdownPreview {
+                MarkdownPreviewView(
+                    markdown: tab.text,
+                    bodyPointSize: fontSize,
+                    onLink: onOpenMarkdownLink
+                )
+            } else {
+                EditorTextView(
+                    text: Binding(
+                        get: { tab.text },
+                        set: { newValue in
+                            if tab.text != newValue {
+                                tab.text = newValue
+                                tab.isDirty = true
+                            }
                         }
-                    }
-                ),
-                fontSize: fontSize,
-                gotoLine: $tab.gotoLine,
-                highlightName: $tab.highlightName,
-                highlightOff: $tab.highlightOff,
-                highlightLen: $tab.highlightLen,
-                highlightEpoch: tab.highlightEpoch,
-                isViewMode: $tab.isViewMode,
-                selection: Binding(
-                    get: { tab.selection },
-                    set: { tab.selection = $0 }
-                ),
-                topVisibleLine: Binding(
-                    get: { tab.topVisibleLine },
-                    set: { tab.topVisibleLine = $0 }
-                ),
-                isDebugArmed: isDebugArmed,
-                isDebugPaused: isDebugPaused,
-                showLineNumbers: showLineNumbers,
-                wrapMode: wrapMode,
-                wrapColumn: wrapColumn,
-                breakpointEntries: breakpointEntries,
-                onDebugStepOver: onDebugStepOver,
-                onDebugStepInto: onDebugStepInto,
-                onDebugStepOut: onDebugStepOut,
-                onDebugContinue: onDebugContinue,
-                onDebugStop: onDebugStop,
-                onForwardProgramKey: onForwardProgramKey,
-                onPrepareRunLine: onPrepareRunLine,
-                onCommandClickWord: onCommandClickWord,
-                onToggleBreakpoint: onToggleBreakpoint,
-                isSelectedEditor: isSelectedEditor,
-                onEmitCurrent: onEmitCurrent,
-                onRunToOffset: onRunToOffset
-            )
+                    ),
+                    fontSize: fontSize,
+                    gotoLine: $tab.gotoLine,
+                    highlightName: $tab.highlightName,
+                    highlightOff: $tab.highlightOff,
+                    highlightLen: $tab.highlightLen,
+                    highlightEpoch: tab.highlightEpoch,
+                    isViewMode: $tab.isViewMode,
+                    selection: Binding(
+                        get: { tab.selection },
+                        set: { tab.selection = $0 }
+                    ),
+                    topVisibleLine: Binding(
+                        get: { tab.topVisibleLine },
+                        set: { tab.topVisibleLine = $0 }
+                    ),
+                    isDebugArmed: isDebugArmed,
+                    isDebugPaused: isDebugPaused,
+                    showLineNumbers: showLineNumbers,
+                    wrapMode: wrapMode,
+                    wrapColumn: wrapColumn,
+                    breakpointEntries: breakpointEntries,
+                    onDebugStepOver: onDebugStepOver,
+                    onDebugStepInto: onDebugStepInto,
+                    onDebugStepOut: onDebugStepOut,
+                    onDebugContinue: onDebugContinue,
+                    onDebugStop: onDebugStop,
+                    onForwardProgramKey: onForwardProgramKey,
+                    onPrepareRunLine: onPrepareRunLine,
+                    onCommandClickWord: onCommandClickWord,
+                    onToggleBreakpoint: onToggleBreakpoint,
+                    isSelectedEditor: isSelectedEditor,
+                    onEmitCurrent: onEmitCurrent,
+                    onRunToOffset: onRunToOffset
+                )
+            }
+        }
+    }
+
+    /// Preview is read-only. Source is the existing text editor, including view mode.
+    private var markdownDisplayBar: some View {
+        HStack(spacing: 8) {
+            Picker("Markdown", selection: Binding(
+                get: { tab.showsMarkdownSource },
+                set: { tab.showsMarkdownSource = $0 }
+            )) {
+                Text("Preview").tag(false as Bool)
+                Text("Source").tag(true as Bool)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 170)
+            .help("Preview shows formatted Markdown. Source is the plain-text editor.")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
         }
     }
 }

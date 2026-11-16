@@ -2,7 +2,7 @@
 //  AskForthToolAgent.swift
 //  EditForth
 //
-//  Opt-in Ollama tool loop for Ask Forth: web_search, fetch_url, library_search.
+//  Opt-in tool loop for Ask Forth: stack_effect, web_search, fetch_url, library_search.
 //
 
 import Foundation
@@ -12,6 +12,20 @@ enum AskForthToolAgent {
     static let maxToolResultChars = 6_000
 
     static let toolDefinitions: [LLMToolDefinition] = [
+        LLMToolDefinition(
+            name: "stack_effect",
+            description: "Trace a Forth colon definition or fragment from an empty data stack. An underflow is an input. Returns comments marked copy, or not inferred. Call this before writing a stack comment. Copy a comment marked copy. Do not invent a different ( before -- after ).",
+            parametersJSONSchema: [
+                "type": "object",
+                "properties": [
+                    "source": [
+                        "type": "string",
+                        "description": "A colon definition, or a fragment such as DUP SWAP +"
+                    ]
+                ],
+                "required": ["source"]
+            ]
+        ),
         LLMToolDefinition(
             name: "web_search",
             description: "Search the web (DuckDuckGo Lite) and return top hit titles, URLs, and snippets. Use when you need current docs or examples not in Library.",
@@ -59,9 +73,10 @@ enum AskForthToolAgent {
     /// Extra system guidance when tools are enabled.
     static func systemAddon() -> String {
         """
-        You may call tools when they help answer accurately: web_search, fetch_url, library_search.
+        You may call tools when they help answer accurately: stack_effect, web_search, fetch_url, library_search.
+        You may call stack_effect to check a definition you are about to write. Pass the colon definition, or a fragment such as DUP +. Copy a comment marked copy. If the result says not inferred, say so instead of guessing a stack comment.
         Prefer library_search for local Sample/Reference knowledge (including Forth-2012 stack effects); use web_search or fetch_url only when Library is insufficient.
-        After tools return, ground the answer in tool and Library results. Do not invent tool results, word names, or stack diagrams.
+        After tools return, ground the answer in tool and Library results. Do not invent tool results, word names, or stack diagrams. A Stack model result overrides a Library excerpt for that definition.
         If library_search returns nothing useful, say so rather than fabricating 64Forth APIs.
         """
     }
@@ -195,6 +210,10 @@ enum AskForthToolAgent {
                 return "Fetch error: \(err)"
             }
             return fetched.contextBlock(maxChars: maxToolResultChars)
+
+        case "stack_effect":
+            let source = stringArg(args, "source") ?? ""
+            return ForthStackEffect.toolResult(source: source)
 
         case "library_search":
             let query = stringArg(args, "query") ?? ""

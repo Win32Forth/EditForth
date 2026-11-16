@@ -546,10 +546,11 @@ final class AIAssistantModel: ObservableObject {
 
             // Session history and the read-only reference go to the model only.
             // Web search still uses the Prompt box, not the reference file or the session.
-            let sessionBits: (String, String) = await MainActor.run {
+            let sessionBits: (String, String, String) = await MainActor.run {
                 let preface = self.pendingSessionPreface
                 let block = self.referenceContextBlock(in: workspace, path: self.pendingReferencePath)
-                return (preface, block)
+                let stack = self.stackModelReport(user: user, preface: preface, workspace: workspace)
+                return (preface, block, stack)
             }
             if !sessionBits.0.isEmpty {
                 contextPrefix += sessionBits.0 + "\n\n"
@@ -557,6 +558,7 @@ final class AIAssistantModel: ObservableObject {
             if !sessionBits.1.isEmpty {
                 contextPrefix += sessionBits.1 + "\n\n"
             }
+            let stackReport = sessionBits.2
 
             // Tool agent decides when to browse/search; skip automatic URL/web pre-fetch.
             if !useTools {
@@ -637,6 +639,12 @@ final class AIAssistantModel: ObservableObject {
                 } else {
                     contextNote += " · Library: no hits (\(settings.retrieveMode.statusLabel))"
                 }
+            }
+
+            // After Library, so a traced comment sits next to the request and wins.
+            if !stackReport.isEmpty {
+                contextPrefix += stackReport + "\n\n"
+                contextNote += " · Stack model"
             }
 
             let effectiveSystem = system + Self.libraryGroundingAddon(
@@ -754,7 +762,8 @@ final class AIAssistantModel: ObservableObject {
         attachJob(job)
     }
 
-    /// Replace the live section. Does not wrap columns: wrapping can split a comment into code.
+    /// Replace the live section. Long lines wrap near 80 columns.
+    /// A `\` comment continues on the next line as a comment.
     /// `reply` stays the latest answer. The file gets the sanitized text.
     private func writeLiveStreamBody(_ body: String, in workspace: WorkspaceModel, closeParens: Bool) {
         guard let tab = resolveAskOutputTab(in: workspace),
@@ -1057,6 +1066,7 @@ final class AIAssistantModel: ObservableObject {
         let profile = profiles.first(where: { $0.id == activeProfileID })
             ?? AskForthLLMSettings.activeProfile
         lines.append("Context window: \(profile.contextTokens)")
+        lines.append("Stack model: on")
         if includeLibraryContext {
             let settings = ForthLibraryRAGSettings.load()
             lines.append("Include Library context: on")
@@ -1106,6 +1116,31 @@ final class AIAssistantModel: ObservableObject {
             contents = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
         }
         return AskForthSession.referenceContextBlock(path: path, contents: contents)
+    }
+
+    /// Trace from an empty stack. Prefer the new request, then the session
+    /// preface, then a Forth reference file. Do not join them: an older fenced
+    /// reply would hide a new unfenced definition.
+    private func stackModelReport(user: String, preface: String, workspace: WorkspaceModel) -> String {
+        if let report = ForthStackEffect.report(source: user) {
+            return report
+        }
+        if let report = ForthStackEffect.report(source: preface) {
+            return report
+        }
+        guard let path = pendingReferencePath, !path.isEmpty else { return "" }
+        let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        guard ext == "fth" || ext == "fs" || ext == "f" else { return "" }
+        let tab = workspace.tabs.first { $0.fileURL?.standardizedFileURL.path == path }
+        let contents: String?
+        if let tab {
+            contents = tab.text
+        } else {
+            contents = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+        }
+        guard let contents, !contents.isEmpty else { return "" }
+        let clipped = contents.count > 200_000 ? String(contents.prefix(200_000)) : contents
+        return ForthStackEffect.report(source: clipped) ?? ""
     }
 
     private func currentSessionText(in workspace: WorkspaceModel) -> String? {
@@ -1190,6 +1225,7 @@ final class AIAssistantModel: ObservableObject {
             "When asked for code, return Forth source the user can paste inside a ```forth fenced block when possible.",
             "Never invent ANS or 64Forth word names, stack effects, or APIs. If you are unsure, say so and suggest looking in System/Reference or forth-standard.org.",
             "Stack comments must match real argument order (e.g. c-addr u for strings, not a single invented string cell).",
+            ForthStackEffect.promptRule,
             "Line comments use one backslash and run to the end of the line. Never start a word with \\\\, \\S, or \\\\S. Those swallow or stop the rest of an INCLUDE. Close every ( comment with ). Do not wrap Forth to a fixed column width.",
             "Be concise."
         ]
@@ -1213,18 +1249,21 @@ final class AIAssistantModel: ObservableObject {
             Prefer quoting or paraphrasing stack diagrams from Reference (e.g. COMPARE, MOVE, TYPE) over guessing.
             If the user asks for something not supported by the Library excerpts, say “Not found in the provided Library context” (or similar) for that part, and label any extra suggestion clearly as unverified.
             When citing, mention path:line from the Library headers when helpful.
+            If a Stack model block is present, its comments override Library excerpts for those definitions.
             """
         }
         return """
 
             Library search ran but returned no matching excerpts for this prompt.
             Do not invent standard stack effects or Library APIs. Say that Library context had no hits, give only carefully labeled general Forth advice, and prefer “I don’t know / not in Library” over fabricating 64Forth words.
+            If a Stack model block is present, its comments override Library excerpts for those definitions.
             """
     }
 
     private static let libraryUserReminderWithHits = """
     Instructions for this answer:
     - Use the Library context above as the source of truth for word names and stack effects.
+    - If a Stack model block is present, its comments override Library excerpts for those definitions.
     - If a needed fact is missing from that context, say it is not in the provided sources instead of inventing it.
     - Put loadable Forth in a ```forth block when you provide code.
     """
@@ -1232,6 +1271,7 @@ final class AIAssistantModel: ObservableObject {
     private static let libraryUserReminderNoHits = """
     Instructions for this answer:
     - Library search found no excerpts for this prompt.
+    - If a Stack model block is present, its comments override Library excerpts for those definitions.
     - Do not invent ANS/64Forth stack effects or APIs. Prefer saying you lack Library backing over fabricating a solution.
     """
 }

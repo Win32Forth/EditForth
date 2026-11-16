@@ -31,6 +31,8 @@ final class EditorTab: Identifiable, ObservableObject {
     var selection = NSRange(location: 0, length: 0)
     /// 1-based first visible line restored with the selection (not @Published — caret churn).
     var topVisibleLine: Int = 1
+    /// Markdown tabs open on the formatted preview. Source is the plain-text editor.
+    @Published var showsMarkdownSource = false
 
     init(
         text: String = "",
@@ -58,6 +60,12 @@ final class EditorTab: Identifiable, ObservableObject {
     }
 
     var pathString: String? { fileURL?.path }
+
+    /// `.md` / `.markdown` use the formatted preview. Other tabs stay in the text editor.
+    var isMarkdownFile: Bool {
+        let ext = fileURL?.pathExtension.lowercased() ?? ""
+        return ext == "md" || ext == "markdown"
+    }
 
     /// Whitespace-delimited Forth token at the stored caret, if any.
     func forthTokenAtCaret() -> String? {
