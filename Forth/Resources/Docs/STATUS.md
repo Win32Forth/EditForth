@@ -1,9 +1,8 @@
 # 64Forth development status
 
 **Current:** **2.7.4** (build **35**) — Ask Forth stack check and Markdown
-preview. No disk image. The image to install stays
-`Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image stays. The 2.7.0 image
-stays.
+preview. Disk image `Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image
+stays. The 2.7.1 image stays. The 2.7.0 image stays.
 
 **Last updated:** 2026-11-15
 
@@ -11,11 +10,15 @@ stays.
 
 ## v2.7.4 — Ask Forth stack check and Markdown preview
 
-**Version strings:** marketing **2.7.4**, build **35**. No disk image. The
-image to install stays `Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image
-stays (`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
+**Version strings:** marketing **2.7.4**, build **35**. One-app disk image
+`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays
+(`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+(`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
 (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
-`Nov 15, 2026 5:58 PM`.
+`Nov 15, 2026 5:58 PM`. `scripts/release.sh` archive, validate, emit-smoke,
+and dmg: ANS-VALIDATE 395 passed, 0 failed; Hayes
+`ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`.
+GitHub release **v2.7.4**.
 
 **Console header stamp:**
 
@@ -74,8 +77,8 @@ stays (`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
   The Markdown docs are wrapped near 80 columns so a line does not run off
   the right side of the editor.
 
-**Release:** no disk image. The image to install stays
-`Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image stays. The 2.7.0 image
+**Release:** disk image `Releases/EditForth-2.7.4-macOS.dmg`. GitHub release
+**v2.7.4**. The 2.7.3 image stays. The 2.7.1 image stays. The 2.7.0 image
 stays.
 
 ---

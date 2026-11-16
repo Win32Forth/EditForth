@@ -4,10 +4,10 @@
 files and capture console output without driving the GUI.
 
 **Status:** shipped (**64Forth 1.1.2+**; current **2.7.4**, build **35**,
-banner `Nov 15, 2026 5:58 PM`). No 2.7.4 disk image. The image to install
-stays `Releases/EditForth-2.7.3-macOS.dmg`. The 2.7.1 image stays. The 2.7.0
-image stays. See also [STATUS.md](STATUS.md) (section **v1.1.2 — agent
-channel**).
+banner `Nov 15, 2026 5:58 PM`). Disk image
+`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays. The 2.7.1 image
+stays. The 2.7.0 image stays. See also [STATUS.md](STATUS.md) (section
+**v1.1.2 — agent channel**).
 ## Why
 
 The GUI app does not treat stdin as a REPL. Accessibility can type keys but
