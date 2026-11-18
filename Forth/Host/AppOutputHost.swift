@@ -81,6 +81,8 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     /// Latest mouse sample in Forth PLOT coords (origin bottom-left).
     /// Button mask matches classic getmous / NSEvent.pressedMouseButtons:
     /// bit0=left (1), bit1=right (2), bit2=middle (4).
+    /// Option held on a button-down ORs in keyOpt (1024), the same bit
+    /// mapKeyEvent uses. Mouse-up stays 0 so a poll can see the release.
     /// A click is also latched. Forth polls about every 10 ms, so mouseUp
     /// can wipe `mouseButtons` before `G-MOUSE` sees the down.
     private let mouseLock = NSLock()
@@ -132,8 +134,8 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     @discardableResult
     func open(cols c: Int, rows r: Int) -> Int64 {
         if AgentChannel.isRequested { return -1 }
-        let cols = max(1, min(c, 256))
-        let rows = max(1, min(r, 128))
+        let cols = max(1, min(c, 384))
+        let rows = max(1, min(r, 192))
         if Thread.isMainThread {
             performOpenOnMain(cols: cols, rows: rows)
             return opened ? 0 : -1
@@ -275,7 +277,7 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         mouseLock.lock()
         mouseX = Int64(max(0, x))
         mouseY = Int64(max(0, y))
-        mouseButtons = Int64(buttons & 0x7)
+        mouseButtons = Int64(buttons) & (0x7 | Self.keyOpt)
         if latchDown && mouseButtons != 0 {
             clickLatchX = mouseX
             clickLatchY = mouseY
@@ -434,8 +436,8 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
             d = 1; stride = (w + 7) / 8; need = stride * h
         }
         let n = min(count, need)
-        // Cap: 256×128 cells × 8×16 × 4 bytes = 16 MiB truecolor.
-        guard need > 0, need <= 16 * 1024 * 1024 else { return }
+        // Cap: 384×192 cells × 8×16 × 4 bytes = 36 MiB truecolor.
+        guard need > 0, need <= 36 * 1024 * 1024 else { return }
 
         var copy = [UInt8](repeating: 0, count: need)
         copy.withUnsafeMutableBytes { dest in
@@ -813,8 +815,8 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
     private func snapGrid(from view: NSView) -> (Int, Int) {
         let innerW = max(1, view.bounds.width - 8)
         let innerH = max(1, view.bounds.height - 8)
-        let c = max(40, min(256, Int(innerW / cellW)))
-        let r = max(12, min(128, Int(innerH / cellH)))
+        let c = max(40, min(384, Int(innerW / cellW)))
+        let r = max(12, min(192, Int(innerH / cellH)))
         return (c, r)
     }
 
@@ -1161,6 +1163,63 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
         return slot.value
     }
 
+    /// JPEG, PNG, or TIFF. A plain path with no picture extension is not one.
+    private func pictureContentType(for url: URL) -> UTType? {
+        switch url.pathExtension.lowercased() {
+        case "png": return .png
+        case "jpg", "jpeg": return .jpeg
+        case "tif", "tiff": return .tiff
+        default: return nil
+        }
+    }
+
+    /// Picture save panel. The format popup is JPEG, PNG, or TIFF.
+    /// A staged text path does not become the suggested name.
+    /// 0=ok, -1=cancel, -2=fail.
+    func savePictureAs() -> Int64 {
+        if AgentChannel.isRequested { return -1 }
+        let suggested = fileStagedPath
+        let slot = PanelResult()
+        runPanelOnPump { [weak self] in
+            guard let self else { slot.value = -2; return }
+            let panel = NSSavePanel()
+            panel.title = "Save Picture"
+            panel.prompt = "Save"
+            panel.message = "Choose JPEG, PNG, or TIFF."
+            panel.canCreateDirectories = true
+            panel.allowedContentTypes = [.png, .jpeg, .tiff]
+            panel.allowsOtherFileTypes = false
+            panel.isExtensionHidden = false
+            panel.showsContentTypes = true
+
+            let staged = suggested.isEmpty ? nil : URL(fileURLWithPath: suggested)
+            let matched = staged.flatMap { self.pictureContentType(for: $0) }
+            if let staged, let matched {
+                panel.directoryURL = staged.deletingLastPathComponent()
+                panel.nameFieldStringValue = staged.lastPathComponent
+                panel.currentContentType = matched
+            } else {
+                if let staged {
+                    panel.directoryURL = staged.deletingLastPathComponent()
+                } else if let pictures = FileManager.default.urls(
+                    for: .picturesDirectory, in: .userDomainMask
+                ).first {
+                    panel.directoryURL = pictures
+                }
+                panel.nameFieldStringValue = "Julia.png"
+                panel.currentContentType = .png
+            }
+
+            guard panel.runModal() == .OK, let url = panel.url else {
+                slot.value = -1
+                return
+            }
+            self.stageFile(at: url)
+            slot.value = 0
+        }
+        return slot.value
+    }
+
     /// Copy staged path into Forth buffer. Returns bytes written (0 if none).
     func copyStagedPath(to dest: UnsafeMutableRawPointer?, max: Int) -> Int64 {
         guard let dest, max > 0, !fileStagedPath.isEmpty else { return 0 }
@@ -1358,18 +1417,24 @@ final class AppGridView: NSView {
     /// Button from the event. `pressedMouseButtons` is often still 0 inside
     /// `mouseDown`, so a click never reached the editor.
     private func buttons(for event: NSEvent) -> Int {
+        let down: Int
         switch event.type {
         case .leftMouseDown, .leftMouseDragged:
-            return 1
+            down = 1
         case .rightMouseDown, .rightMouseDragged:
-            return 2
+            down = 2
         case .otherMouseDown, .otherMouseDragged:
-            return 4
+            down = 4
         case .leftMouseUp, .rightMouseUp, .otherMouseUp, .mouseMoved:
             return 0
         default:
-            return Int(NSEvent.pressedMouseButtons) & 0x7
+            down = Int(NSEvent.pressedMouseButtons) & 0x7
         }
+        guard down != 0 else { return 0 }
+        if event.modifierFlags.contains(.option) {
+            return down | Int(AppOutputHost.keyOpt)
+        }
+        return down
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -1746,6 +1811,12 @@ public func host_app_file_choose() -> Int64 {
 @_cdecl("host_app_file_save_as")
 public func host_app_file_save_as() -> Int64 {
     AppOutputHost.shared.saveFileAs()
+}
+
+/// Picture NSSavePanel — JPEG, PNG, or TIFF. 0=ok, -1=cancel, -2=fail.
+@_cdecl("host_app_file_save_picture")
+public func host_app_file_save_picture() -> Int64 {
+    AppOutputHost.shared.savePictureAs()
 }
 
 /// Copy staged UTF-8 path into dest; returns byte count (0 if none).

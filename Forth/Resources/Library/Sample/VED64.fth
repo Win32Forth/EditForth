@@ -187,7 +187,7 @@ CREATE VED-FIND   VED-FIND-MAX 1+ ALLOT
 \     mov  w0, #80              // G-COLS
 \     adrp x1, ved_cols@PAGE
 \     str  x0, [x1, ved_cols@PAGEOFF]
-\     mov  w0, #25 // WINDOW-SIZE already clamps to 40×12 … 256×128.
+\     mov  w0, #25 // WINDOW-SIZE already clamps to 40×12 … 384×192.
 \     adrp x1, ved_rows@PAGE
 \     str  x0, [x1, ved_rows@PAGEOFF]
 \     NEXT

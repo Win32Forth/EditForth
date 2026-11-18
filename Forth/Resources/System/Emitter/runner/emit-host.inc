@@ -595,8 +595,8 @@ static int64_t host_app_cblit_depth(int64_t addr, int64_t nbytes, int64_t depth)
   } else {
     d = 1; stride = (w + 7) / 8; need = stride * h;
   }
-  /* Cap: 256×128 cells × 8×16 × 4 = 16 MiB truecolor. */
-  if (need <= 0 || need > 16 * 1024 * 1024) return 0;
+  /* Cap: 384×192 cells × 8×16 × 4 = 36 MiB truecolor. */
+  if (need <= 0 || need > 36 * 1024 * 1024) return 0;
   if (!emit_pix || emit_pix_n < need) {
     free(emit_pix);
     emit_pix = (uint8_t *)malloc((size_t)need);

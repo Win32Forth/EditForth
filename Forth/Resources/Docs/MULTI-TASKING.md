@@ -86,7 +86,9 @@ the end of that input.
 
 `0BRANCH` and `EXECUTE`'s empty-stack test compare the data-stack pointer with
 this task's `S0`. `DEPTH`, `SP0`, and `CLEARSTACK` use that same `S0` and the
-4096 bytes below it. The interpreter's between-word stack check and the console
+4096 bytes below it. `EXECUTE`, `DEPTH`, `SP0`, and `CLEARSTACK` read that
+`S0` through `x27` when it is set. Early boot leaves `x27` at 0 and falls
+back to `up_var`. The interpreter's between-word stack check and the console
 prompt still name the console data stack.
 
 `INCLUDE`, `INCLUDED`, `REQUIRED`, `(INCLUDE)`, and `(LINE-SOURCE)` from a
@@ -178,16 +180,22 @@ from a worker prints `? CORES only from the console task`. The same line is
 used for `COOP` and `CORES-JOIN`.
 
 `CORES` places each later `ACTIVATE` on a serial queue named `64Forth.core.0`
-through `64Forth.core.3`, at user-initiated quality of service. That prefers a
-performance core and does not pin one. A fifth awake compute task shares the
-queue with the fewest unfinished tasks. The console stays on `64Forth.kernel`.
+through `64Forth.core.9`, at user-initiated quality of service. No core is
+pinned. The operating system places the ten queues on the performance cores
+and the efficiency cores. The first ten tasks each take an idle processor.
+An eleventh task waits. When a processor finishes, that processor runs the
+oldest waiting task, so a fast core can complete several tasks while a slow
+core is still on its first. `PAUSE` keeps the processor. A waiting task runs
+only after some task stops or faults. The console stays on `64Forth.kernel`.
 A task activated before `CORES` stays on the cooperative circle.
 
 A worker runs until `PAUSE`, `STOP`, or a park inside `WAIT`, `>MBOX`, `MBOX>`,
-`>Q`, or `Q>`. `PAUSE` returns to the host, which queues that task again so a
-sibling on the same queue can run. `STOP` finishes the run. A park blocks that
-queue on a dispatch semaphore. Publishing a cell wakes every parked task. A
-wake that arrives before the park is remembered. A failed claim does not spin.
+`>Q`, or `Q>`. `PAUSE` returns to the host, which queues that same task again
+on the same processor. It does not hand the processor to a task that is
+waiting. `STOP` finishes the run, and that processor then takes the oldest
+waiting task. A park blocks that queue on a dispatch semaphore. Publishing a
+cell wakes every parked task. A wake that arrives before the park is
+remembered. A failed claim does not spin.
 
 `CORES-JOIN` waits until those worker runs have finished. `COOP` does that
 wait, then clears `CORES`. A join with nothing in flight returns at once.
@@ -378,7 +386,9 @@ task `INCLUDE`s or loads a block.
 - `MULTI` — Arm the yield.
 - `SINGLE` — Make the yield a no-op. The task that executes it keeps the core
   until `MULTI`.
-- `CORES` — Run each later `ACTIVATE` on up to four worker queues.
+- `CORES` — Run each later `ACTIVATE` on up to ten worker queues. The first
+  ten tasks each take an idle processor. A later task waits until a processor
+  finishes.
 - `COOP` — Wait for worker tasks, then use the cooperative scheduler.
 - `CORES-JOIN` — Wait until worker tasks have stopped.
 - `PAUSE` — Unchanged meaning: flush the console, then wait 1 ms. When `MULTI`
@@ -415,9 +425,10 @@ default. A sample can activate a loop that increments a counter and calls
 **Multi-core.** The same records and the same mailbox, queue, and semaphore
 words. `CORES` selects it. The console stays on `64Forth.kernel`. Each task
 activated while `CORES` is on gets a serial queue at user-initiated quality of
-service, which prefers a performance core and does not pin one. At most four
-compute queues run at once. A fifth awake compute task shares the least busy
-queue. `COOP` waits for those runs and returns to the cooperative scheduler.
+service. No core is pinned. At most ten compute queues run at once. The first
+ten tasks each take an idle processor. An eleventh waits. The processor that
+finishes runs the oldest waiting task. `PAUSE` does not give that processor
+away. `COOP` waits for those runs and returns to the cooperative scheduler.
 
 `EMIT` and `KEY` from a worker take `CONSOLE-SEM` around the existing emit
 buffer and key queue. A blit takes `GRAPHICS-SEM` around the buffer copy, then
@@ -475,7 +486,8 @@ string, or a record goes through a mailbox.
 4. **Mailbox and queue.** Landed. `MAILBOX` `>MBOX` `MBOX>` and `QUEUE` `>Q`
    `Q>` `Q-DEPTH`. Fixed rings in the shared dictionary. See "Step 4 as built".
 5. **Multi-core scheduler.** Landed. `CORES` `COOP` `CORES-JOIN`. Console queue
-   unchanged. Compute tasks on up to four worker queues. See "Step 5 as built".
+   unchanged. Compute tasks on up to ten worker queues. A finished processor
+   takes the next waiting task. See "Step 5 as built".
 6. **Private dictionary slice.** Landed. `SLICE`. A background task compiles
    into that slice. The console `HERE` stays put. See "Step 6 as built".
 

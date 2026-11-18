@@ -1,10 +1,85 @@
 # 64Forth development status
 
-**Current:** **2.7.4** (build **35**) — Ask Forth stack check and Markdown
-preview. Disk image `Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image
-stays. The 2.7.1 image stays. The 2.7.0 image stays.
+**Current:** **2.7.5** (build **36**) — Julia walker, ten worker queues,
+and picture save. No disk image. The image to install stays
+`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays. The 2.7.1
+image stays. The 2.7.0 image stays.
 
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-18
+
+---
+
+## v2.7.5 — Julia walker, ten worker queues, and picture save
+
+**Version strings:** marketing **2.7.5**, build **36**. No disk image. The
+image to install stays `Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image
+stays (`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+(`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
+(`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
+`Nov 18, 2026 5:51 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.7.5 === Nov 18, 2026 5:51 PM ===
+```
+
+### Highlights since 2.7.4
+
+- **Ten worker queues.** `CORES` runs each later `ACTIVATE` on up to ten
+  serial queues, `64Forth.core.0` through `64Forth.core.9`. No core is
+  pinned. All ten queues are user-initiated. The operating system places
+  them on the four performance cores and the six efficiency cores. The
+  first ten tasks each take an idle processor. A later task waits. The
+  processor that finishes runs the oldest waiting task, so a fast core can
+  finish more than one task while a slow core is still on its first.
+  `PAUSE` keeps that processor. A waiting task runs only after `STOP` or a
+  fault. `CORES-JOIN` still waits until every run has finished. The console
+  stays on `64Forth.kernel`. `MANSHOW-CORE` still uses four of those queues.
+- **Worker stacks.** `EXECUTE`, `DEPTH`, `SP0`, and `CLEARSTACK` read this
+  task's `S0` through `x27` when it is set. Early boot leaves `x27` at 0 and
+  falls back to the console user area. A worker `DEFER` paints in the column
+  it was given. The boot word count is 433.
+- **Graphics grid.** `WINDOW-SIZE` clamps the character grid to 40 by 12
+  through 384 by 192 cells. That is 3072 by 3072 pixels. The truecolor blit
+  cap is 36 MiB. Option held on a mouse button sets bit 1024. Mouse-up stays
+  0.
+- **Julia walker.** `Library/Juliav444` is Jos v.d. Ven's Julia and
+  Mandelbrot walker, public domain. The z^2+c formula is Marcel Hendrix,
+  iForth, 1994. `FROMLIB FLOAD Juliav444/JULIAV444.fth` then `JULIAV444`.
+  `JULIAV444-CORE4`, `JULIAV444-CORE8`, and `JULIAV444-CORE20` draw the same
+  picture on four cores, eight cores, and twenty column bands. CORE20 uses
+  all ten processors. Load one Julia file per session. CORE4 and CORE8 share
+  task names. Pixels stay at 28 fraction bits. Do not set `XBITS` in these
+  files. The window opens at 144 by 48 cells.
+- **Keys and mouse.** Julia arrows slide the picture with the key. Shift
+  zooms that screen axis. Mandelbrot arrows move the window. A left click
+  centers that pixel and zooms in by 2. Option-click zooms out by 2. Right
+  and middle clicks do nothing. Space holds a finished slide. `?` paints the
+  key list on a green band. Q or Esc returns to the console. Mandelbrot
+  pattern-down is O. R starts the slides. V cycles four saved views. Styles
+  are 1 through 8. Ini files and sound are not in this copy.
+- **Picture save.** S opens a picture save panel titled Save Picture. The
+  format menu is PNG, JPEG, or TIFF. PNG is the suggested name `Julia.png`.
+  A staged text path is not offered as the name. The word is
+  `(APP-FILE-SAVE-PICTURE)` `( -- ior )`: `0` ok, `-1` cancel, `-2` fail.
+  It is not an emitter host slot. `(APP-FILE-SAVE-AS)` stays the text save
+  panel for EDIT64, VED64, and WINED64. S during a frame does not abort that
+  frame. The file is written after the frame finishes. JPEG and PNG come
+  from `Sample/IMAGE-OUT.fth`. TIFF is uncompressed RGB. The name still has
+  to end in `.jpg`, `.jpeg`, `.png`, `.tif`, or `.tiff`.
+- **Checked.** Headless `JULIAV444-CORE20` printed `juliav444-core20-ok`
+  with an empty stack and with 99 kept. A 640 by 400 frame took 28 ms.
+  Columns 0, 32, and so on through 608, plus 639, each had 400 nonzero rows.
+  No window opened. An 8 by 16 picture: PNG and TIFF pixels matched, JPEG
+  opened as 8 by 16, and a `.bmp` name returned ior 1. In agent mode
+  `(APP-FILE-SAVE-PICTURE)` returned `-1`, and `JV-ASK` calls that word. The
+  format popup was not clicked. CORE4 and CORE8 selftests passed on the
+  earlier eight-queue build. They were not rerun on the ten-queue binary.
+
+**Release:** no disk image in this commit. The image to install stays
+`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays. The 2.7.1
+image stays. The 2.7.0 image stays.
 
 ---
 

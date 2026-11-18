@@ -58,6 +58,8 @@
 // Return stack (grows down). Match data-stack headroom for Forth DBG-PAUSE nesting.
 .equ RETURN_STACK_SIZE, 4096          // bytes (= 512 cells)
 .equ RETURN_STACK_CELLS, 512
+// CORES worker slots. CoreRuntime.slotCount in KernelBridge.swift must match.
+.equ CORE_SLOTS, 10
 // Cooperative task user area. Defined here so KEY (above the task block)
 // can use the offsets as immediates. 0 asleep, -1 awake.
 .equ TU_LINK,        0
@@ -1340,6 +1342,19 @@ XAPP_FILE_SAVE_AS:
 XAPP_FILE_SAVE_AS_END:
     NEXT
 
+// (APP-FILE-SAVE-PICTURE) ( -- ior )  picture panel; JPEG, PNG, or TIFF
+    BOOT_WORD "(APP-FILE-SAVE-PICTURE)", "(APP-FILE-SAVE-PICTURE) ( -- ior ) save picture via dialog", 0, XAPP_FILE_SAVE_PICTURE, XAPP_FILE_SAVE_PICTURE_END
+XAPP_FILE_SAVE_PICTURE:
+    stp  x29, x30, [sp, #-16]!
+    SAVE_VM
+    bl   _host_app_file_save_picture
+    RESTORE_VM
+    ldp  x29, x30, [sp], #16
+    str  x20, [x22, #-8]!
+    mov  x20, x0
+XAPP_FILE_SAVE_PICTURE_END:
+    NEXT
+
 // (APP-FILE-PATH) ( c-addr u -- u' )  copy staged path; 0 if none
     BOOT_WORD "(APP-FILE-PATH)", "(APP-FILE-PATH) ( c-addr u -- u2 ) copy staged file path", 0, XAPP_FILE_PATH, XAPP_FILE_PATH_END
 XAPP_FILE_PATH:
@@ -1513,7 +1528,7 @@ _kof_scan:
     cmp  x15, x12
     b.eq _kof_worker
     add  x14, x14, #1
-    cmp  x14, #4
+    cmp  x14, #CORE_SLOTS
     b.lo _kof_scan
 _kof_console:
     // Sticky note for host after recovery (read via kernel_take_fault_flag)
@@ -3436,7 +3451,7 @@ XSINGLE:
 XSINGLE_END:
     NEXT
 
-    BOOT_WORD "CORES", "CORES ( -- ) run tasks on up to four worker queues", 0, XCORES, XCORES_END
+    BOOT_WORD "CORES", "CORES ( -- ) run tasks on up to ten worker queues", 0, XCORES, XCORES_END
 XCORES:
     adrp x1, console_task@page
     add  x1, x1, console_task@pageoff
@@ -4456,16 +4471,18 @@ _task_cold_init:
     str  xzr, [x1]
     adrp x1, core_task@page
     add  x1, x1, core_task@pageoff
-    str  xzr, [x1]
-    str  xzr, [x1, #8]
-    str  xzr, [x1, #16]
-    str  xzr, [x1, #24]
+    mov  x2, #CORE_SLOTS
+.Ltc_zap_task:
+    str  xzr, [x1], #8
+    subs x2, x2, #1
+    b.ne .Ltc_zap_task
     adrp x1, core_pthread@page
     add  x1, x1, core_pthread@pageoff
-    str  xzr, [x1]
-    str  xzr, [x1, #8]
-    str  xzr, [x1, #16]
-    str  xzr, [x1, #24]
+    mov  x2, #CORE_SLOTS
+.Ltc_zap_pthread:
+    str  xzr, [x1], #8
+    subs x2, x2, #1
+    b.ne .Ltc_zap_pthread
     mov  x27, x0
     ret
 
@@ -4477,7 +4494,7 @@ _task_cold_init:
 .globl _kernel_task_run
 _kernel_task_run:
     cbz  x0, _ktr_bad
-    cmp  w1, #3
+    cmp  w1, #(CORE_SLOTS - 1)
     b.hi _ktr_bad
     uxtw x1, w1
     stp  x29, x30, [sp, #-112]!
@@ -4562,7 +4579,7 @@ _cl_scan:
     cmp  x11, x27
     b.eq _cl_hit
     add  x10, x10, #1
-    cmp  x10, #4
+    cmp  x10, #CORE_SLOTS
     b.lo _cl_scan
 _cl_noslot:
     NEXT
@@ -4593,7 +4610,7 @@ _ciw_loop:
     cmp  x3, x27
     b.eq _ciw_yes
     add  x2, x2, #1
-    cmp  x2, #4
+    cmp  x2, #CORE_SLOTS
     b.lo _ciw_loop
 _ciw_no:
     mov  x0, #0
@@ -6033,9 +6050,17 @@ _tick_fail:
     BOOT_WORD "EXECUTE", "EXECUTE ( xt -- ) execute the word with the given xt", 0, XEXECUTE, XEXECUTE_END
 XEXECUTE:
     mov x21, x20                   // W = CFA
+    // This thread's SP0 via x27. up_var is the console. A worker stack
+    // lives above that BSS bound, so the old compare looked empty, skipped
+    // the pop, and left TOS as 0. DEFER then kept a zero under the args.
+    cbnz x27, _exec_up
     adrp x0, up_var@page
     add  x0, x0, up_var@pageoff
     ldr  x0, [x0]
+    b    _exec_s0
+_exec_up:
+    mov  x0, x27
+_exec_s0:
     ldr  x0, [x0, #TU_S0]          // this task's empty DSP
     cmp  x22, x0
     b.hs 1f                        // empty under → no pop
@@ -11448,15 +11473,22 @@ _gmm_fail:
 //   Algorithm: n = (SP0 - DSP) >> 3;  push old TOS;  TOS = n.
 //
 //   If DSP is outside [SP0-4096, SP0] (prior underflow/overflow), repair to
-//   empty first. SP0 is this task's TU_S0. On the console that is
-//   data_stack+4096, which is &return_stack[0]. An underflewed DSP that DEPTH
-//   pushed through would scribble on the return stack or fault.
+//   empty first. SP0 is this thread's TU_S0 via x27, not up_var. On the
+//   console that is data_stack+4096, which is &return_stack[0]. A worker
+//   DSP lives in the dictionary, so the console bound looks like overflow
+//   and would retarget the worker at the console stack. An underflewed DSP
+//   that DEPTH pushed through would scribble on the return stack or fault.
 
     BOOT_WORD "DEPTH", "DEPTH ( -- +n ) data stack depth in cells", 0, XDEPTH, XDEPTH_END
 XDEPTH:
+    cbnz x27, _depth_up
     adrp x2, up_var@page
     add  x2, x2, up_var@pageoff
     ldr  x2, [x2]
+    b    _depth_s0
+_depth_up:
+    mov  x2, x27
+_depth_s0:
     ldr  x0, [x2, #TU_S0]          // SP0
     sub  x1, x0, #4096             // base
     cmp  x22, x0
@@ -11481,10 +11513,16 @@ XDEPTH_END:
 
     BOOT_WORD "CLEARSTACK", "CLEARSTACK ( -- ) empty the data stack (safe reset)", 0, XCLEARSTACK, XCLEARSTACK_END
 XCLEARSTACK:
-    adrp x22, up_var@page
-    add  x22, x22, up_var@pageoff
-    ldr  x22, [x22]
-    ldr  x22, [x22, #TU_S0]
+    // This thread's SP0. up_var is the console; a worker must not adopt it.
+    cbnz x27, _clr_up
+    adrp x0, up_var@page
+    add  x0, x0, up_var@pageoff
+    ldr  x0, [x0]
+    b    _clr_s0
+_clr_up:
+    mov  x0, x27
+_clr_s0:
+    ldr  x22, [x0, #TU_S0]
     mov  x20, #0
 XCLEARSTACK_END:
     NEXT
@@ -11493,9 +11531,15 @@ XCLEARSTACK_END:
 
     BOOT_WORD "SP0", "SP0 ( -- addr ) empty data-stack DSP", 0, XSP0, XSP0_END
 XSP0:
+    // This thread's SP0 via x27. The console bound would reset a worker.
+    cbnz x27, _sp0_up
     adrp x2, up_var@page
     add  x2, x2, up_var@pageoff
     ldr  x2, [x2]
+    b    _sp0_s0
+_sp0_up:
+    mov  x2, x27
+_sp0_s0:
     ldr  x0, [x2, #TU_S0]          // SP0
     sub  x1, x0, #4096             // base
     cmp  x22, x0
@@ -21364,11 +21408,20 @@ qput_thread:       .quad qput_retry_xt
 qget_retry_xt:     .quad XQGET_RETRY
 qget_thread:       .quad qget_retry_xt
 .align 8
-core_sp:        .quad 0, 0, 0, 0
-core_task:      .quad 0, 0, 0, 0
-core_pthread:   .quad 0, 0, 0, 0
+core_sp:
+    .rept CORE_SLOTS
+    .quad 0
+    .endr
+core_task:
+    .rept CORE_SLOTS
+    .quad 0
+    .endr
+core_pthread:
+    .rept CORE_SLOTS
+    .quad 0
+    .endr
 .align 8
-core_jmp:       .skip 1024         // 4 * 256 sigjmp_buf
+core_jmp:       .skip CORE_SLOTS * 256   // one 256-byte sigjmp_buf per slot
 blk_var:        .quad 0            // BLK body (0 = not interpreting a block)
 scr_var:        .quad 0            // SCR body
 block_file_var: .quad 0            // current volume fileid (0 = none)

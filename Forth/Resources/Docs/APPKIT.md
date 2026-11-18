@@ -45,6 +45,9 @@ Entry pattern (unchanged): load sources, then `MAIN` (AutoLoad may call
 | Pixels | **640 × 400** (`G-PX` / `G-PY` = 80×8 × 25×16) |
 | Cell | 8 × 16 px |
 
+`WINDOW-SIZE` clamps the character grid to 40 by 12 through 384 by 192 cells
+(3072 by 3072 pixels). The truecolor blit cap is 36 MiB.
+
 ### Pixel depth (selectable)
 
 - `1BIT` (default) — `G-DEPTH`: 1; Buffer: packed bits (~32 KB used); Notes:
@@ -107,7 +110,8 @@ Time / sound: `TIME-RESET` `10TH-ELAPSED` `TENTHS` `TONE`
 
 Mouse: `G-MOUSE` / `GETMOUS` → `(APP-MOUSE)` — `( -- x y buttons )`, PLOT
 origin (bottom-left); buttons `1`=left `2`=right `4`=middle. Shift is not part
-of the button mask.
+of the button mask. Option held on a button-down sets bit `1024`. Mouse-up
+stays 0.
 
 Points: `1BIT` `COLOR8` `TRUECOLOR` `WHITE` `BLACK` `INVERT` `COLOR` `RGB`
 `CBLACK`…`CWHITE` `PLOT` `UNPLOT` `LINE` `POINT@` `POINT-COLOR@` `PCLS`
@@ -144,6 +148,10 @@ Hanoi, `(APP-TONE)`)
 - `(APP-FILE-CHOOSE) ( -- ior )` — NSOpenPanel; stages path; `0` ok, `-1`
   cancel, `-2` fail.
 - `(APP-FILE-SAVE-AS) ( -- ior )` — NSSavePanel; stages path.
+- `(APP-FILE-SAVE-PICTURE) ( -- ior )` — picture save panel. The format
+  menu is PNG, JPEG, or TIFF. `0` ok, `-1` cancel, `-2` fail. Interactive
+  kernel only. It is not an emitter host slot. `(APP-FILE-SAVE-AS)` stays
+  the text save panel.
 - `(APP-FILE-PATH) ( c-addr u -- u2 )` — copy staged UTF-8 path (`0` if none).
 - `(APP-FILE-SLURP) ( c-addr max -- u ior )` — read staged file into buffer.
 - `(APP-FILE-SPEW) ( c-addr u -- ior )` — write buffer to staged path.

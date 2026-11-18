@@ -313,12 +313,16 @@ private func kernel_set_float_op(
 
 // MARK: - CORES workers
 
-/// Four serial queues at user-initiated QoS. No core is pinned.
-/// A fifth awake task shares the queue with the fewest unfinished tasks.
+/// Ten serial queues at user-initiated QoS. No core is pinned.
+/// This Mac has 4 performance cores and 6 efficiency cores.
+/// The first ten tasks each take an idle processor. A later task
+/// waits. When a processor finishes, that processor runs the oldest
+/// waiting task, so a fast core can complete several tasks while a
+/// slow core is still on its first. PAUSE keeps the processor.
 /// WAIT blocks that queue on a dispatch semaphore. A signal that arrives
 /// first is remembered, so the waiter does not sleep forever.
 private final class CoreRuntime {
-    static let slotCount = 4
+    static let slotCount = 10
 
     private let lock = NSLock()
     private var queues: [DispatchQueue] = []
@@ -330,6 +334,7 @@ private final class CoreRuntime {
     private var consolePending = false
     private var taskSlot: [UInt64: Int] = [:]
     private var depth: [Int]
+    private var backlog: [UInt64] = []
     private var inflight = 0
     private var joinWaiters = 0
     private let joinSem = DispatchSemaphore(value: 0)
@@ -348,28 +353,41 @@ private final class CoreRuntime {
         }
     }
 
+    /// Lowest idle processor, or nil when every processor is busy.
+    private func idleSlotLocked() -> Int? {
+        for i in 0..<Self.slotCount where depth[i] == 0 {
+            return i
+        }
+        return nil
+    }
+
+    private func assignLocked(task: UInt64, idx: Int) {
+        depth[idx] += 1
+        taskSlot[task] = idx
+    }
+
     func schedule(task: UInt64) {
         lock.lock()
         ensureQueuesLocked()
-        var idx = 0
-        for i in 1..<Self.slotCount where depth[i] < depth[idx] {
-            idx = i
-        }
-        depth[idx] += 1
         inflight += 1
-        taskSlot[task] = idx
-        let queue = queues[idx]
-        lock.unlock()
-        queue.async { [self] in
-            self.run(task: task, idx: idx, queue: queue)
+        if let idx = idleSlotLocked() {
+            assignLocked(task: task, idx: idx)
+            let queue = queues[idx]
+            lock.unlock()
+            queue.async { [self] in
+                self.run(task: task, idx: idx, queue: queue)
+            }
+            return
         }
+        backlog.append(task)
+        lock.unlock()
     }
 
     private func run(task: UInt64, idx: Int, queue: DispatchQueue) {
         let rc = kernel_task_run(task, Int32(idx))
         if rc == 1 {
-            // PAUSE returns without dropping inflight, so a sibling already
-            // queued on this serial queue runs before this task continues.
+            // PAUSE keeps this processor. The same task continues.
+            // A task in the backlog waits until some task STOPs.
             queue.async { [self] in
                 self.run(task: task, idx: idx, queue: queue)
             }
@@ -386,9 +404,23 @@ private final class CoreRuntime {
         if depth[idx] > 0 { depth[idx] -= 1 }
         if inflight > 0 { inflight -= 1 }
         taskSlot[task] = nil
+        // The finished processor takes the oldest waiting task.
+        // That task was already counted in inflight when it was scheduled.
+        var nextTask: UInt64?
+        if depth[idx] == 0, !backlog.isEmpty {
+            let next = backlog.removeFirst()
+            assignLocked(task: next, idx: idx)
+            nextTask = next
+        }
         let signalJoin = inflight == 0 && joinWaiters > 0
         if signalJoin { joinWaiters -= 1 }
+        let queue = queues[idx]
         lock.unlock()
+        if let nextTask {
+            queue.async { [self] in
+                self.run(task: nextTask, idx: idx, queue: queue)
+            }
+        }
         if signalJoin { joinSem.signal() }
     }
 

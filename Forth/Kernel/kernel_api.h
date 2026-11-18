@@ -238,6 +238,7 @@ int64_t host_app_img_render(void *dest, int64_t dest_w, int64_t dest_h,
 /// Text file panels / staged path (EDIT64). ior: 0=ok, -1=cancel, -2=fail.
 int64_t host_app_file_choose(void);
 int64_t host_app_file_save_as(void);
+int64_t host_app_file_save_picture(void);
 int64_t host_app_file_path(void *dest, int64_t max);
 int64_t host_app_file_slurp(void *dest, int64_t max, int64_t *out_u);
 int64_t host_app_file_spew(const void *src, int64_t nbytes);
