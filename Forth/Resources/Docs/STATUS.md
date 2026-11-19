@@ -1,9 +1,9 @@
 # 64Forth development status
 
 **Current:** **2.7.5** (build **36**) — Julia walker, ten worker queues,
-and picture save. No disk image. The image to install stays
-`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays. The 2.7.1
-image stays. The 2.7.0 image stays.
+and picture save. Disk image `Releases/EditForth-2.7.5-macOS.dmg`. The
+2.7.4 image stays. The 2.7.3 image stays. The 2.7.1 image stays. The 2.7.0
+image stays.
 
 **Last updated:** 2026-11-18
 
@@ -11,12 +11,16 @@ image stays. The 2.7.0 image stays.
 
 ## v2.7.5 — Julia walker, ten worker queues, and picture save
 
-**Version strings:** marketing **2.7.5**, build **36**. No disk image. The
-image to install stays `Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image
-stays (`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+**Version strings:** marketing **2.7.5**, build **36**. One-app disk image
+`Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image stays
+(`Releases/EditForth-2.7.4-macOS.dmg`). The 2.7.3 image stays
+(`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
 (`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
 (`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
-`Nov 18, 2026 5:51 PM`.
+`Nov 18, 2026 5:51 PM`. `scripts/release.sh` archive, validate, emit-smoke,
+and dmg: ANS-VALIDATE 395 passed, 0 failed; Hayes
+`ALL COUNTS ZERO — PASS`; dbg-span PASS; VED64 emit produced `VED64.app`.
+GitHub release **v2.7.5**.
 
 **Console header stamp:**
 
@@ -77,9 +81,9 @@ stays (`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
   format popup was not clicked. CORE4 and CORE8 selftests passed on the
   earlier eight-queue build. They were not rerun on the ten-queue binary.
 
-**Release:** no disk image in this commit. The image to install stays
-`Releases/EditForth-2.7.4-macOS.dmg`. The 2.7.3 image stays. The 2.7.1
-image stays. The 2.7.0 image stays.
+**Release:** disk image `Releases/EditForth-2.7.5-macOS.dmg`. GitHub release
+**v2.7.5**. The 2.7.4 image stays. The 2.7.3 image stays. The 2.7.1 image
+stays. The 2.7.0 image stays.
 
 ---
 
