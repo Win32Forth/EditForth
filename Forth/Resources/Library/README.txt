@@ -46,7 +46,7 @@ Examples
   FROMLIB FLOAD Sample/MANSHOW.fth         \ then: MANSHOW (pan and zoom mandel.raw)
   FROMLIB FLOAD Sample/MANSHOW-COOP.fth    \ then: MANSHOW-COOP (four cooperative tasks)
   FROMLIB FLOAD Sample/MANSHOW-CORE.fth    \ then: MANSHOW-CORE (four worker cores)
-  FROMLIB FLOAD Juliav444/JULIAV444.fth    \ then: JULIAV444 (Q28 Julia and Mandelbrot)
+  FROMLIB FLOAD Juliav444/JULIAV444.fth    \ then: JULIAV444 (Q28 Julia and Mandelbrot; L loads a parameter file)
   FROMLIB FLOAD Juliav444/JULIAV444-CORE4.fth \ then: JULIAV444-CORE4 (four cores)
   FROMLIB FLOAD Juliav444/JULIAV444-CORE8.fth \ then: JULIAV444-CORE8 (eight cores)
   FROMLIB FLOAD Juliav444/JULIAV444-CORE20.fth \ then: JULIAV444-CORE20 (twenty tasks, ten processors)

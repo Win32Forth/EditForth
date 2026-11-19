@@ -4,9 +4,10 @@ JULIAV444 for EditForth
 Jos v.d. Ven, Win32Forth, public domain. The z^2+c formula is
 Marcel Hendrix, iForth, April 1994. This copy draws into the
 TRUECOLOR graphics window. S saves the picture. The dialog
-offers JPEG, PNG, or TIFF. Ini files and sound are not
-included. One thread draws the picture. A key during a pass
-stops that pass. S waits until the pass finishes.
+offers JPEG, PNG, or TIFF. L loads a parameter file and
+draws that view. Sound is not included. One thread draws
+the picture. A key during a pass stops that pass. S and L
+wait until the pass finishes.
 
 Load
   FROMLIB FLOAD Juliav444/JULIAV444.fth
@@ -91,6 +92,10 @@ Keys
   S        save the picture. The dialog offers JPEG, PNG,
            or TIFF. During a pass, S waits until that
            frame finishes.
+  L        load a parameter file. During a pass, L waits
+           until that frame finishes, then opens the file
+           and draws that view. A missing key keeps its
+           current value. Xx and Yy in the file are ignored.
   X        swap the two colors
   C        Julia: swap colors. Mandelbrot: tiger interior
   H Home   reset the walker that is on screen

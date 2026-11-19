@@ -40,8 +40,8 @@
 \ the finished frame. Any other key still stops the pass.
 \ Esc or Q returns to the console.
 \ One thread. S saves the picture as JPEG, PNG, or TIFF.
-\ Ini files and sound are not in this copy. V cycles
-\ four saved views.
+\ L loads a parameter file and draws that view. Sound is
+\ not in this copy. V cycles four saved views.
 \
 \ The hot step is the same shift as X*. It is not a CODE word.
 \   x0 = x, x1 = y, x8 = aa, x9 = bb, x7 = 100 in Q28
@@ -86,8 +86,10 @@ DECIMAL
 
 0.1e0 F>X CONSTANT JV-A0
 1.0e0 F>X CONSTANT JV-B0
-1.9e0 F>X CONSTANT JV-P1
-2.0e0 F>X CONSTANT JV-P2
+VARIABLE JV-P1
+VARIABLE JV-P2
+1.9e0 F>X JV-P1 !
+2.0e0 F>X JV-P2 !
 100.0e0 F>X CONSTANT JV-100
 14.0e0 F>X CONSTANT JV-14
 4.0e0 F>X CONSTANT JV-4
@@ -445,7 +447,7 @@ CREATE JV-SINUS
 : JV-MAP ( -- )
   G-PX 2/ 1 MAX DUP JV-XM ! JV-N1 !
   G-PY 2/ 1 MAX JV-YM !
-  JV-N1 @ JV-P1 X* JV-P2 X/ DUP 1 < IF DROP 1 THEN JV-N2 ! ;
+  JV-N1 @ JV-P1 @ X* JV-P2 @ X/ DUP 1 < IF DROP 1 THEN JV-N2 ! ;
 
 : JV-M-SETUP ( -- )
   G-PX 1 MAX
@@ -473,7 +475,8 @@ CREATE JV-SINUS
       JV-SHOW @ IF -1 JV-HOLD ! THEN
       FALSE EXIT
     THEN
-    DUP [CHAR] s = OVER [CHAR] S = OR IF
+    DUP [CHAR] s = OVER [CHAR] S = OR
+    OVER [CHAR] l = OR OVER [CHAR] L = OR IF
       JV-PEND !
       FALSE EXIT
     THEN
@@ -508,8 +511,8 @@ CREATE JV-SINUS
   JV-YM @ - >R
   JV-XM @ -
   JV-N2 @ 0= IF DROP R> DROP 2DROP EXIT THEN
-  DUP JV-P2 * JV-N2 @ / JV-FZPX @ X* JV-FPOSX @ + JV-YY !
-  R> JV-P1 * JV-N1 @ / JV-FZPY @ X* JV-FPOSY @ + JV-XX !
+  DUP JV-P2 @ * JV-N2 @ / JV-FZPX @ X* JV-FPOSX @ + JV-YY !
+  R> JV-P1 @ * JV-N1 @ / JV-FZPY @ X* JV-FPOSY @ + JV-XX !
   DROP
   JV-PIXEL
   JV-DOT ;
@@ -695,6 +698,8 @@ VARIABLE JV-TL
   0 JV-PEND !
   0 JV-ABORT !
   0 JV-RESIZE !
+  1.9e0 F>X JV-P1 !
+  2.0e0 F>X JV-P2 !
   0 ['] JV-STD JV-USE ;
 
 : JV-SEED ( -- )
@@ -793,10 +798,10 @@ VARIABLE JV-TL
   DUP JV-FZDIST @ X* JV-TEN X/ ;
 
 : JV-STEPX ( x -- step )
-  JV-P2 X* JV-N2 @ DUP 0= IF DROP DROP 0 EXIT THEN / ;
+  JV-P2 @ X* JV-N2 @ DUP 0= IF DROP DROP 0 EXIT THEN / ;
 
 : JV-STEPY ( y -- step )
-  JV-P1 X* JV-N1 @ DUP 0= IF DROP DROP 0 EXIT THEN / ;
+  JV-P1 @ X* JV-N1 @ DUP 0= IF DROP DROP 0 EXIT THEN / ;
 
 : JV-ZIN-X ( -- )
   JV-FZPX @ DUP JV-SCALE -
@@ -830,9 +835,9 @@ VARIABLE JV-TL
 : JV-J-CLICK ( -- )
   JV-MAP
   JV-MY @ JV-YM @ -
-  JV-P1 * JV-N1 @ / JV-FZPY @ X* JV-FPOSY +!
+  JV-P1 @ * JV-N1 @ / JV-FZPY @ X* JV-FPOSY +!
   JV-MX @ JV-XM @ -
-  JV-P2 * JV-N2 @ / JV-FZPX @ X* JV-FPOSX +!
+  JV-P2 @ * JV-N2 @ / JV-FZPX @ X* JV-FPOSX +!
   JV-MB @ 1024 AND IF JV-ZOUT2 ELSE JV-ZIN2 THEN ;
 
 \ center half -- min max. min is center-half, max is center+half.
@@ -896,6 +901,7 @@ VARIABLE JV-TL
   JV-B0 JV-BB !
   0 JV-JDET !
   1 JV-STYLE
+  -1 JV-MAN !
   67174400 JV-CF !
   12709967 JV-CT !
   7 JV-STEP !
@@ -942,6 +948,7 @@ VARIABLE JV-TL
   1.56e0 F>X JV-BB !
   11 JV-JDET !
   1 JV-STYLE
+  -1 JV-MAN !
   81177907 JV-CF !
   83014267 JV-CT !
   107 JV-STEP !
@@ -1011,7 +1018,7 @@ VARIABLE JV-HBUF
   1 9 AT ." + - detail   PgUp PgDn step   H Home reset   X swap colors"
   1 10 AT ." Mandelbrot: B interior  C tiger  D E distort  P O pattern"
   1 11 AT ." Q or Esc returns to the console.  ? this list"
-  1 12 AT ." S saves this picture. Choose JPEG, PNG, or TIFF." ;
+  1 12 AT ." S saves this picture. Choose JPEG, PNG, or TIFF. L loads a parameter file." ;
 
 \ Green text on a medium green band. Any key clears it and puts
 \ the saved pixels back. The fractal is not redrawn.
@@ -1041,6 +1048,7 @@ VARIABLE JV-HBUF
 
 \ S opens the save panel. The file name selects JPEG, PNG, or TIFF.
 FROMLIB S" Juliav444/JV-SAVE.fth" INCLUDED
+FROMLIB S" Juliav444/JV-INI.fth" INCLUDED
 
 : JV-CMD ( key -- )
   DUP 27 = OVER [CHAR] q = OR OVER [CHAR] Q = OR IF
@@ -1049,6 +1057,7 @@ FROMLIB S" Juliav444/JV-SAVE.fth" INCLUDED
   0 JV-SHOW !
   DUP [CHAR] ? = IF DROP JV-HELP EXIT THEN
   [CHAR] s JV-LETTER IF DROP JV-SAVE EXIT THEN
+  [CHAR] l JV-LETTER IF DROP JV-LOAD IF JV-DRAW THEN EXIT THEN
   DUP 200 = IF DROP
     JV-MAN @ IF
       JV-VSTEP DUP JV-MINY @ + JV-MINY !
@@ -1191,6 +1200,7 @@ FROMLIB S" Juliav444/JV-SAVE.fth" INCLUDED
   S" Mandelbrot: B interior  C tiger  D E distort  P O pattern" JV-LINE
   S" R random slides. Space holds the finished frame." JV-LINE
   S" S saves this picture. Choose JPEG, PNG, or TIFF." JV-LINE
+  S" L loads a parameter file and draws that view." JV-LINE
   S" The next slide waits 2 seconds. Q or Esc quits." JV-LINE ;
 
 : JV-DRAIN ( n -- )

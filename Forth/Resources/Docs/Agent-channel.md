@@ -3,9 +3,9 @@
 **Public domain.** Headless control so tools (Grok, CI, scripts) can load Forth
 files and capture console output without driving the GUI.
 
-**Status:** shipped (**64Forth 1.1.2+**; current **2.7.5**, build **36**,
-banner `Nov 18, 2026 5:51 PM`). Disk image
-`Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image stays. The 2.7.3
+**Status:** shipped (**64Forth 1.1.2+**; current **2.7.6**, build **37**,
+banner `Nov 18, 2026 9:49 PM`). No new disk image. The image to install
+stays `Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image stays. The 2.7.3
 image stays. The 2.7.1 image stays. The 2.7.0 image stays. See also
 [STATUS.md](STATUS.md) (section **v1.1.2 — agent channel**).
 ## Why

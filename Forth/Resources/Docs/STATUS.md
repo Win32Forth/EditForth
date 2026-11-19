@@ -1,11 +1,60 @@
 # 64Forth development status
 
-**Current:** **2.7.5** (build **36**) — Julia walker, ten worker queues,
-and picture save. Disk image `Releases/EditForth-2.7.5-macOS.dmg`. The
-2.7.4 image stays. The 2.7.3 image stays. The 2.7.1 image stays. The 2.7.0
-image stays.
+**Current:** **2.7.6** (build **37**) — Julia parameter files.
+No disk image. The image to install stays
+`Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image stays. The 2.7.3
+image stays. The 2.7.1 image stays. The 2.7.0 image stays.
 
 **Last updated:** 2026-11-18
+
+---
+
+## v2.7.6 — Julia parameter files
+
+**Version strings:** marketing **2.7.6**, build **37**. No disk image. The
+image to install stays `Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image
+stays (`Releases/EditForth-2.7.4-macOS.dmg`). The 2.7.3 image stays
+(`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+(`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
+(`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
+`Nov 18, 2026 9:49 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.7.6 === Nov 18, 2026 9:49 PM ===
+```
+
+### Highlights since 2.7.5
+
+- **Parameter file.** L on `JULIAV444`, `JULIAV444-CORE4`,
+  `JULIAV444-CORE8`, and `JULIAV444-CORE20` opens a file panel and loads a
+  Win32Forth Julia parameter file. The loader is `Juliav444/JV-INI.fth`.
+  `JV-INI ( c-addr u -- ior )` returns 0 when the keys that were present
+  were stored. It returns 1 when the file could not be opened, and nothing
+  changes. A missing key keeps its current value. A value that is not a
+  number is skipped. The walker is not reset.
+- **Keys.** Section `[mandelbrot]` stores distortion, detail, pattern,
+  MaxX, MinX, MaxY, and MinY. Section `[julia]` stores Aa, Bb, p1, p2,
+  julia-detail, julia-style, color_false, color_true, colorstep,
+  rgb-to-inc, fzoom-posx, fzoom-posye, fposy, fposx, and fdist. Names are
+  compared without case. Blank lines and lines that start with `;` or `#`
+  are ignored. Xx and Yy are accepted and not stored. fzoom-dist is not in
+  the file. p1 and p2 are variables. They start at 1.9 and 2.0.
+- **Style.** julia-style is applied after the other keys. 1 selects
+  Mandelbrot. Any other value in the file selects Julia through the style
+  bits: 0 standard, 2 anti, 4 extreme, 8 extreme-anti, 16 cameleon,
+  32 tiger, 64 snake, and 128 tentacle. A style outside that list selects
+  cameleon. If the file has no julia-style, the current walker and style
+  stay. The spiral and dual-black-hole presets stay Mandelbrot.
+- **During a frame.** L does not abort the frame. The panel opens after
+  the frame finishes. Cancel stays quiet. S still saves PNG, JPEG, or
+  TIFF. Sound is not included. The parameter file is not written back.
+- **Checked.** Headless loads of MultiEyed, spiral, wow, and dualblackhole
+  stored those fields and left a 99 under the call. `JV-SELFTEST` printed
+  `juliav444-ok`, `juliav444-core4-ok`, `juliav444-core8-ok`, and
+  `juliav444-core20-ok`. No window opened. The file dialog was not clicked.
+  Agent mode cancels that panel.
 
 ---
 
