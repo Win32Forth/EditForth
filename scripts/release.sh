@@ -210,9 +210,29 @@ cmd_archive() {
     || die "Developer ID export missing EditForth.app"
   rm -rf "$STAGE_APPS/EditForth.app"
   ditto --norsrc "$export_dir/EditForth.app" "$STAGE_APPS/EditForth.app"
-  if ! codesign -dv "$STAGE_APPS/EditForth.app" 2>&1 | grep -q "Developer ID Application"; then
-    die "staged app is not signed with Developer ID Application"
-  fi
+
+  # A nested Mach-O can be Developer ID with no hardened runtime. Notarization
+  # rejects that. Re-sign those binaries, then the app, and keep the entitlements.
+  local ident="Developer ID Application: Thomas Zimmer (X5YCJL3LJ8)"
+  local ents nested
+  ents=$(mktemp)
+  codesign -d --entitlements :- "$STAGE_APPS/EditForth.app" >"$ents" 2>/dev/null
+  while IFS= read -r nested; do
+    [[ -n "$nested" ]] || continue
+    [[ "$nested" == "$STAGE_APPS/EditForth.app/Contents/MacOS/EditForth" ]] && continue
+    codesign --force --sign "$ident" --options runtime --timestamp "$nested"
+  done < <(find "$STAGE_APPS/EditForth.app" -type f -exec file {} + | awk -F: '/Mach-O/ {print $1}')
+  codesign --force --sign "$ident" --options runtime --timestamp \
+    --entitlements "$ents" "$STAGE_APPS/EditForth.app"
+  rm -f "$ents"
+  codesign --verify --deep --strict "$STAGE_APPS/EditForth.app"
+  # grep -q can SIGPIPE codesign, and pipefail then looks like a failed check.
+  local sign_info
+  sign_info=$(codesign -dv --verbose=4 "$STAGE_APPS/EditForth.app" 2>&1 || true)
+  case "$sign_info" in
+    *"Developer ID Application"*) ;;
+    *) die "staged app is not signed with Developer ID Application" ;;
+  esac
 
   # Drop archives after the export (app kept in STAGE_APPS).
   # 2.5.0+ ships one app. The 64Forth scheme is not part of this archive.
