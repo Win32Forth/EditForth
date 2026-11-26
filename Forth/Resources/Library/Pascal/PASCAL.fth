@@ -32,12 +32,6 @@ ONLY FORTH ALSO DEFINITIONS DECIMAL
 
 : NOOP ;
 
-: ,"  ( -- )
-    HERE  8 ALLOT
-    DUP 8 ERASE
-    [CHAR] " PARSE  7 MIN
-    ROT PLACE ALIGN ;
-
 \ Jump table after EXEC: in the caller. R> takes the table address (and
 \ abandons falling through the table). @ EXECUTE runs the selected word;
 \ then EXIT returns to EXEC:'s caller.  (@ >R is DTC-style and faults on
@@ -365,16 +359,22 @@ CHAR # CRCK ##?
         IF  8 TO TYP  ELSE  7 TO TYP  -1 PASIN +!  THEN
     THEN ;
 
+: KW,"  ( -- )
+    HERE  8 ALLOT
+    DUP 8 ERASE
+    [CHAR] " PARSE  7 MIN
+    ROT PLACE ALIGN ;
+
 CREATE KW-TABLE
-    ," and"     ," array"   ," begin"   ," newline"
-    ," case"    ," const"   ," div"     ," do"
-    ," downto"  ," else"    ," end"     ," for"
-    ," func"    ," if"      ," integer" ," mem"
-    ," mod"     ," not"     ," of"      ," or"
-    ," proc"    ," read"    ," repeat"  ," shl"
-    ," shr"     ," then"    ," to"      ," type"
-    ," until"   ," var"     ," while"   ," write"
-    ," in"
+    KW," and"     KW," array"   KW," begin"   KW," newline"
+    KW," case"    KW," const"   KW," div"     KW," do"
+    KW," downto"  KW," else"    KW," end"     KW," for"
+    KW," func"    KW," if"      KW," integer" KW," mem"
+    KW," mod"     KW," not"     KW," of"      KW," or"
+    KW," proc"    KW," read"    KW," repeat"  KW," shl"
+    KW," shr"     KW," then"    KW," to"      KW," type"
+    KW," until"   KW," var"     KW," while"   KW," write"
+    KW," in"
 33 CONSTANT TABLE-SIZE
 
 \ No locals: DO/LOOP uses the return stack; locals+LEAVE is fragile here.

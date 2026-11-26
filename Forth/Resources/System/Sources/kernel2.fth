@@ -412,6 +412,14 @@ DOC" SLITERAL ( c-addr u -- ) compile string literal (immediate)"
   BEGIN DUP WHILE OVER C@ C, 1 /STRING REPEAT 2DROP ALIGN ; IMMEDIATE
 DOC" PLACE ( c-addr1 u c-addr2 -- ) copy as counted string at c-addr2"
 : PLACE 2DUP 2>R CHAR+ SWAP MOVE 2R> C! ;
+DOC" comma-quote ( quote text -- ) string compiler: counted string at HERE, then align"
+: ,"     ( ' text' -- ) [CHAR] " PARSE HERE OVER CHAR+ ALLOT PLACE ALIGN ;
+DOC" FOR ( n -- ) ( C: -- a1 ) immediate: count from n down through 0"
+: FOR    ( n -- ) ( C: -- a1 ) POSTPONE >R HERE ; IMMEDIATE
+DOC" NEXT ( C: a1 -- ) immediate: loop back while the count stays non-negative"
+: NEXT   ( C: a1 -- )
+  ?COMP POSTPONE R> POSTPONE 1- POSTPONE DUP POSTPONE >R
+  POSTPONE 0< POSTPONE UNTIL POSTPONE R> POSTPONE DROP ; IMMEDIATE
 32 CONSTANT (SUBST-MAX)
 CREATE (SUBST-NAMES) 32 32 * ALLOT
 CREATE (SUBST-TEXTS) 32 256 * ALLOT

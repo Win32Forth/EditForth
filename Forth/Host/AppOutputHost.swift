@@ -1269,6 +1269,29 @@ final class AppOutputHost: NSObject, NSWindowDelegate {
 
 // MARK: - View
 
+/// DOS code page 437, bytes 176...223. CLOCK uses 177 and 178 for the
+/// minute, second, day, and year bars, 219 for hour and month, and
+/// 185...206 for the frame around the Roman time.
+private let graphicsCP437Blocks: [String] = [
+    "\u{2591}", "\u{2592}", "\u{2593}", "\u{2502}", "\u{2524}", "\u{2561}", "\u{2562}", "\u{2556}",
+    "\u{2555}", "\u{2563}", "\u{2551}", "\u{2557}", "\u{255D}", "\u{255C}", "\u{255B}", "\u{2510}",
+    "\u{2514}", "\u{2534}", "\u{252C}", "\u{251C}", "\u{2500}", "\u{253C}", "\u{255E}", "\u{255F}",
+    "\u{255A}", "\u{2554}", "\u{2569}", "\u{2566}", "\u{2560}", "\u{2550}", "\u{256C}", "\u{2567}",
+    "\u{2568}", "\u{2564}", "\u{2565}", "\u{2559}", "\u{2558}", "\u{2552}", "\u{2553}", "\u{256B}",
+    "\u{256A}", "\u{2518}", "\u{250C}", "\u{2588}", "\u{2584}", "\u{258C}", "\u{2590}", "\u{2580}",
+]
+
+private func graphicsGlyph(_ byte: UInt8) -> String {
+    if byte >= 32 && byte <= 126 {
+        return String(UnicodeScalar(byte))
+    }
+    let block = Int(byte) - 176
+    if block >= 0 && block < graphicsCP437Blocks.count {
+        return graphicsCP437Blocks[block]
+    }
+    return "?"
+}
+
 final class AppGridView: NSView {
     weak var host: AppOutputHost?
 
@@ -1347,10 +1370,7 @@ final class AppGridView: NSView {
                 for x in 0..<cols {
                     let chv = host.cellAt(col: x, row: y)
                     if chv == 32 { continue }
-                    let s: String
-                    if chv == 219 { s = "\u{2588}" }
-                    else if chv < 32 || chv > 126 { s = "?" }
-                    else { s = String(UnicodeScalar(chv)) }
+                    let s = graphicsGlyph(chv)
 
                     let textFg: NSColor
                     if host.showingPixels && host.pixelDepth == 8 {

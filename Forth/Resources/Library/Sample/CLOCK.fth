@@ -25,14 +25,6 @@
 only forth also graphics
 \ FILE-ECHO on
 
-: ," 	( " text" -- )
-		[CHAR] " PARSE HERE OVER 1+ ALLOT PLACE ;
-
-: FOR	( -- a1 )
-		HERE ; IMMEDIATE
-
-: NEXT	( a1 -- )
-		?COMP	POSTPONE 1- POSTPONE UNTIL ; IMMEDIATE
 
 : HMS 	( -- hour min sec )
 		TIME&DATE 					\ ( -- sec min hour day month year )
@@ -214,12 +206,18 @@ VARIABLE LAST-MO        VARIABLE LAST-YR
                        ?DAY  4DUP .R-DATE  .B-DATE
                        KEY?     IF      KEY
                                         27 =
-                                        IF     0 21 AT ABORT
+                                        IF     0 21 AT EXIT
                                         THEN
                                 THEN
                 AGAIN  ;
 
+ONLY FORTH ALSO DEFINITIONS GRAPHICS
+
 : CLOCK	( -- )
-			TIC/TOK ;
+			TIC/TOK
+            WINDOW-OFF ;
+
+\ Console CR. GRAPHICS CR calls EMIT, and EMIT opens the window.
+PREVIOUS
 
 .( CLOCK to run the Clock ) CR

@@ -57,7 +57,7 @@ extension Notification.Name {
 // Update the date/time stamp only when finishing a change set for a version —
 // just before DMG + commit/push (not on every intermediate build).
 // Format: === 64Forth M.N.P === Mon D, YYYY H:MM AM/PM ===
-private let banner = "=== 64Forth 2.7.6 === Nov 18, 2026 9:49 PM ===\n"
+private let banner = "=== 64Forth 2.8.0 === Nov 25, 2026 11:04 PM ===\n"
 
 struct ConsoleView: View {
     @State private var consoleText = banner

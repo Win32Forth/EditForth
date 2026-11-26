@@ -107,7 +107,7 @@ enum ForthColonScan {
                 skipParenString(source, from: &index, line: &line)
                 continue
             }
-            if token == ".\"" || token == "S\"" || token == "C\"" || token == "ABORT\"" {
+            if token == ".\"" || token == ",\"" || token == "S\"" || token == "C\"" || token == "ABORT\"" {
                 skipQuote(source, from: &index, line: &line, escaped: false)
                 continue
             }

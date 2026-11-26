@@ -220,6 +220,17 @@ VARIABLE G-T0-MS                     \ TIME-RESET baseline (MS@)
   R> BASE !
   ;
 
+\ FORTH .R and CODE SPACES write with _putchar. These write the grid.
+: SPACES  ( n -- )  0 MAX 0 ?DO  SPACE  LOOP ;
+: U.R  ( u n -- )
+  WINDOW
+  >R 0 <# #S #> R> OVER - 0 MAX SPACES TYPE
+  ;
+: .R  ( n1 n2 -- )
+  WINDOW
+  >R DUP ABS 0 <# #S ROT SIGN #> R> OVER - 0 MAX SPACES TYPE
+  ;
+
 : ."  ( -- )  \ IMMEDIATE — compile/interpret to GRAPHICS TYPE
   [CHAR] " PARSE
   STATE @ IF  POSTPONE SLITERAL  POSTPONE TYPE  ELSE  TYPE  THEN

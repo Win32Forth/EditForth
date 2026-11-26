@@ -1,11 +1,68 @@
 # 64Forth development status
 
-**Current:** **2.7.6** (build **37**) — Julia parameter files.
-No disk image. The image to install stays
-`Releases/EditForth-2.7.5-macOS.dmg`. The 2.7.4 image stays. The 2.7.3
-image stays. The 2.7.1 image stays. The 2.7.0 image stays.
+**Current:** **2.8.0** (build **38**) — editor coloring and clock graphics.
+Disk image `Releases/EditForth-2.8.0-macOS.dmg`. The 2.7.6 image stays.
+The 2.7.5 image stays. The 2.7.4 image stays. The 2.7.3 image stays.
+The 2.7.1 image stays. The 2.7.0 image stays.
 
-**Last updated:** 2026-11-18
+**Last updated:** 2026-11-25
+
+---
+
+## v2.8.0 — editor coloring and clock graphics
+
+**Version strings:** marketing **2.8.0**, build **38**. Disk image
+`Releases/EditForth-2.8.0-macOS.dmg`. Signed with Developer ID and
+notarized by Apple. The 2.7.6 image stays
+(`Releases/EditForth-2.7.6-macOS.dmg`). The 2.7.5 image stays
+(`Releases/EditForth-2.7.5-macOS.dmg`). The 2.7.4 image stays
+(`Releases/EditForth-2.7.4-macOS.dmg`). The 2.7.3 image stays
+(`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+(`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
+(`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
+`Nov 25, 2026 11:04 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.8.0 === Nov 25, 2026 11:04 PM ===
+```
+
+### Highlights since 2.7.6
+
+- **Editor coloring.** Forth source in the editor is colored. The saved
+  file stays plain text. Words from the Forth 2012 glossary are blue.
+  `:`, `;`, `:NONAME`, and `EXIT` are red bold. Conditionals, including
+  `FOR` and `NEXT`, are orange bold. Numbers are purple. Quoted strings,
+  including `."`, `,"`, `S"`, `C"`, and `ABORT"`, are green. Comments are
+  gray italic. Hover shows the wordset, stack effect, and glossary
+  summary. A name defined in the open file says "Defined in this file."
+- **Kernel strings and counted loops.** `,"` compiles a counted string at
+  HERE and aligns. `FOR` / `NEXT` count from n down through 0, so the body
+  runs n+1 times. `1- FOR` runs n times.
+- **Graphics field words.** GRAPHICS `SPACES`, `U.R`, and `.R` write on
+  the grid. FORTH `.R` still writes on the console.
+- **CP437.** Bytes 176 through 223 draw as the DOS shades, box drawing,
+  and blocks. CLOCK seconds and year bars are byte 177. Minute and day
+  bars are 178. Hour and month bars are 219. The Roman frame is 185
+  through 206.
+- **CLOCK.** The load line is `ONLY FORTH ALSO DEFINITIONS GRAPHICS`.
+  `: CLOCK` calls `WINDOW-OFF`. `PREVIOUS` returns to the console. Esc in
+  the clock is `EXIT`. The axis numbers use GRAPHICS `.R`. CLOCK no longer
+  defines its own `,"`, `FOR`, or `NEXT`.
+- **Pascal.** Keyword text uses `KW,"`, an 8-byte field. Kernel `,"` is
+  the string compiler.
+- **32-bit fixed point.** `Library/FixPoint/FIXEDPOINT32.fth` is the
+  fixed-point file for 32-bit cells. It aborts unless `1 CELLS` is 4.
+  The Mac app is 64-bit and keeps `FIXEDPOINT.fth`.
+- **SOWM.** `Library/SOWM` is a floating-window policy: rectangles, focus,
+  drag, and six desktops. `SOWM-EF.fth` is the EditForth screen.
+  `BALL.fth` and `LINES.fth` are the sample programs. Load
+  `FROMLIB FLOAD SOWM/SOWM-EF.fth`, then the ball and the lines, then
+  `SOWM`.
+- **Install.** The disk image contains EditForth.app and README.txt. Drag
+  the app into Applications. The first open asks you to confirm that the
+  app was downloaded from the internet.
 
 ---
 

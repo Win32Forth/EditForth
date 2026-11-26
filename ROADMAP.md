@@ -17,11 +17,11 @@ Goal: one repeatable path so version bumps, validation, samples, DMG, docs, comm
 4. **Hayes suite** — **scripted (`validate`):** `--agent` + `FROMLIB FLOAD Testing/HayesTest/HayesTest.fth`; require `HAYES: ALL COUNTS ZERO — PASS`. **Done (host):** ACCEPT auto-feed (`hayes-accept` + Return) on stock prompt; suite unchanged.
 5. **App-window smoke** — **deferred** (GUI KEY loops).
 6. **Sample programs** — **v1 emit-smoke:** `Sample/VED64.fth` via `EMIT-AUTO-FILE`; require `VED64.app` + clean quiet log. Full interactive Sample runs deferred.
-7. **Release DMG** — **scripted (`archive` + `dmg`):** Archive → stage apps + collage JPG + README.pdf → `diskutil image create` UDZO under `Releases/EditForth-<ver>-macOS.dmg`.
+7. **Release DMG** — **scripted (`archive` + `dmg`):** Archive → Developer ID export → `EditForth.app` + `README.txt` → `diskutil image create` UDZO under `Releases/EditForth-<ver>-macOS.dmg`, then sign, notarize, and staple.
 8. **Retire old DMG** — **human:** trash previous `Releases/*-macOS.dmg` after the new one is ready.
-9. **DMG contents** — collage + PDF copied into the volume by `dmg`.
+9. **DMG contents** — `EditForth.app` and `README.txt`. The README says to drag the app into Applications and confirm the internet download.
 10. **Commit + push** — **human ask** after trash; leave `HYPER.NDX` unstaged.
-11. **GitHub release** — **human ask** (tag, notes, attach DMG + collage).
+11. **GitHub release** — **human ask** (tag, notes, attach the notarized DMG).
 
 ### Automation shape
 - `./scripts/release.sh prep <ver> <build> [--stamp "…"] [--force]` runs bump → archive → validate → emit-smoke → dmg, then prints the handoff checklist.

@@ -212,6 +212,8 @@ struct EditorTextView: NSViewRepresentable {
 
         let textChanged = tv.string != text
         if textChanged {
+            // Replacing the string drops temporary attributes, including colors.
+            context.coordinator.sourceHighlightStamp = nil
             let oldText = tv.string
             // Ask Forth / Enhance rewrite the same buffer often. A full `string =`
             // resets the clip to the top; async needsRestore then races the next
@@ -339,6 +341,8 @@ struct EditorTextView: NSViewRepresentable {
                 )
             }
         }
+
+        context.coordinator.applySourceHighlight(in: tv)
     }
 
     private var hasPendingHighlight: Bool {
@@ -440,6 +444,8 @@ struct EditorTextView: NSViewRepresentable {
         var suppressSave = false
         /// Apply saved selection / top line once the view is ready.
         var needsRestore = false
+        /// `string hash` plus font size. Nil forces the next color pass.
+        var sourceHighlightStamp: String?
         /// Character range of the last pastel-green DEBUG token highlight.
         private var debugHighlightRange: NSRange?
         /// Character ranges painted for BREAK-table words (red or gray).
@@ -1120,6 +1126,82 @@ struct EditorTextView: NSViewRepresentable {
                 captureViewState(from: tv)
             }
         }
+
+        /// Paint standard words, comments, numbers, and defining words.
+        /// Temporary attributes leave the saved buffer plain.
+        func applySourceHighlight(in tv: NSTextView) {
+            let stamp = "\(tv.string.hashValue)|\(parent.fontSize)"
+            if stamp == sourceHighlightStamp { return }
+            sourceHighlightStamp = stamp
+            guard let layout = tv.layoutManager else { return }
+            let full = NSRange(location: 0, length: (tv.string as NSString).length)
+            if full.length > 0 {
+                layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
+                layout.removeTemporaryAttribute(.font, forCharacterRange: full)
+                layout.removeTemporaryAttribute(.obliqueness, forCharacterRange: full)
+            }
+            let runs = ForthSourceHighlight.paint(tv.string)
+            let size = parent.fontSize
+            let bold = NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
+            var tips: [(NSRange, String)] = []
+            for run in runs {
+                let range = NSRange(location: run.location, length: run.length)
+                switch run.kind {
+                case .comment:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.secondaryLabelColor,
+                        forCharacterRange: range
+                    )
+                    layout.addTemporaryAttribute(
+                        .obliqueness,
+                        value: 0.22,
+                        forCharacterRange: range
+                    )
+                case .string:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.systemGreen,
+                        forCharacterRange: range
+                    )
+                case .number:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.systemPurple,
+                        forCharacterRange: range
+                    )
+                case .definition:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.systemRed,
+                        forCharacterRange: range
+                    )
+                    layout.addTemporaryAttribute(.font, value: bold, forCharacterRange: range)
+                case .conditional:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.systemOrange,
+                        forCharacterRange: range
+                    )
+                    layout.addTemporaryAttribute(.font, value: bold, forCharacterRange: range)
+                case .documented:
+                    layout.addTemporaryAttribute(
+                        .foregroundColor,
+                        value: NSColor.systemBlue,
+                        forCharacterRange: range
+                    )
+                case .plain:
+                    break
+                }
+                if let tip = run.tip, !tip.isEmpty {
+                    tips.append((range, tip))
+                }
+            }
+            (tv as? EditorNSTextView)?.docSpans = tips
+            if full.length > 0 {
+                layout.invalidateDisplay(forCharacterRange: full)
+            }
+        }
     }
 }
 
@@ -1129,6 +1211,71 @@ final class EditorNSTextView: NSTextView {
     var onRunToOffset: ((Int) -> Void)?
     /// Live DEBUG armed flag from the representable (context menu enable).
     var isDebugArmedProvider: (() -> Bool)?
+    /// Documented tokens, in order, for the hover tip.
+    var docSpans: [(NSRange, String)] = []
+    private var docCursorOn = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.owner === self && area.options.contains(.mouseMoved) {
+            removeTrackingArea(area)
+        }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let tip = documentationTip(at: event)
+        if toolTip != tip { toolTip = tip }
+        if tip != nil {
+            if !docCursorOn {
+                NSCursor.pointingHand.set()
+                docCursorOn = true
+            }
+        } else if docCursorOn {
+            NSCursor.iBeam.set()
+            docCursorOn = false
+        }
+    }
+
+    /// Glossary or “defined here” tip when the pointer is on a colored token.
+    private func documentationTip(at event: NSEvent) -> String? {
+        guard !docSpans.isEmpty, let layout = layoutManager, let container = textContainer else {
+            return nil
+        }
+        var point = convert(event.locationInWindow, from: nil)
+        point.x -= textContainerOrigin.x
+        point.y -= textContainerOrigin.y
+        let glyphCount = layout.numberOfGlyphs
+        guard glyphCount > 0 else { return nil }
+        var glyph = layout.glyphIndex(for: point, in: container)
+        if glyph >= glyphCount { glyph = glyphCount - 1 }
+        let rect = layout.boundingRect(
+            forGlyphRange: NSRange(location: glyph, length: 1),
+            in: container
+        )
+        guard rect.insetBy(dx: -1, dy: -1).contains(point) else { return nil }
+        let idx = layout.characterIndexForGlyph(at: glyph)
+        var lo = 0
+        var hi = docSpans.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            let range = docSpans[mid].0
+            if idx < range.location {
+                hi = mid
+            } else if idx >= range.location + range.length {
+                lo = mid + 1
+            } else {
+                return docSpans[mid].1
+            }
+        }
+        return nil
+    }
 
     override func mouseDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

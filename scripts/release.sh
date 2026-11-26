@@ -26,7 +26,7 @@ EditForth release helper
   emit-smoke            EMIT Sample/VED64.fth; require VED64.app
   bump <ver> <build>    Version stamps (+ optional --stamp)
   archive               Archive the EditForth scheme; stage EditForth.app
-  dmg [--force]         Build Releases/EditForth-<ver>-macOS.dmg
+  dmg [--force]         Build a notarized Releases/EditForth-<ver>-macOS.dmg
   prep <ver> <build>    bump → archive → validate → emit-smoke → dmg
 
 Options:
@@ -185,21 +185,38 @@ cmd_archive() {
     -project "$ROOT/EditForth.xcodeproj" \
     -scheme EditForth \
     -configuration Release \
+    -destination 'platform=macOS,arch=arm64' \
     -archivePath "$ARCHIVE_PATH" \
+    ENABLE_HARDENED_RUNTIME=YES \
     archive \
     | tee "$LOG_DIR/archive-editforth.txt" \
     | tail -20
 
-  if ! copy_app_from_archive "$ARCHIVE_PATH" "EditForth.app" "$STAGE_APPS"; then
-    die "EditForth.app missing from archive"
+  local export_dir="$BUILD_ROOT/export"
+  local export_plist="$SCRIPT_DIR/developer-id-export.plist"
+  [[ -f "$export_plist" ]] || die "missing $export_plist"
+  rm -rf "$export_dir"
+  note "=== Export Developer ID ==="
+  xcodebuild \
+    -exportArchive \
+    -archivePath "$ARCHIVE_PATH" \
+    -exportPath "$export_dir" \
+    -exportOptionsPlist "$export_plist" \
+    -allowProvisioningUpdates \
+    | tee "$LOG_DIR/export-editforth.txt" \
+    | tail -20
+
+  [[ -d "$export_dir/EditForth.app" ]] \
+    || die "Developer ID export missing EditForth.app"
+  rm -rf "$STAGE_APPS/EditForth.app"
+  ditto --norsrc "$export_dir/EditForth.app" "$STAGE_APPS/EditForth.app"
+  if ! codesign -dv "$STAGE_APPS/EditForth.app" 2>&1 | grep -q "Developer ID Application"; then
+    die "staged app is not signed with Developer ID Application"
   fi
 
-  [[ -d "$STAGE_APPS/EditForth.app" ]] \
-    || die "stage incomplete under $STAGE_APPS"
-
-  # Drop archives after extract (app kept in STAGE_APPS).
+  # Drop archives after the export (app kept in STAGE_APPS).
   # 2.5.0+ ships one app. The 64Forth scheme is not part of this archive.
-  rm -rf "$ARCHIVE_PATH" "$ARCHIVE_64"
+  rm -rf "$ARCHIVE_PATH" "$ARCHIVE_64" "$export_dir"
   ok "archive → $STAGE_APPS"
 }
 
@@ -228,19 +245,43 @@ cmd_dmg() {
   [[ -d "$STAGE_APPS/EditForth.app" ]] \
     || die "missing staged EditForth.app — run archive first ($STAGE_APPS)"
 
-  local jpg="$RELEASES/Getting EditForth to run.jpg"
-  local pdf="$RELEASES/README.pdf"
-  [[ -f "$jpg" ]] || die "missing $jpg"
-  [[ -f "$pdf" ]] || die "missing $pdf"
-
   rm -rf "$STAGE_DMG"
   mkdir -p "$STAGE_DMG"
   ditto --norsrc "$STAGE_APPS/EditForth.app" "$STAGE_DMG/EditForth.app"
-  cp "$jpg" "$STAGE_DMG/"
-  cp "$pdf" "$STAGE_DMG/"
+  cat >"$STAGE_DMG/README.txt" <<EOF
+EditForth $ver
+================
+
+1. Open this disk image.
+2. Drag EditForth.app into Applications.
+3. The first time you open EditForth, macOS asks you to confirm that
+   you downloaded it from the internet. Click Open.
+
+Approval
+--------
+This copy is signed with a Developer ID and notarized by Apple.
+It does not stop running after a week.
+
+A Mac set to allow apps from the App Store only will still refuse it.
+
+Apple Silicon. macOS 26 or later.
+EOF
 
   create_dmg_from_folder "$STAGE_DMG" "$dest" "EditForth $ver"
   rm -rf "$STAGE_DMG"
+
+  note "=== Sign disk image ==="
+  codesign --sign "Developer ID Application: Thomas Zimmer (X5YCJL3LJ8)" \
+    --timestamp "$dest"
+  note "=== Notarize ==="
+  xcrun notarytool submit "$dest" \
+    --keychain-profile "Win32Forth-notary" \
+    --wait | tee "$LOG_DIR/notary.txt"
+  grep -q "status: Accepted" "$LOG_DIR/notary.txt" \
+    || die "notarization was not Accepted (see $LOG_DIR/notary.txt)"
+  xcrun stapler staple "$dest"
+  xcrun stapler validate "$dest"
+  ok "notarized $dest"
   print_handoff "$dest"
 }
 

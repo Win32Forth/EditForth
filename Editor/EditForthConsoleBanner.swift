@@ -11,12 +11,12 @@ import Foundation
 
 enum EditForthConsoleBanner {
     /// Update when finishing a version (with MARKETING_VERSION / docs).
-    static let stamp = "Nov 18, 2026 9:49 PM"
+    static let stamp = "Nov 25, 2026 11:04 PM"
 
     /// Marketing version from the app bundle. Fallback matches the current bump.
     static var marketingVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "2.7.6"
+            ?? "2.8.0"
     }
 
     /// e.g. `=== EditForth 2.0.2 === Oct 6, 2026 9:29 PM ===\n`
