@@ -43,6 +43,10 @@ notarized by Apple. The 2.8.0 image stays
 - **Install.** The disk image contains EditForth.app and README.txt. Drag
   the app into Applications. The first open asks you to confirm that the
   app was downloaded from the internet.
+- **Checked.** `scripts/release.sh` archive, validate, emit-smoke, and dmg:
+  ANS-VALIDATE 395 passed, 0 failed; Hayes `ALL COUNTS ZERO — PASS`;
+  dbg-span PASS; VED64 emit produced `VED64.app`. The disk image was
+  archived again after this line.
 
 ---
 
