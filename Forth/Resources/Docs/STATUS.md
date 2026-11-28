@@ -1,11 +1,48 @@
 # 64Forth development status
 
-**Current:** **2.8.0** (build **38**) — editor coloring and clock graphics.
-Disk image `Releases/EditForth-2.8.0-macOS.dmg`. The 2.7.6 image stays.
-The 2.7.5 image stays. The 2.7.4 image stays. The 2.7.3 image stays.
-The 2.7.1 image stays. The 2.7.0 image stays.
+**Current:** **2.8.1** (build **39**) — Forth early years.
+Disk image `Releases/EditForth-2.8.1-macOS.dmg`. The 2.8.0 image stays.
+The 2.7.6 image stays. The 2.7.5 image stays. The 2.7.4 image stays.
+The 2.7.3 image stays. The 2.7.1 image stays. The 2.7.0 image stays.
 
-**Last updated:** 2026-11-25
+**Last updated:** 2026-11-27
+
+---
+
+## v2.8.1 — Forth early years
+
+**Version strings:** marketing **2.8.1**, build **39**. Disk image
+`Releases/EditForth-2.8.1-macOS.dmg`. Signed with Developer ID and
+notarized by Apple. The 2.8.0 image stays
+(`Releases/EditForth-2.8.0-macOS.dmg`). The 2.7.6 image stays
+(`Releases/EditForth-2.7.6-macOS.dmg`). The 2.7.5 image stays
+(`Releases/EditForth-2.7.5-macOS.dmg`). The 2.7.4 image stays
+(`Releases/EditForth-2.7.4-macOS.dmg`). The 2.7.3 image stays
+(`Releases/EditForth-2.7.3-macOS.dmg`). The 2.7.1 image stays
+(`Releases/EditForth-2.7.1-macOS.dmg`). The 2.7.0 image stays
+(`Releases/EditForth-2.7.0-macOS.dmg`). Console stamp
+`Nov 27, 2026 11:27 PM`.
+
+**Console header stamp:**
+
+```text
+=== 64Forth 2.8.1 === Nov 27, 2026 11:27 PM ===
+```
+
+### Highlights since 2.8.0
+
+- **Forth early years.** `Docs/Forth-Early-Years.md` is a chronology of
+  Chuck Moore's 1958–1971 account, from his 1991 essay "Forth - The
+  Early Years." The typescript is at
+  `https://colorforth.github.io/HOPL.html`. The same file is
+  `System/Reference/Forth-Early-Years.md`, so Ask Forth can find it
+  when Library context is on. The file list opens the Docs copy as a
+  formatted preview. The old spellings in it, including `DROP` written
+  as `;` and store written as `<`, are not the words to type now. A
+  program being written now uses the Forth 2012 chapters.
+- **Install.** The disk image contains EditForth.app and README.txt. Drag
+  the app into Applications. The first open asks you to confirm that the
+  app was downloaded from the internet.
 
 ---
 

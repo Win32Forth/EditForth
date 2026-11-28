@@ -18,5 +18,10 @@ Stack-effects-cheatsheet.txt is a short Ask Forth helper for stack comments
 and idioms models often invent wrong (MOVE/COMPARE/TYPE/files/records). It is
 indexed with the other Reference text; do not INCLUDE it.
 
+Forth-Early-Years.md is Chuck Moore's 1958–1971 history (the 1991 HOPL
+essay), as a chronology for this tree. The same text is in Docs/. The
+old spellings in it (DROP as semicolon, store as <) are not modern Forth.
+Use the Forth 2012 chapters for a program being written now.
+
 Not Forth source — do not INCLUDE these files into the dictionary. Also copy
 updates into ~/Documents/EditForth/System/Reference/ for the live tree.
